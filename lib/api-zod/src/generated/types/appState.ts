@@ -5,11 +5,18 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
+import type { AppStateComputedQuarter } from "./appStateComputedQuarter";
 import type { AppStateCurrentQuarter } from "./appStateCurrentQuarter";
+import type { AppStateQuarterOverride } from "./appStateQuarterOverride";
 
 export interface AppState {
   id: number;
+  /** Effective quarter - override if set, else computed from wall clock */
   currentQuarter: AppStateCurrentQuarter;
+  /** Always the wall-clock-computed quarter regardless of override */
+  computedQuarter: AppStateComputedQuarter;
+  /** Manual override set by Raymo. Null means use computed quarter. */
+  quarterOverride?: AppStateQuarterOverride;
   /** True when Pops is in rest mode (high symptom days 1-5 of Haldol cycle) */
   zombieMode: boolean;
   /**

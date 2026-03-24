@@ -6,10 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type UpdateAppStateInputCurrentQuarter =
-  (typeof UpdateAppStateInputCurrentQuarter)[keyof typeof UpdateAppStateInputCurrentQuarter];
+export type UpdateAppStateInputQuarterOverride =
+  | (typeof UpdateAppStateInputQuarterOverride)[keyof typeof UpdateAppStateInputQuarterOverride]
+  | null;
 
-export const UpdateAppStateInputCurrentQuarter = {
+export const UpdateAppStateInputQuarterOverride = {
   Q1: "Q1",
   Q2: "Q2",
   Q3: "Q3",

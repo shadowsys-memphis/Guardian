@@ -5,16 +5,16 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateAppStateInputCurrentQuarter } from "./updateAppStateInputCurrentQuarter";
+import type { UpdateAppStateInputQuarterOverride } from "./updateAppStateInputQuarterOverride";
 
 export interface UpdateAppStateInput {
-  currentQuarter?: UpdateAppStateInputCurrentQuarter;
+  quarterOverride?: UpdateAppStateInputQuarterOverride;
   zombieMode?: boolean;
   /**
    * @minimum 1
    * @maximum 5
    */
   motivationLevel?: number;
-  activeMessage?: string;
+  activeMessage?: string | null;
   notes?: string;
 }

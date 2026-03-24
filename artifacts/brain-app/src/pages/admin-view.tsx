@@ -1,12 +1,27 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { Activity, Calendar, FileText, Settings, ShieldAlert, Check, Plus, Edit2, Trash2, HeartPulse, BrainCircuit, Mic } from "lucide-react";
-import { 
+import {
+  Activity,
+  Calendar,
+  ShieldAlert,
+  Check,
+  Plus,
+  Edit2,
+  Trash2,
+  HeartPulse,
+  BrainCircuit,
+  Mic,
+  Cpu,
+  AlertTriangle,
+  Clock,
+} from "lucide-react";
+import {
   useGetAppState, useUpdateAppState,
   useGetSchedule, useCreateScheduleTask, useUpdateScheduleTask, useDeleteScheduleTask, useCompleteScheduleTask,
   useGetSymptomLogs, useCreateSymptomLog,
   useGetVoiceScripts, useUpdateVoiceScript,
-  useGetHaldolCycle, useUpdateHaldolCycle
+  useGetHaldolCycle, useUpdateHaldolCycle,
+  useGetGovernorPillars, useGetGovernorNotes, useCreateGovernorNote,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,14 +30,13 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
-type Tab = 'dashboard' | 'schedule' | 'symptoms' | 'scripts' | 'haldol';
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "governor";
 
 export function AdminView() {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
-      {/* Sidebar Nav */}
       <aside className="w-full md:w-64 bg-card border-r border-border shrink-0 flex flex-col">
         <div className="p-6 border-b border-border/50">
           <div className="flex items-center gap-3">
@@ -33,38 +47,45 @@ export function AdminView() {
             </div>
           </div>
         </div>
-        
+
         <nav className="p-4 space-y-2 flex-1">
-          <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<Activity size={18}/>} label="Dashboard" />
-          <NavButton active={activeTab === 'schedule'} onClick={() => setActiveTab('schedule')} icon={<Calendar size={18}/>} label="Schedule Editor" />
-          <NavButton active={activeTab === 'symptoms'} onClick={() => setActiveTab('symptoms')} icon={<HeartPulse size={18}/>} label="Symptom Log" />
-          <NavButton active={activeTab === 'scripts'} onClick={() => setActiveTab('scripts')} icon={<Mic size={18}/>} label="Voice Scripts" />
-          <NavButton active={activeTab === 'haldol'} onClick={() => setActiveTab('haldol')} icon={<BrainCircuit size={18}/>} label="Haldol Tracker" />
+          <NavButton active={activeTab === "dashboard"} onClick={() => setActiveTab("dashboard")} icon={<Activity size={18} />} label="Dashboard" />
+          <NavButton active={activeTab === "schedule"} onClick={() => setActiveTab("schedule")} icon={<Calendar size={18} />} label="Schedule Editor" />
+          <NavButton active={activeTab === "symptoms"} onClick={() => setActiveTab("symptoms")} icon={<HeartPulse size={18} />} label="Symptom Log" />
+          <NavButton active={activeTab === "scripts"} onClick={() => setActiveTab("scripts")} icon={<Mic size={18} />} label="Voice Scripts" />
+          <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
+          <div className="border-t border-border/30 my-2 pt-2">
+            <NavButton active={activeTab === "governor"} onClick={() => setActiveTab("governor")} icon={<Cpu size={18} />} label="Governor" />
+          </div>
         </nav>
+
+        <div className="p-4 border-t border-border/30">
+          <p className="text-xs text-muted-foreground/50 uppercase tracking-widest font-display">Unconditional Software v1</p>
+        </div>
       </aside>
 
-      {/* Main Content Area */}
       <main className="flex-1 p-6 md:p-8 overflow-y-auto">
         <div className="max-w-6xl mx-auto">
-          {activeTab === 'dashboard' && <DashboardTab />}
-          {activeTab === 'schedule' && <ScheduleTab />}
-          {activeTab === 'symptoms' && <SymptomsTab />}
-          {activeTab === 'scripts' && <ScriptsTab />}
-          {activeTab === 'haldol' && <HaldolTab />}
+          {activeTab === "dashboard" && <DashboardTab />}
+          {activeTab === "schedule" && <ScheduleTab />}
+          {activeTab === "symptoms" && <SymptomsTab />}
+          {activeTab === "scripts" && <ScriptsTab />}
+          {activeTab === "haldol" && <HaldolTab />}
+          {activeTab === "governor" && <GovernorTab />}
         </div>
       </main>
     </div>
   );
 }
 
-function NavButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+function NavButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm font-bold uppercase tracking-wider font-display transition-all ${
-        active 
-          ? 'bg-primary/10 text-primary border-l-4 border-primary' 
-          : 'text-muted-foreground hover:bg-secondary hover:text-foreground border-l-4 border-transparent'
+        active
+          ? "bg-primary/10 text-primary border-l-4 border-primary"
+          : "text-muted-foreground hover:bg-secondary hover:text-foreground border-l-4 border-transparent"
       }`}
     >
       {icon}
@@ -73,25 +94,26 @@ function NavButton({ active, onClick, icon, label }: { active: boolean, onClick:
   );
 }
 
-// --- TABS ---
-
 function DashboardTab() {
   const { data: state } = useGetAppState();
   const { data: haldol } = useGetHaldolCycle();
   const { data: schedule } = useGetSchedule();
   const updateState = useUpdateAppState();
   const { toast } = useToast();
+  const [broadcastValue, setBroadcastValue] = useState(state?.activeMessage ?? "");
 
   const handleStateChange = (updates: any) => {
     updateState.mutate({ data: updates }, {
-      onSuccess: () => toast({ title: "State updated successfully" }),
-      onError: (e) => toast({ title: "Failed to update state", variant: "destructive" })
+      onSuccess: () => toast({ title: "State updated" }),
+      onError: () => toast({ title: "Update failed", variant: "destructive" }),
     });
   };
 
-  const completedCount = schedule?.filter(t => t.isCompleted).length || 0;
-  const totalCount = schedule?.length || 0;
+  const completedCount = schedule?.filter((t) => t.isCompleted).length ?? 0;
+  const totalCount = schedule?.length ?? 0;
   const completionRate = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
+
+  const hasOverride = !!state?.quarterOverride;
 
   return (
     <div className="space-y-6">
@@ -103,64 +125,90 @@ function DashboardTab() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold">Current Quarter</CardDescription>
-            <CardTitle className="text-5xl">{state?.currentQuarter || '--'}</CardTitle>
+            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
+              <Clock size={14} /> Current Quarter
+            </CardDescription>
+            <CardTitle className="text-5xl">{state?.currentQuarter ?? "--"}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-2 mt-2">
-              {['Q1', 'Q2', 'Q3', 'Q4'].map(q => (
+            <p className="text-xs text-muted-foreground mb-2 uppercase font-bold">
+              {hasOverride ? (
+                <span className="text-primary">Manual Override Active</span>
+              ) : (
+                <span className="text-success">Auto (Wall Clock)</span>
+              )}
+            </p>
+            <div className="flex gap-1 flex-wrap">
+              {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
                 <button
                   key={q}
-                  onClick={() => handleStateChange({ currentQuarter: q })}
-                  className={`px-3 py-1 text-xs font-bold rounded ${state?.currentQuarter === q ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:bg-secondary/80'}`}
+                  onClick={() => handleStateChange({ quarterOverride: q })}
+                  className={`px-2 py-1 text-xs font-bold rounded ${state?.quarterOverride === q ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}
                 >
                   {q}
                 </button>
               ))}
+              {hasOverride && (
+                <button
+                  onClick={() => handleStateChange({ quarterOverride: null })}
+                  className="px-2 py-1 text-xs font-bold rounded bg-destructive/10 text-destructive hover:bg-destructive/20"
+                >
+                  AUTO
+                </button>
+              )}
             </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Clock: <span className="text-primary font-bold">{state?.computedQuarter ?? "--"}</span>
+            </p>
           </CardContent>
         </Card>
 
-        <Card className={state?.zombieMode ? 'border-destructive shadow-[0_0_15px_rgba(220,38,38,0.2)]' : ''}>
+        <Card className={state?.zombieMode ? "border-destructive shadow-[0_0_15px_rgba(220,38,38,0.2)]" : ""}>
           <CardHeader className="pb-2">
             <CardDescription className="uppercase tracking-widest font-bold">Mode Status</CardDescription>
-            <CardTitle className={`text-4xl ${state?.zombieMode ? 'text-destructive' : 'text-success'}`}>
-              {state?.zombieMode ? 'REST (ZOMBIE)' : 'NORMAL'}
+            <CardTitle className={`text-4xl ${state?.zombieMode ? "text-destructive" : "text-success"}`}>
+              {state?.zombieMode ? "REST MODE" : "NORMAL"}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Button 
-              variant={state?.zombieMode ? "outline" : "destructive"} 
-              size="sm" 
+            <Button
+              variant={state?.zombieMode ? "outline" : "destructive"}
+              size="sm"
               className="w-full mt-2"
               onClick={() => handleStateChange({ zombieMode: !state?.zombieMode })}
             >
-              {state?.zombieMode ? 'Deactivate Rest Mode' : 'Trigger Rest Mode'}
+              {state?.zombieMode ? "Deactivate Rest Mode" : "Trigger Rest Mode"}
             </Button>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold">Task Completion</CardDescription>
+            <CardDescription className="uppercase tracking-widest font-bold">Schedule Activity</CardDescription>
             <CardTitle className="text-5xl">{completionRate}%</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="w-full bg-secondary h-2 mt-4 rounded-full overflow-hidden">
               <div className="bg-primary h-full" style={{ width: `${completionRate}%` }} />
             </div>
-            <p className="text-xs text-muted-foreground mt-2 text-right">{completedCount} of {totalCount} tasks</p>
+            <p className="text-xs text-muted-foreground mt-2 text-right">
+              {completedCount} of {totalCount} tasks logged
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="uppercase tracking-widest font-bold">Haldol Cycle</CardDescription>
-            <CardTitle className="text-5xl">Day {haldol?.cycleDay || '-'}</CardTitle>
+            <CardTitle className="text-5xl">Day {haldol?.cycleDay ?? "-"}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground mt-2">Next: {haldol ? format(new Date(haldol.nextInjectionDate), 'MMM dd') : '--'}</p>
-            {haldol?.isZombiePhase && <Badge variant="destructive" className="mt-2">High Symptom Phase</Badge>}
+            <p className="text-sm text-muted-foreground mt-2">
+              Next: {haldol ? haldol.nextInjectionDate : "--"}
+            </p>
+            {haldol?.isZombiePhase && (
+              <Badge variant="destructive" className="mt-2">High Symptom Phase</Badge>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -168,23 +216,30 @@ function DashboardTab() {
       <Card className="mt-8">
         <CardHeader>
           <CardTitle>Active Broadcast Message</CardTitle>
-          <CardDescription>Displayed prominently on Pops' screen.</CardDescription>
+          <CardDescription>Displayed prominently on Pops' ambient screen. Overrides the current task display.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-4">
-            <Input 
-              defaultValue={state?.activeMessage || ''}
-              id="activeMsgInput"
+            <Input
+              value={broadcastValue}
+              onChange={(e) => setBroadcastValue(e.target.value)}
               className="font-display text-xl"
-              placeholder="Enter motivational quote or instruction..."
+              placeholder="Type message to show Pops..."
             />
-            <Button onClick={() => {
-              const val = (document.getElementById('activeMsgInput') as HTMLInputElement).value;
-              handleStateChange({ activeMessage: val });
-            }}>
+            <Button onClick={() => handleStateChange({ activeMessage: broadcastValue })}>
               Broadcast
             </Button>
+            {state?.activeMessage && (
+              <Button variant="outline" onClick={() => { setBroadcastValue(""); handleStateChange({ activeMessage: null }); }}>
+                Clear
+              </Button>
+            )}
           </div>
+          {state?.activeMessage && (
+            <p className="text-xs text-primary mt-2 font-bold">
+              Currently showing: "{state.activeMessage}"
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -206,33 +261,39 @@ function ScheduleTab() {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     const data = {
-      quarter: formData.get('quarter') as 'Q1'|'Q2'|'Q3'|'Q4',
-      timeLabel: formData.get('timeLabel') as string,
-      title: formData.get('title') as string,
-      description: formData.get('description') as string,
-      voiceScript: formData.get('voiceScript') as string,
-      order: parseInt(formData.get('order') as string, 10),
+      quarter: formData.get("quarter") as "Q1" | "Q2" | "Q3" | "Q4",
+      timeLabel: formData.get("timeLabel") as string,
+      title: formData.get("title") as string,
+      description: formData.get("description") as string,
+      voiceScript: formData.get("voiceScript") as string,
+      order: parseInt(formData.get("order") as string, 10),
     };
 
     if (editingTask) {
       updateTask.mutate({ id: editingTask.id, data }, {
-        onSuccess: () => { setIsModalOpen(false); toast({ title: "Task updated" }); }
+        onSuccess: () => { setIsModalOpen(false); toast({ title: "Task updated" }); },
       });
     } else {
       createTask.mutate({ data }, {
-        onSuccess: () => { setIsModalOpen(false); toast({ title: "Task created" }); }
+        onSuccess: () => { setIsModalOpen(false); toast({ title: "Task created" }); },
       });
     }
   };
 
-  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+  const quarters = ["Q1", "Q2", "Q3", "Q4"];
+  const quarterLabels: Record<string, string> = {
+    Q1: "Q1 — Morning (0600-1200)",
+    Q2: "Q2 — Afternoon (1200-1800)",
+    Q3: "Q3 — Evening (1800-2200)",
+    Q4: "Q4 — Night (2200-0600)",
+  };
 
   return (
     <div>
       <header className="mb-8 border-b border-border/50 pb-4 flex justify-between items-end">
         <div>
           <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Schedule Editor</h2>
-          <p className="text-muted-foreground">Manage daily tasks and routine blocks.</p>
+          <p className="text-muted-foreground">Manage the state machine. Each task becomes a Jessica voice prompt.</p>
         </div>
         <Button onClick={() => { setEditingTask(null); setIsModalOpen(true); }}>
           <Plus className="mr-2 h-4 w-4" /> Add Task
@@ -240,12 +301,12 @@ function ScheduleTab() {
       </header>
 
       <div className="space-y-8">
-        {quarters.map(q => {
-          const qTasks = schedule?.filter(t => t.quarter === q).sort((a, b) => a.order - b.order) || [];
+        {quarters.map((q) => {
+          const qTasks = schedule?.filter((t) => t.quarter === q).sort((a, b) => a.order - b.order) ?? [];
           return (
             <Card key={q}>
               <CardHeader className="bg-secondary/50 py-3">
-                <CardTitle className="text-2xl">{q} Tasks</CardTitle>
+                <CardTitle className="text-xl font-display tracking-widest">{quarterLabels[q]}</CardTitle>
               </CardHeader>
               <div className="p-0">
                 {qTasks.length === 0 ? (
@@ -262,7 +323,7 @@ function ScheduleTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {qTasks.map(task => (
+                      {qTasks.map((task) => (
                         <tr key={task.id} className="border-b border-border/50 hover:bg-secondary/20">
                           <td className="px-6 py-4">
                             {task.isCompleted ? (
@@ -274,7 +335,7 @@ function ScheduleTab() {
                           <td className="px-6 py-4 font-bold">{task.timeLabel}</td>
                           <td className="px-6 py-4 font-display text-lg tracking-wider">{task.title}</td>
                           <td className="px-6 py-4">{task.order}</td>
-                          <td className="px-6 py-4 text-right space-x-2 flex justify-end">
+                          <td className="px-6 py-4 text-right flex justify-end gap-2">
                             {!task.isCompleted && (
                               <Button size="icon" variant="outline" className="h-8 w-8 text-success hover:bg-success/20 hover:text-success border-success/30" onClick={() => completeTask.mutate({ id: task.id })}>
                                 <Check className="h-4 w-4" />
@@ -283,7 +344,7 @@ function ScheduleTab() {
                             <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => { setEditingTask(task); setIsModalOpen(true); }}>
                               <Edit2 className="h-4 w-4" />
                             </Button>
-                            <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => { if(confirm('Delete task?')) deleteTask.mutate({ id: task.id }); }}>
+                            <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => { if (confirm("Delete task?")) deleteTask.mutate({ id: task.id }); }}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </td>
@@ -303,7 +364,7 @@ function ScheduleTab() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-bold uppercase text-muted-foreground">Quarter</label>
-              <select name="quarter" defaultValue={editingTask?.quarter || 'Q1'} className="flex h-10 w-full rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <select name="quarter" defaultValue={editingTask?.quarter ?? "Q1"} className="flex h-10 w-full rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                 <option value="Q1">Q1 (Morning)</option>
                 <option value="Q2">Q2 (Afternoon)</option>
                 <option value="Q3">Q3 (Evening)</option>
@@ -329,7 +390,7 @@ function ScheduleTab() {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-bold uppercase text-muted-foreground">Sort Order</label>
-            <Input name="order" type="number" defaultValue={editingTask?.order || 0} required />
+            <Input name="order" type="number" defaultValue={editingTask?.order ?? 0} required />
           </div>
           <div className="pt-4 flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
@@ -345,23 +406,27 @@ function SymptomsTab() {
   const { data: logs } = useGetSymptomLogs();
   const createLog = useCreateSymptomLog();
   const { toast } = useToast();
+  const [hiVal, setHiVal] = useState(0);
+  const [mlVal, setMlVal] = useState(3);
 
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     const data = {
-      ptsdTrigger: formData.get('ptsdTrigger') === 'on',
-      hallucinationIntensity: parseInt(formData.get('hallucinationIntensity') as string, 10),
-      motivationLevel: parseInt(formData.get('motivationLevel') as string, 10),
-      behaviorNotes: formData.get('behaviorNotes') as string,
-      loggedBy: 'Raymo'
+      ptsdTrigger: formData.get("ptsdTrigger") === "on",
+      hallucinationIntensity: hiVal,
+      motivationLevel: mlVal,
+      behaviorNotes: formData.get("behaviorNotes") as string,
+      loggedBy: "Raymo",
     };
 
     createLog.mutate({ data }, {
       onSuccess: () => {
         toast({ title: "Symptom logged successfully" });
         (e.target as HTMLFormElement).reset();
-      }
+        setHiVal(0);
+        setMlVal(3);
+      },
     });
   };
 
@@ -371,32 +436,23 @@ function SymptomsTab() {
         <header className="border-b border-border/50 pb-4">
           <h2 className="text-4xl font-display text-primary tracking-widest uppercase">New Log</h2>
         </header>
-        
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleLogSubmit} className="space-y-6">
               <div className="space-y-3">
                 <label className="text-sm font-bold uppercase text-muted-foreground flex items-center justify-between">
                   Hallucination Intensity (0-5)
-                  <span className="text-primary font-display text-xl px-2 bg-secondary rounded" id="hi-val">0</span>
+                  <span className="text-primary font-display text-xl px-2 bg-secondary rounded">{hiVal}</span>
                 </label>
-                <input 
-                  type="range" name="hallucinationIntensity" min="0" max="5" defaultValue="0" 
-                  className="w-full accent-primary" 
-                  onChange={(e) => document.getElementById('hi-val')!.innerText = e.target.value}
-                />
+                <input type="range" min="0" max="5" value={hiVal} onChange={(e) => setHiVal(parseInt(e.target.value))} className="w-full accent-primary" />
               </div>
 
               <div className="space-y-3">
                 <label className="text-sm font-bold uppercase text-muted-foreground flex items-center justify-between">
                   Motivation Level (1-5)
-                  <span className="text-primary font-display text-xl px-2 bg-secondary rounded" id="ml-val">3</span>
+                  <span className="text-primary font-display text-xl px-2 bg-secondary rounded">{mlVal}</span>
                 </label>
-                <input 
-                  type="range" name="motivationLevel" min="1" max="5" defaultValue="3" 
-                  className="w-full accent-primary"
-                  onChange={(e) => document.getElementById('ml-val')!.innerText = e.target.value}
-                />
+                <input type="range" min="1" max="5" value={mlVal} onChange={(e) => setMlVal(parseInt(e.target.value))} className="w-full accent-primary" />
               </div>
 
               <div className="flex items-center gap-3 bg-secondary/50 p-4 rounded-md border border-border">
@@ -408,8 +464,8 @@ function SymptomsTab() {
 
               <div className="space-y-2">
                 <label className="text-sm font-bold uppercase text-muted-foreground">Behavior Notes</label>
-                <textarea 
-                  name="behaviorNotes" 
+                <textarea
+                  name="behaviorNotes"
                   className="flex min-h-[100px] w-full rounded-sm border border-border bg-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   placeholder="Observations..."
                 />
@@ -425,25 +481,24 @@ function SymptomsTab() {
         <header className="border-b border-border/50 pb-4">
           <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Recent History</h2>
         </header>
-        
         <div className="space-y-4">
           {logs?.length === 0 ? (
             <p className="text-muted-foreground italic">No logs recorded yet.</p>
           ) : (
-            logs?.map(log => (
-              <Card key={log.id} className={log.ptsdTrigger ? 'border-destructive/50 border-l-4 border-l-destructive' : ''}>
+            logs?.map((log) => (
+              <Card key={log.id} className={log.ptsdTrigger ? "border-destructive/50 border-l-4 border-l-destructive" : ""}>
                 <CardContent className="p-4 flex gap-4">
                   <div className="shrink-0 text-center w-20 p-2 bg-secondary rounded border border-border/50">
                     <div className="text-xs text-muted-foreground uppercase font-bold">Time</div>
-                    <div className="text-lg font-display text-primary">{format(new Date(log.loggedAt), 'HH:mm')}</div>
-                    <div className="text-xs text-muted-foreground">{format(new Date(log.loggedAt), 'MM/dd')}</div>
+                    <div className="text-lg font-display text-primary">{format(new Date(log.loggedAt), "HH:mm")}</div>
+                    <div className="text-xs text-muted-foreground">{format(new Date(log.loggedAt), "MM/dd")}</div>
                   </div>
                   <div className="flex-1">
                     <div className="flex gap-2 mb-2">
-                      <Badge variant={log.hallucinationIntensity > 2 ? 'destructive' : 'secondary'}>
+                      <Badge variant={log.hallucinationIntensity > 2 ? "destructive" : "secondary"}>
                         Intensity: {log.hallucinationIntensity}/5
                       </Badge>
-                      <Badge variant={log.motivationLevel < 3 ? 'destructive' : 'default'}>
+                      <Badge variant={log.motivationLevel < 3 ? "destructive" : "default"}>
                         Motivation: {log.motivationLevel}/5
                       </Badge>
                       {log.ptsdTrigger && <Badge variant="destructive" className="animate-pulse">PTSD Trigger</Badge>}
@@ -469,23 +524,24 @@ function ScriptsTab() {
   const updateScript = useUpdateVoiceScript();
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editTone, setEditTone] = useState("gentle");
 
-  const handlePatch = (id: number, currentTone: string) => {
-    const textInput = document.getElementById(`script-text-${id}`) as HTMLInputElement;
-    const toneInput = document.getElementById(`script-tone-${id}`) as HTMLSelectElement;
-    
-    updateScript.mutate({ 
-      id, 
-      data: { 
-        scriptText: textInput.value,
-        tone: toneInput.value as any,
-        patchNote: "Live admin override"
-      }
+  const startEdit = (script: any) => {
+    setEditingId(script.id);
+    setEditText(script.scriptText);
+    setEditTone(script.tone);
+  };
+
+  const handlePatch = (id: number) => {
+    updateScript.mutate({
+      id,
+      data: { scriptText: editText, tone: editTone as any, patchNote: "Live admin override" },
     }, {
       onSuccess: () => {
         setEditingId(null);
-        toast({ title: "Script patched successfully. Jessica updated." });
-      }
+        toast({ title: "Script patched. Jessica updated." });
+      },
     });
   };
 
@@ -497,30 +553,37 @@ function ScriptsTab() {
       </header>
 
       <div className="grid gap-4">
-        {scripts?.map(script => (
-          <Card key={script.id} className={`transition-all ${editingId === script.id ? 'border-primary shadow-[0_0_20px_rgba(251,191,36,0.1)]' : ''}`}>
+        {scripts?.map((script) => (
+          <Card key={script.id} className={`transition-all ${editingId === script.id ? "border-primary shadow-[0_0_20px_rgba(251,191,36,0.1)]" : ""}`}>
             <CardHeader className="py-3 flex flex-row items-center justify-between bg-secondary/30">
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${script.isActive ? 'bg-success animate-pulse' : 'bg-muted-foreground'}`} />
-                <CardTitle className="text-xl">{script.label} <span className="text-xs text-muted-foreground ml-2 font-sans tracking-normal">[{script.taskKey}]</span></CardTitle>
+                <div className={`w-2 h-2 rounded-full ${script.isActive ? "bg-success animate-pulse" : "bg-muted-foreground"}`} />
+                <CardTitle className="text-xl">
+                  {script.label}{" "}
+                  <span className="text-xs text-muted-foreground ml-2 font-sans tracking-normal">[{script.taskKey}]</span>
+                </CardTitle>
               </div>
               <Badge variant="outline">{script.tone}</Badge>
             </CardHeader>
             <CardContent className="p-4">
               {editingId === script.id ? (
                 <div className="space-y-4">
-                  <Input 
-                    id={`script-text-${script.id}`}
-                    defaultValue={script.scriptText} 
-                    className="font-sans font-bold text-primary"
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    className="flex min-h-[80px] w-full rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary font-bold text-primary"
                   />
                   <div className="flex gap-4">
-                    <select id={`script-tone-${script.id}`} defaultValue={script.tone} className="h-10 rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                      {['gentle', 'grounding', 'urgent', 'encouraging', 'calm'].map(t => (
+                    <select
+                      value={editTone}
+                      onChange={(e) => setEditTone(e.target.value)}
+                      className="h-10 rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      {["gentle", "grounding", "urgent", "encouraging", "calm"].map((t) => (
                         <option key={t} value={t}>{t.toUpperCase()}</option>
                       ))}
                     </select>
-                    <Button onClick={() => handlePatch(script.id, script.tone)} disabled={updateScript.isPending}>
+                    <Button onClick={() => handlePatch(script.id)} disabled={updateScript.isPending}>
                       Deploy Patch
                     </Button>
                     <Button variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
@@ -529,7 +592,7 @@ function ScriptsTab() {
               ) : (
                 <div className="flex justify-between items-center gap-4">
                   <p className="font-sans text-lg text-foreground/90 border-l-2 border-primary/50 pl-4 py-1 italic">"{script.scriptText}"</p>
-                  <Button variant="outline" size="sm" onClick={() => setEditingId(script.id)}>Edit / Patch</Button>
+                  <Button variant="outline" size="sm" onClick={() => startEdit(script)}>Edit / Patch</Button>
                 </div>
               )}
             </CardContent>
@@ -551,11 +614,11 @@ function HaldolTab() {
     const formData = new FormData(e.target as HTMLFormElement);
     updateHaldol.mutate({
       data: {
-        lastInjectionDate: formData.get('lastInjectionDate') as string,
-        notes: formData.get('notes') as string,
-      }
+        lastInjectionDate: formData.get("lastInjectionDate") as string,
+        notes: formData.get("notes") as string,
+      },
     }, {
-      onSuccess: () => toast({ title: "Cycle tracking updated" })
+      onSuccess: () => toast({ title: "Cycle tracking updated" }),
     });
   };
 
@@ -575,9 +638,11 @@ function HaldolTab() {
             <CardContent className="text-center pb-8 space-y-6">
               <div>
                 <p className="text-muted-foreground font-bold uppercase tracking-widest text-sm mb-2">Cycle Day</p>
-                <div className="text-8xl font-display text-primary tracking-wider">{haldol.cycleDay}<span className="text-4xl text-muted-foreground">/14</span></div>
+                <div className="text-8xl font-display text-primary tracking-wider">
+                  {haldol.cycleDay}<span className="text-4xl text-muted-foreground">/14</span>
+                </div>
               </div>
-              
+
               {haldol.isZombiePhase ? (
                 <div className="inline-block px-6 py-3 bg-destructive/20 border border-destructive rounded-md">
                   <h4 className="text-xl font-display text-destructive uppercase tracking-widest flex items-center gap-2">
@@ -595,7 +660,7 @@ function HaldolTab() {
 
               <div className="pt-4 border-t border-border/50">
                 <p className="text-muted-foreground uppercase text-xs font-bold tracking-widest mb-1">Next Scheduled Injection</p>
-                <p className="text-3xl font-display text-foreground">{format(new Date(haldol.nextInjectionDate), 'EEEE, MMMM do')}</p>
+                <p className="text-3xl font-display text-foreground">{haldol.nextInjectionDate}</p>
               </div>
             </CardContent>
           </Card>
@@ -609,29 +674,182 @@ function HaldolTab() {
               <form onSubmit={handleUpdate} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-muted-foreground">Last Injection Date</label>
-                  <Input 
-                    type="date" 
-                    name="lastInjectionDate" 
-                    defaultValue={haldol.lastInjectionDate}
-                    required 
-                  />
+                  <Input type="date" name="lastInjectionDate" defaultValue={haldol.lastInjectionDate} required />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-muted-foreground">Clinical Notes</label>
-                  <textarea 
-                    name="notes" 
-                    defaultValue={haldol.notes || ''}
+                  <textarea
+                    name="notes"
+                    defaultValue={haldol.notes ?? ""}
                     className="flex min-h-[120px] w-full rounded-sm border border-border bg-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     placeholder="Observations around injection time..."
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={updateHaldol.isPending}>
-                  Reset & Save Cycle
+                  Reset &amp; Save Cycle
                 </Button>
               </form>
             </CardContent>
           </Card>
         </div>
+      )}
+    </div>
+  );
+}
+
+const PILLAR_COLORS: Record<string, string> = {
+  productivity: "border-yellow-500/40 bg-yellow-500/5",
+  passion: "border-blue-500/40 bg-blue-500/5",
+  curiosity: "border-green-500/40 bg-green-500/5",
+};
+
+const PILLAR_ACCENT: Record<string, string> = {
+  productivity: "text-yellow-400",
+  passion: "text-blue-400",
+  curiosity: "text-green-400",
+};
+
+function GovernorTab() {
+  const { data: pillars } = useGetGovernorPillars();
+  const { data: notes, refetch: refetchNotes } = useGetGovernorNotes();
+  const createNote = useCreateGovernorNote();
+  const { toast } = useToast();
+  const [noteText, setNoteText] = useState("");
+  const [notePillar, setNotePillar] = useState("");
+
+  const handleSubmitNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteText.trim()) return;
+    createNote.mutate({
+      data: { noteText: noteText.trim(), pillarKey: notePillar || undefined },
+    }, {
+      onSuccess: () => {
+        toast({ title: "Synthesis note logged" });
+        setNoteText("");
+        setNotePillar("");
+        refetchNotes();
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-8">
+      <header className="border-b border-border/50 pb-4">
+        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Sovereign Staff Governor</h2>
+        <p className="text-muted-foreground">Raymo's three-pillar productivity engine — separate from Pops' care system.</p>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {pillars?.map((pillar) => (
+          <Card key={pillar.pillarKey} className={`border-2 ${PILLAR_COLORS[pillar.pillarKey] ?? "border-border"}`}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between mb-1">
+                <Badge variant="outline" className={`text-xs uppercase font-bold ${PILLAR_ACCENT[pillar.pillarKey]}`}>
+                  {pillar.pillarKey}
+                </Badge>
+                <span className="text-xs text-muted-foreground font-bold">
+                  {pillar.focusDurationMins} min
+                </span>
+              </div>
+              <CardTitle className={`text-2xl font-display tracking-widest ${PILLAR_ACCENT[pillar.pillarKey]}`}>
+                {pillar.name}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground leading-relaxed">{pillar.description}</p>
+              {pillar.metrics.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest mb-2">Metrics</p>
+                  <ul className="space-y-1">
+                    {pillar.metrics.map((m, i) => (
+                      <li key={i} className="text-xs text-foreground/70 flex items-start gap-2">
+                        <span className="text-primary mt-0.5">›</span>
+                        {m}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Log Synthesis Note</CardTitle>
+          <CardDescription>
+            Record a daily insight, trajectory observation, or Goldilocks action across your pillars.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmitNote} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-bold uppercase text-muted-foreground">Pillar (Optional)</label>
+              <select
+                value={notePillar}
+                onChange={(e) => setNotePillar(e.target.value)}
+                className="flex h-10 w-full rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <option value="">General / All Pillars</option>
+                {pillars?.map((p) => (
+                  <option key={p.pillarKey} value={p.pillarKey}>
+                    {p.name} ({p.pillarKey})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold uppercase text-muted-foreground">Synthesis Note</label>
+              <textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                className="flex min-h-[120px] w-full rounded-sm border border-border bg-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                placeholder="Trajectory analysis, lagging pillar, Goldilocks action, logic bridge..."
+                required
+              />
+            </div>
+            <Button type="submit" disabled={createNote.isPending || !noteText.trim()}>
+              Save Synthesis Note
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {notes && notes.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-2xl font-display text-primary tracking-widest uppercase border-b border-border/50 pb-3">
+            Recent Notes
+          </h3>
+          {notes.map((note) => {
+            const pillar = pillars?.find((p) => p.pillarKey === note.pillarKey);
+            return (
+              <Card key={note.id}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    {pillar ? (
+                      <Badge className={`text-xs uppercase font-bold ${PILLAR_ACCENT[pillar.pillarKey]}`} variant="outline">
+                        {pillar.name}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs uppercase font-bold">General</Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(note.createdAt), "EEE MMM dd, HH:mm")}
+                    </span>
+                  </div>
+                  <p className="text-sm text-foreground/90 leading-relaxed">{note.noteText}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {notes?.length === 0 && (
+        <p className="text-muted-foreground italic text-center py-8">
+          No synthesis notes yet. Log your first one above.
+        </p>
       )}
     </div>
   );

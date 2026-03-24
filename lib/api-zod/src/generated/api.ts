@@ -15,13 +15,24 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * @summary Get current live app state
+ * @summary Get current live app state (includes computed quarter from wall clock)
  */
 export const getAppStateResponseMotivationLevelMax = 5;
 
 export const GetAppStateResponse = zod.object({
   id: zod.number(),
-  currentQuarter: zod.enum(["Q1", "Q2", "Q3", "Q4"]),
+  currentQuarter: zod
+    .enum(["Q1", "Q2", "Q3", "Q4"])
+    .describe(
+      "Effective quarter - override if set, else computed from wall clock",
+    ),
+  computedQuarter: zod
+    .enum(["Q1", "Q2", "Q3", "Q4"])
+    .describe("Always the wall-clock-computed quarter regardless of override"),
+  quarterOverride: zod
+    .enum(["Q1", "Q2", "Q3", "Q4"])
+    .nullish()
+    .describe("Manual override set by Raymo. Null means use computed quarter."),
   zombieMode: zod
     .boolean()
     .describe(
@@ -45,14 +56,14 @@ export const GetAppStateResponse = zod.object({
 export const updateAppStateBodyMotivationLevelMax = 5;
 
 export const UpdateAppStateBody = zod.object({
-  currentQuarter: zod.enum(["Q1", "Q2", "Q3", "Q4"]).optional(),
+  quarterOverride: zod.enum(["Q1", "Q2", "Q3", "Q4"]).nullish(),
   zombieMode: zod.boolean().optional(),
   motivationLevel: zod
     .number()
     .min(1)
     .max(updateAppStateBodyMotivationLevelMax)
     .optional(),
-  activeMessage: zod.string().optional(),
+  activeMessage: zod.string().nullish(),
   notes: zod.string().optional(),
 });
 
@@ -60,7 +71,18 @@ export const updateAppStateResponseMotivationLevelMax = 5;
 
 export const UpdateAppStateResponse = zod.object({
   id: zod.number(),
-  currentQuarter: zod.enum(["Q1", "Q2", "Q3", "Q4"]),
+  currentQuarter: zod
+    .enum(["Q1", "Q2", "Q3", "Q4"])
+    .describe(
+      "Effective quarter - override if set, else computed from wall clock",
+    ),
+  computedQuarter: zod
+    .enum(["Q1", "Q2", "Q3", "Q4"])
+    .describe("Always the wall-clock-computed quarter regardless of override"),
+  quarterOverride: zod
+    .enum(["Q1", "Q2", "Q3", "Q4"])
+    .nullish()
+    .describe("Manual override set by Raymo. Null means use computed quarter."),
   zombieMode: zod
     .boolean()
     .describe(
@@ -348,4 +370,44 @@ export const UpdateHaldolCycleResponse = zod.object({
     .describe("True on days 1-5 when symptoms are typically highest"),
   nextInjectionDate: zod.date(),
   notes: zod.string().optional(),
+});
+
+/**
+ * @summary Get all Governor productivity pillars
+ */
+export const GetGovernorPillarsResponseItem = zod.object({
+  id: zod.number(),
+  pillarKey: zod.string().describe("productivity | passion | curiosity"),
+  name: zod.string(),
+  description: zod.string(),
+  focusDurationMins: zod.number(),
+  metrics: zod.array(zod.string()),
+});
+export const GetGovernorPillarsResponse = zod.array(
+  GetGovernorPillarsResponseItem,
+);
+
+/**
+ * @summary Get synthesis notes (most recent first)
+ */
+export const getGovernorNotesQueryLimitDefault = 20;
+
+export const GetGovernorNotesQueryParams = zod.object({
+  limit: zod.coerce.number().default(getGovernorNotesQueryLimitDefault),
+});
+
+export const GetGovernorNotesResponseItem = zod.object({
+  id: zod.number(),
+  pillarKey: zod.string().nullish(),
+  noteText: zod.string(),
+  createdAt: zod.date(),
+});
+export const GetGovernorNotesResponse = zod.array(GetGovernorNotesResponseItem);
+
+/**
+ * @summary Log a synthesis note for a pillar
+ */
+export const CreateGovernorNoteBody = zod.object({
+  pillarKey: zod.string().optional(),
+  noteText: zod.string(),
 });

@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Effective quarter - override if set, else computed from wall clock
+ */
 export type AppStateCurrentQuarter =
   (typeof AppStateCurrentQuarter)[keyof typeof AppStateCurrentQuarter];
 

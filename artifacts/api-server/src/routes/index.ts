@@ -5,6 +5,7 @@ import scheduleRouter from "./schedule";
 import symptomsRouter from "./symptoms";
 import scriptsRouter from "./scripts";
 import haldolRouter from "./haldol";
+import governorRouter from "./governor";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(scheduleRouter);
 router.use(symptomsRouter);
 router.use(scriptsRouter);
 router.use(haldolRouter);
+router.use(governorRouter);
 
 export default router;

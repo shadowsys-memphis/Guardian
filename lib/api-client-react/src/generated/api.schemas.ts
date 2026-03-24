@@ -9,6 +9,9 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * Effective quarter - override if set, else computed from wall clock
+ */
 export type AppStateCurrentQuarter =
   (typeof AppStateCurrentQuarter)[keyof typeof AppStateCurrentQuarter];
 
@@ -19,9 +22,41 @@ export const AppStateCurrentQuarter = {
   Q4: "Q4",
 } as const;
 
+/**
+ * Always the wall-clock-computed quarter regardless of override
+ */
+export type AppStateComputedQuarter =
+  (typeof AppStateComputedQuarter)[keyof typeof AppStateComputedQuarter];
+
+export const AppStateComputedQuarter = {
+  Q1: "Q1",
+  Q2: "Q2",
+  Q3: "Q3",
+  Q4: "Q4",
+} as const;
+
+/**
+ * Manual override set by Raymo. Null means use computed quarter.
+ */
+export type AppStateQuarterOverride =
+  | (typeof AppStateQuarterOverride)[keyof typeof AppStateQuarterOverride]
+  | null;
+
+export const AppStateQuarterOverride = {
+  Q1: "Q1",
+  Q2: "Q2",
+  Q3: "Q3",
+  Q4: "Q4",
+} as const;
+
 export interface AppState {
   id: number;
+  /** Effective quarter - override if set, else computed from wall clock */
   currentQuarter: AppStateCurrentQuarter;
+  /** Always the wall-clock-computed quarter regardless of override */
+  computedQuarter: AppStateComputedQuarter;
+  /** Manual override set by Raymo. Null means use computed quarter. */
+  quarterOverride?: AppStateQuarterOverride;
   /** True when Pops is in rest mode (high symptom days 1-5 of Haldol cycle) */
   zombieMode: boolean;
   /**
@@ -35,10 +70,11 @@ export interface AppState {
   notes?: string;
 }
 
-export type UpdateAppStateInputCurrentQuarter =
-  (typeof UpdateAppStateInputCurrentQuarter)[keyof typeof UpdateAppStateInputCurrentQuarter];
+export type UpdateAppStateInputQuarterOverride =
+  | (typeof UpdateAppStateInputQuarterOverride)[keyof typeof UpdateAppStateInputQuarterOverride]
+  | null;
 
-export const UpdateAppStateInputCurrentQuarter = {
+export const UpdateAppStateInputQuarterOverride = {
   Q1: "Q1",
   Q2: "Q2",
   Q3: "Q3",
@@ -46,14 +82,14 @@ export const UpdateAppStateInputCurrentQuarter = {
 } as const;
 
 export interface UpdateAppStateInput {
-  currentQuarter?: UpdateAppStateInputCurrentQuarter;
+  quarterOverride?: UpdateAppStateInputQuarterOverride;
   zombieMode?: boolean;
   /**
    * @minimum 1
    * @maximum 5
    */
   motivationLevel?: number;
-  activeMessage?: string;
+  activeMessage?: string | null;
   notes?: string;
 }
 
@@ -237,6 +273,32 @@ export interface UpdateHaldolCycleInput {
   notes?: string;
 }
 
+export interface GovernorPillar {
+  id: number;
+  /** productivity | passion | curiosity */
+  pillarKey: string;
+  name: string;
+  description: string;
+  focusDurationMins: number;
+  metrics: string[];
+}
+
+export interface GovernorNote {
+  id: number;
+  pillarKey?: string | null;
+  noteText: string;
+  createdAt: string;
+}
+
+export interface CreateGovernorNoteInput {
+  pillarKey?: string;
+  noteText: string;
+}
+
 export type GetSymptomLogsParams = {
+  limit?: number;
+};
+
+export type GetGovernorNotesParams = {
   limit?: number;
 };

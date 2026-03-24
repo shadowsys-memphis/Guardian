@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const appStateTable = pgTable("app_state", {
   id: serial("id").primaryKey(),
   currentQuarter: text("current_quarter").notNull().default("Q1"),
+  quarterOverride: text("quarter_override"),
   zombieMode: boolean("zombie_mode").notNull().default(false),
   motivationLevel: integer("motivation_level").notNull().default(3),
   lastUpdated: timestamp("last_updated").notNull().defaultNow(),
@@ -52,20 +53,43 @@ export const haldolCycleTable = pgTable("haldol_cycle", {
   notes: text("notes"),
 });
 
+export const governorPillarsTable = pgTable("governor_pillars", {
+  id: serial("id").primaryKey(),
+  pillarKey: text("pillar_key").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  focusDurationMins: integer("focus_duration_mins").notNull().default(60),
+  metrics: text("metrics"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const governorNotesTable = pgTable("governor_notes", {
+  id: serial("id").primaryKey(),
+  pillarKey: text("pillar_key"),
+  noteText: text("note_text").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertAppStateSchema = createInsertSchema(appStateTable).omit({ id: true });
 export const insertScheduleTaskSchema = createInsertSchema(scheduleTasksTable).omit({ id: true });
 export const insertSymptomLogSchema = createInsertSchema(symptomLogsTable).omit({ id: true });
 export const insertVoiceScriptSchema = createInsertSchema(voiceScriptsTable).omit({ id: true });
 export const insertHaldolCycleSchema = createInsertSchema(haldolCycleTable).omit({ id: true });
+export const insertGovernorPillarSchema = createInsertSchema(governorPillarsTable).omit({ id: true });
+export const insertGovernorNoteSchema = createInsertSchema(governorNotesTable).omit({ id: true });
 
 export type AppState = typeof appStateTable.$inferSelect;
 export type ScheduleTask = typeof scheduleTasksTable.$inferSelect;
 export type SymptomLog = typeof symptomLogsTable.$inferSelect;
 export type VoiceScript = typeof voiceScriptsTable.$inferSelect;
 export type HaldolCycle = typeof haldolCycleTable.$inferSelect;
+export type GovernorPillar = typeof governorPillarsTable.$inferSelect;
+export type GovernorNote = typeof governorNotesTable.$inferSelect;
 
 export type InsertAppState = z.infer<typeof insertAppStateSchema>;
 export type InsertScheduleTask = z.infer<typeof insertScheduleTaskSchema>;
 export type InsertSymptomLog = z.infer<typeof insertSymptomLogSchema>;
 export type InsertVoiceScript = z.infer<typeof insertVoiceScriptSchema>;
 export type InsertHaldolCycle = z.infer<typeof insertHaldolCycleSchema>;
+export type InsertGovernorPillar = z.infer<typeof insertGovernorPillarSchema>;
+export type InsertGovernorNote = z.infer<typeof insertGovernorNoteSchema>;

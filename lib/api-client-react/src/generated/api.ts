@@ -18,10 +18,14 @@ import type {
 
 import type {
   AppState,
+  CreateGovernorNoteInput,
   CreateScheduleTaskInput,
   CreateSymptomLogInput,
   CreateVoiceScriptInput,
+  GetGovernorNotesParams,
   GetSymptomLogsParams,
+  GovernorNote,
+  GovernorPillar,
   HaldolCycle,
   HealthStatus,
   ScheduleTask,
@@ -118,7 +122,7 @@ export function useHealthCheck<
 }
 
 /**
- * @summary Get current live app state
+ * @summary Get current live app state (includes computed quarter from wall clock)
  */
 export const getGetAppStateUrl = () => {
   return `/api/state`;
@@ -167,7 +171,7 @@ export type GetAppStateQueryResult = NonNullable<
 export type GetAppStateQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get current live app state
+ * @summary Get current live app state (includes computed quarter from wall clock)
  */
 
 export function useGetAppState<
@@ -1438,4 +1442,262 @@ export const useUpdateHaldolCycle = <
   TContext
 > => {
   return useMutation(getUpdateHaldolCycleMutationOptions(options));
+};
+
+/**
+ * @summary Get all Governor productivity pillars
+ */
+export const getGetGovernorPillarsUrl = () => {
+  return `/api/governor/pillars`;
+};
+
+export const getGovernorPillars = async (
+  options?: RequestInit,
+): Promise<GovernorPillar[]> => {
+  return customFetch<GovernorPillar[]>(getGetGovernorPillarsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetGovernorPillarsQueryKey = () => {
+  return [`/api/governor/pillars`] as const;
+};
+
+export const getGetGovernorPillarsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGovernorPillars>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getGovernorPillars>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetGovernorPillarsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGovernorPillars>>
+  > = ({ signal }) => getGovernorPillars({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGovernorPillars>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetGovernorPillarsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGovernorPillars>>
+>;
+export type GetGovernorPillarsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get all Governor productivity pillars
+ */
+
+export function useGetGovernorPillars<
+  TData = Awaited<ReturnType<typeof getGovernorPillars>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getGovernorPillars>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetGovernorPillarsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get synthesis notes (most recent first)
+ */
+export const getGetGovernorNotesUrl = (params?: GetGovernorNotesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/governor/notes?${stringifiedParams}`
+    : `/api/governor/notes`;
+};
+
+export const getGovernorNotes = async (
+  params?: GetGovernorNotesParams,
+  options?: RequestInit,
+): Promise<GovernorNote[]> => {
+  return customFetch<GovernorNote[]>(getGetGovernorNotesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetGovernorNotesQueryKey = (
+  params?: GetGovernorNotesParams,
+) => {
+  return [`/api/governor/notes`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetGovernorNotesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGovernorNotes>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetGovernorNotesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getGovernorNotes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetGovernorNotesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGovernorNotes>>
+  > = ({ signal }) => getGovernorNotes(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGovernorNotes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetGovernorNotesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGovernorNotes>>
+>;
+export type GetGovernorNotesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get synthesis notes (most recent first)
+ */
+
+export function useGetGovernorNotes<
+  TData = Awaited<ReturnType<typeof getGovernorNotes>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetGovernorNotesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getGovernorNotes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetGovernorNotesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Log a synthesis note for a pillar
+ */
+export const getCreateGovernorNoteUrl = () => {
+  return `/api/governor/notes`;
+};
+
+export const createGovernorNote = async (
+  createGovernorNoteInput: CreateGovernorNoteInput,
+  options?: RequestInit,
+): Promise<GovernorNote> => {
+  return customFetch<GovernorNote>(getCreateGovernorNoteUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createGovernorNoteInput),
+  });
+};
+
+export const getCreateGovernorNoteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createGovernorNote>>,
+    TError,
+    { data: BodyType<CreateGovernorNoteInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createGovernorNote>>,
+  TError,
+  { data: BodyType<CreateGovernorNoteInput> },
+  TContext
+> => {
+  const mutationKey = ["createGovernorNote"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createGovernorNote>>,
+    { data: BodyType<CreateGovernorNoteInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createGovernorNote(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateGovernorNoteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createGovernorNote>>
+>;
+export type CreateGovernorNoteMutationBody = BodyType<CreateGovernorNoteInput>;
+export type CreateGovernorNoteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Log a synthesis note for a pillar
+ */
+export const useCreateGovernorNote = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createGovernorNote>>,
+    TError,
+    { data: BodyType<CreateGovernorNoteInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createGovernorNote>>,
+  TError,
+  { data: BodyType<CreateGovernorNoteInput> },
+  TContext
+> => {
+  return useMutation(getCreateGovernorNoteMutationOptions(options));
 };
