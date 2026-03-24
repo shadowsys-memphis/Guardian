@@ -1,0 +1,31 @@
+{
+  "pillars": {
+    "productivity": {
+      "id": "leveraged_income",
+      "name": "Lulubear Bakery (Productivity Block)",
+      "description": "Daily status: Optimization of high-leverage client assets. Focus on speed and site audit delivery.",
+      "metrics": ["Lulubear site speed audit progress", "Optimization asset staging in /projects/lulubear/optimizations"],
+      "focus_duration_mins": 60
+    },
+    "passion": {
+      "id": "autonomous_code",
+      "name": "SS_III (Passion Block)",
+      "description": "Logic problems: Developing the Autonomous IT Department. Shadow AI Service Agent development.",
+      "metrics": ["Service Agent logic v0.1 stability", "Shadow AI terminal history pattern mapping"],
+      "focus_duration_mins": 120
+    },
+    "curiosity": {
+      "id": "future_innovation",
+      "name": "Growth (Curiosity Block)",
+      "description": "Research: AI/Crypto trends, Kraken metrics. High-level strategic synthesis and learning.",
+      "metrics": ["Kraken portfolio risk assessment", "Latest AI/Crypto research synthesis docs"],
+      "focus_duration_mins": 45
+    }
+  },
+  "governor_settings": {
+    "goldilocks_rule": "Be helpful, not obvious or invasive. Synthesize a single actionable starting point.",
+    "pivot_window_minutes": 120,
+    "scan_on_startup": true,
+    "current_session_start": null
+  }
+}
