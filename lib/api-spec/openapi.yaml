@@ -403,6 +403,11 @@ components:
           description: "Message shown prominently on Pops' display"
         notes:
           type: string
+        currentScheduledTask:
+          nullable: true
+          description: "Highest-priority active task for the current quarter (by order). Null if none."
+          allOf:
+            - $ref: "#/components/schemas/ScheduleTask"
       required:
         - id
         - currentQuarter

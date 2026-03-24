@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Clock,
 } from "lucide-react";
+
 import {
   useGetAppState, useUpdateAppState,
   useGetSchedule, useCreateScheduleTask, useUpdateScheduleTask, useDeleteScheduleTask, useCompleteScheduleTask,
@@ -22,6 +23,11 @@ import {
   useGetVoiceScripts, useUpdateVoiceScript,
   useGetHaldolCycle, useUpdateHaldolCycle,
   useGetGovernorPillars, useGetGovernorNotes, useCreateGovernorNote,
+  type UpdateAppStateInput,
+  type VoiceScript,
+  type ScheduleTask,
+  type GovernorPillar,
+  type GovernorNote,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
+type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
 type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "governor";
 
 export function AdminView() {
@@ -102,7 +109,7 @@ function DashboardTab() {
   const { toast } = useToast();
   const [broadcastValue, setBroadcastValue] = useState(state?.activeMessage ?? "");
 
-  const handleStateChange = (updates: any) => {
+  const handleStateChange = (updates: UpdateAppStateInput) => {
     updateState.mutate({ data: updates }, {
       onSuccess: () => toast({ title: "State updated" }),
       onError: () => toast({ title: "Update failed", variant: "destructive" }),
@@ -255,7 +262,7 @@ function ScheduleTab() {
   const { toast } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<any>(null);
+  const [editingTask, setEditingTask] = useState<ScheduleTask | null>(null); 
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -525,18 +532,18 @@ function ScriptsTab() {
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
-  const [editTone, setEditTone] = useState("gentle");
+  const [editTone, setEditTone] = useState<Tone>("gentle");
 
-  const startEdit = (script: any) => {
+  const startEdit = (script: VoiceScript) => {
     setEditingId(script.id);
     setEditText(script.scriptText);
-    setEditTone(script.tone);
+    setEditTone(script.tone as Tone);
   };
 
   const handlePatch = (id: number) => {
     updateScript.mutate({
       id,
-      data: { scriptText: editText, tone: editTone as any, patchNote: "Live admin override" },
+      data: { scriptText: editText, tone: editTone, patchNote: "Live admin override" },
     }, {
       onSuccess: () => {
         setEditingId(null);
@@ -576,7 +583,7 @@ function ScriptsTab() {
                   <div className="flex gap-4">
                     <select
                       value={editTone}
-                      onChange={(e) => setEditTone(e.target.value)}
+                      onChange={(e) => setEditTone(e.target.value as Tone)}
                       className="h-10 rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {["gentle", "grounding", "urgent", "encouraging", "calm"].map((t) => (

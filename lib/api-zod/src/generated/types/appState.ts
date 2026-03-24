@@ -8,6 +8,7 @@
 import type { AppStateComputedQuarter } from "./appStateComputedQuarter";
 import type { AppStateCurrentQuarter } from "./appStateCurrentQuarter";
 import type { AppStateQuarterOverride } from "./appStateQuarterOverride";
+import type { ScheduleTask } from "./scheduleTask";
 
 export interface AppState {
   id: number;
@@ -28,4 +29,6 @@ export interface AppState {
   /** Message shown prominently on Pops' display */
   activeMessage?: string;
   notes?: string;
+  /** Highest-priority active task for the current quarter (by order). Null if none. */
+  currentScheduledTask?: ScheduleTask | null;
 }

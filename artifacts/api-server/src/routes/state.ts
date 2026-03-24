@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { appStateTable } from "@workspace/db/schema";
+import { appStateTable, scheduleTasksTable } from "@workspace/db/schema";
 import { UpdateAppStateBody } from "@workspace/api-zod";
-import { eq } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -29,9 +29,35 @@ async function ensureState() {
   return rows[0];
 }
 
-function serializeState(state: typeof appStateTable.$inferSelect) {
+function serializeTask(task: typeof scheduleTasksTable.$inferSelect) {
+  return {
+    id: task.id,
+    quarter: task.quarter as "Q1" | "Q2" | "Q3" | "Q4",
+    timeLabel: task.timeLabel,
+    title: task.title,
+    description: task.description ?? undefined,
+    voiceScript: task.voiceScript ?? undefined,
+    isCompleted: task.isCompleted,
+    completedAt: task.completedAt?.toISOString() ?? null,
+    order: task.order,
+    isActive: task.isActive,
+  };
+}
+
+async function fetchCurrentTask(quarter: "Q1" | "Q2" | "Q3" | "Q4") {
+  const tasks = await db
+    .select()
+    .from(scheduleTasksTable)
+    .where(and(eq(scheduleTasksTable.quarter, quarter), eq(scheduleTasksTable.isActive, true)))
+    .orderBy(asc(scheduleTasksTable.order))
+    .limit(1);
+  return tasks.length > 0 ? serializeTask(tasks[0]) : null;
+}
+
+async function serializeState(state: typeof appStateTable.$inferSelect) {
   const computed = computeCurrentQuarter();
   const effective = (state.quarterOverride as "Q1" | "Q2" | "Q3" | "Q4" | null) ?? computed;
+  const currentScheduledTask = await fetchCurrentTask(effective);
   return {
     id: state.id,
     currentQuarter: effective,
@@ -42,13 +68,14 @@ function serializeState(state: typeof appStateTable.$inferSelect) {
     lastUpdated: state.lastUpdated.toISOString(),
     activeMessage: state.activeMessage ?? undefined,
     notes: state.notes ?? undefined,
+    currentScheduledTask,
   };
 }
 
 router.get("/state", async (req, res) => {
   try {
     const state = await ensureState();
-    res.json(serializeState(state));
+    res.json(await serializeState(state));
   } catch (err) {
     req.log.error({ err }, "Failed to get app state");
     res.status(500).json({ error: "Failed to get state" });
@@ -72,7 +99,7 @@ router.put("/state", async (req, res) => {
       .set(updatePayload)
       .where(eq(appStateTable.id, state.id))
       .returning();
-    res.json(serializeState(updated));
+    res.json(await serializeState(updated));
   } catch (err) {
     req.log.error({ err }, "Failed to update app state");
     res.status(400).json({ error: "Failed to update state" });

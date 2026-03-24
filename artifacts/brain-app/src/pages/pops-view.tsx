@@ -2,9 +2,14 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import {
   useGetAppState,
-  useGetSchedule,
   useGetHaldolCycle,
+  getGetAppStateQueryKey,
+  getGetHaldolCycleQueryKey,
+  type HaldolCycle,
+  type ScheduleTask,
 } from "@workspace/api-client-react";
+
+type CurrentTask = ScheduleTask;
 
 const QUARTER_LABELS: Record<string, string> = {
   Q1: "MORNING",
@@ -27,13 +32,10 @@ export function PopsView() {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const { data: state } = useGetAppState({
-    query: { refetchInterval: 30000 },
-  });
-  const { data: schedule } = useGetSchedule({
-    query: { refetchInterval: 30000 },
+    query: { queryKey: getGetAppStateQueryKey(), refetchInterval: 30000 },
   });
   const { data: haldol } = useGetHaldolCycle({
-    query: { refetchInterval: 60000 },
+    query: { queryKey: getGetHaldolCycleQueryKey(), refetchInterval: 60000 },
   });
 
   useEffect(() => {
@@ -44,14 +46,8 @@ export function PopsView() {
   const isZombieMode = state?.zombieMode || haldol?.isZombiePhase;
   const currentQuarter = state?.currentQuarter ?? "Q1";
 
-  const currentQTasks = (schedule ?? [])
-    .filter((t) => t.quarter === currentQuarter && t.isActive)
-    .sort((a, b) => a.order - b.order);
-
-  const currentTask = currentQTasks.find((t) => !t.isCompleted) ?? currentQTasks[0] ?? null;
-
   if (isZombieMode) {
-    return <ZombieScreen currentTime={currentTime} haldol={haldol} />;
+    return <ZombieScreen currentTime={currentTime} />;
   }
 
   return (
@@ -79,7 +75,7 @@ export function PopsView() {
         ) : (
           <AmbientStateDisplay
             quarter={currentQuarter}
-            task={currentTask}
+            task={state?.currentScheduledTask ?? null}
           />
         )}
       </main>
@@ -89,42 +85,18 @@ export function PopsView() {
   );
 }
 
-function ZombieScreen({
-  currentTime,
-  haldol,
-}: {
-  currentTime: Date;
-  haldol: any;
-}) {
+function ZombieScreen({ currentTime }: { currentTime: Date }) {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col crt-flicker">
-      <header className="bg-secondary/40 border-b-2 border-destructive/60 px-8 py-5 flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-5">
-          <div className="h-4 w-4 rounded-full bg-destructive/60 animate-pulse" />
-          <span className="text-3xl md:text-4xl font-display font-bold tracking-widest text-destructive/80">
-            br(AI)n_OS // REST MODE
-          </span>
-        </div>
-        <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums">
-          {format(currentTime, "HH:mm:ss")}
-        </div>
-      </header>
-
-      <main className="flex-1 flex flex-col items-center justify-center px-8 py-16 text-center">
-        <p className="text-[10vw] md:text-[8rem] font-display font-bold text-primary leading-none tracking-widest uppercase mb-8">
-          REST
-        </p>
-        <p className="text-[5vw] md:text-5xl font-display text-muted-foreground tracking-widest uppercase">
-          TODAY.
-        </p>
-        <div className="mt-16 border border-primary/20 rounded-lg px-10 py-6 bg-primary/5">
-          <p className="text-2xl md:text-3xl font-display text-primary/80 tracking-wider">
-            You are taken care of.
-          </p>
-        </div>
-      </main>
-
-      {haldol && <HaldolBar haldol={haldol} />}
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center crt-flicker">
+      <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums mb-12">
+        {format(currentTime, "HH:mm:ss")}
+      </div>
+      <p className="text-[10vw] md:text-[8rem] font-display font-bold text-primary leading-none tracking-widest uppercase">
+        REST
+      </p>
+      <p className="text-[5vw] md:text-5xl font-display text-muted-foreground tracking-widest uppercase mt-4">
+        TODAY.
+      </p>
     </div>
   );
 }
@@ -134,7 +106,7 @@ function AmbientStateDisplay({
   task,
 }: {
   quarter: string;
-  task: any;
+  task: CurrentTask | null;
 }) {
   const timeOfDay = QUARTER_LABELS[quarter] ?? "NOW";
 
@@ -181,7 +153,7 @@ function ActiveMessage({ message }: { message: string }) {
   );
 }
 
-function HaldolBar({ haldol }: { haldol: any }) {
+function HaldolBar({ haldol }: { haldol: HaldolCycle }) {
   return (
     <footer className="bg-card border-t border-border px-8 py-5 shrink-0">
       <div className="flex justify-between items-center mb-2">

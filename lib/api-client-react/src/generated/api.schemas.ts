@@ -49,50 +49,6 @@ export const AppStateQuarterOverride = {
   Q4: "Q4",
 } as const;
 
-export interface AppState {
-  id: number;
-  /** Effective quarter - override if set, else computed from wall clock */
-  currentQuarter: AppStateCurrentQuarter;
-  /** Always the wall-clock-computed quarter regardless of override */
-  computedQuarter: AppStateComputedQuarter;
-  /** Manual override set by Raymo. Null means use computed quarter. */
-  quarterOverride?: AppStateQuarterOverride;
-  /** True when Pops is in rest mode (high symptom days 1-5 of Haldol cycle) */
-  zombieMode: boolean;
-  /**
-   * @minimum 1
-   * @maximum 5
-   */
-  motivationLevel: number;
-  lastUpdated: string;
-  /** Message shown prominently on Pops' display */
-  activeMessage?: string;
-  notes?: string;
-}
-
-export type UpdateAppStateInputQuarterOverride =
-  | (typeof UpdateAppStateInputQuarterOverride)[keyof typeof UpdateAppStateInputQuarterOverride]
-  | null;
-
-export const UpdateAppStateInputQuarterOverride = {
-  Q1: "Q1",
-  Q2: "Q2",
-  Q3: "Q3",
-  Q4: "Q4",
-} as const;
-
-export interface UpdateAppStateInput {
-  quarterOverride?: UpdateAppStateInputQuarterOverride;
-  zombieMode?: boolean;
-  /**
-   * @minimum 1
-   * @maximum 5
-   */
-  motivationLevel?: number;
-  activeMessage?: string | null;
-  notes?: string;
-}
-
 export type ScheduleTaskQuarter =
   (typeof ScheduleTaskQuarter)[keyof typeof ScheduleTaskQuarter];
 
@@ -116,6 +72,52 @@ export interface ScheduleTask {
   completedAt?: string | null;
   order: number;
   isActive: boolean;
+}
+
+export interface AppState {
+  id: number;
+  /** Effective quarter - override if set, else computed from wall clock */
+  currentQuarter: AppStateCurrentQuarter;
+  /** Always the wall-clock-computed quarter regardless of override */
+  computedQuarter: AppStateComputedQuarter;
+  /** Manual override set by Raymo. Null means use computed quarter. */
+  quarterOverride?: AppStateQuarterOverride;
+  /** True when Pops is in rest mode (high symptom days 1-5 of Haldol cycle) */
+  zombieMode: boolean;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  motivationLevel: number;
+  lastUpdated: string;
+  /** Message shown prominently on Pops' display */
+  activeMessage?: string;
+  notes?: string;
+  /** Highest-priority active task for the current quarter (by order). Null if none. */
+  currentScheduledTask?: ScheduleTask | null;
+}
+
+export type UpdateAppStateInputQuarterOverride =
+  | (typeof UpdateAppStateInputQuarterOverride)[keyof typeof UpdateAppStateInputQuarterOverride]
+  | null;
+
+export const UpdateAppStateInputQuarterOverride = {
+  Q1: "Q1",
+  Q2: "Q2",
+  Q3: "Q3",
+  Q4: "Q4",
+} as const;
+
+export interface UpdateAppStateInput {
+  quarterOverride?: UpdateAppStateInputQuarterOverride;
+  zombieMode?: boolean;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  motivationLevel?: number;
+  activeMessage?: string | null;
+  notes?: string;
 }
 
 export type CreateScheduleTaskInputQuarter =

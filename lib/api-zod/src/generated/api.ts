@@ -48,6 +48,26 @@ export const GetAppStateResponse = zod.object({
     .optional()
     .describe("Message shown prominently on Pops' display"),
   notes: zod.string().optional(),
+  currentScheduledTask: zod
+    .object({
+      id: zod.number(),
+      quarter: zod.enum(["Q1", "Q2", "Q3", "Q4"]),
+      timeLabel: zod.string().describe("e.g. '0600', '0800-1200'"),
+      title: zod.string(),
+      description: zod.string().optional(),
+      voiceScript: zod
+        .string()
+        .optional()
+        .describe("What Jessica says when initiating this task"),
+      isCompleted: zod.boolean(),
+      completedAt: zod.date().nullish(),
+      order: zod.number(),
+      isActive: zod.boolean(),
+    })
+    .nullish()
+    .describe(
+      "Highest-priority active task for the current quarter (by order). Null if none.",
+    ),
 });
 
 /**
@@ -98,6 +118,26 @@ export const UpdateAppStateResponse = zod.object({
     .optional()
     .describe("Message shown prominently on Pops' display"),
   notes: zod.string().optional(),
+  currentScheduledTask: zod
+    .object({
+      id: zod.number(),
+      quarter: zod.enum(["Q1", "Q2", "Q3", "Q4"]),
+      timeLabel: zod.string().describe("e.g. '0600', '0800-1200'"),
+      title: zod.string(),
+      description: zod.string().optional(),
+      voiceScript: zod
+        .string()
+        .optional()
+        .describe("What Jessica says when initiating this task"),
+      isCompleted: zod.boolean(),
+      completedAt: zod.date().nullish(),
+      order: zod.number(),
+      isActive: zod.boolean(),
+    })
+    .nullish()
+    .describe(
+      "Highest-priority active task for the current quarter (by order). Null if none.",
+    ),
 });
 
 /**
