@@ -130,43 +130,45 @@ function DashboardTab() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
+        <Card className={hasOverride ? "border-primary/50" : ""}>
           <CardHeader className="pb-2">
             <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
               <Clock size={14} /> Current Quarter
             </CardDescription>
             <CardTitle className="text-5xl">{state?.currentQuarter ?? "--"}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground mb-2 uppercase font-bold">
-              {hasOverride ? (
-                <span className="text-primary">Manual Override Active</span>
-              ) : (
-                <span className="text-success">Auto (Wall Clock)</span>
-              )}
-            </p>
-            <div className="flex gap-1 flex-wrap">
-              {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
-                <button
-                  key={q}
-                  onClick={() => handleStateChange({ quarterOverride: q })}
-                  className={`px-2 py-1 text-xs font-bold rounded ${state?.quarterOverride === q ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}
-                >
-                  {q}
-                </button>
-              ))}
-              {hasOverride && (
-                <button
-                  onClick={() => handleStateChange({ quarterOverride: null })}
-                  className="px-2 py-1 text-xs font-bold rounded bg-destructive/10 text-destructive hover:bg-destructive/20"
-                >
-                  AUTO
-                </button>
-              )}
+          <CardContent className="space-y-3">
+            <div className={`text-xs uppercase font-bold tracking-widest px-2 py-1 rounded-sm inline-block ${hasOverride ? "bg-primary/10 text-primary" : "bg-success/10 text-success"}`}>
+              {hasOverride ? `Override: ${state?.quarterOverride}` : "Auto — Wall Clock"}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Clock: <span className="text-primary font-bold">{state?.computedQuarter ?? "--"}</span>
+            <p className="text-xs text-muted-foreground">
+              Clock: <span className="font-bold text-foreground">{state?.computedQuarter ?? "--"}</span>
             </p>
+            {hasOverride ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full text-xs"
+                onClick={() => handleStateChange({ quarterOverride: null })}
+              >
+                Clear Override → Resume Auto
+              </Button>
+            ) : (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1 uppercase font-bold">Override Quarter</p>
+                <div className="flex gap-1">
+                  {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => handleStateChange({ quarterOverride: q })}
+                      className="px-2 py-1 text-xs font-bold rounded bg-secondary text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
