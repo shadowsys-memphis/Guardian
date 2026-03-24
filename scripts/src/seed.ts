@@ -202,7 +202,7 @@ async function seed() {
       },
       {
         pillarKey: "curiosity",
-        name: "Growth",
+        name: "AI/Crypto Growth",
         description: "Research: AI/Crypto trends, Kraken metrics. High-level strategic synthesis and learning.",
         focusDurationMins: 45,
         metrics: JSON.stringify([
