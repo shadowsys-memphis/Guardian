@@ -1,20 +1,71 @@
-// Export your models here. Add one export per file
-// export * from "./posts";
-//
-// Each model/table should ideally be split into different files.
-// Each model/table should define a Drizzle table, insert schema, and types:
-//
-//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
-//   import { createInsertSchema } from "drizzle-zod";
-//   import { z } from "zod/v4";
-//
-//   export const postsTable = pgTable("posts", {
-//     id: serial("id").primaryKey(),
-//     title: text("title").notNull(),
-//   });
-//
-//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
-//   export type InsertPost = z.infer<typeof insertPostSchema>;
-//   export type Post = typeof postsTable.$inferSelect;
+import { pgTable, text, integer, boolean, timestamp, date, serial } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
 
-export {}
+export const appStateTable = pgTable("app_state", {
+  id: serial("id").primaryKey(),
+  currentQuarter: text("current_quarter").notNull().default("Q1"),
+  zombieMode: boolean("zombie_mode").notNull().default(false),
+  motivationLevel: integer("motivation_level").notNull().default(3),
+  lastUpdated: timestamp("last_updated").notNull().defaultNow(),
+  activeMessage: text("active_message"),
+  notes: text("notes"),
+});
+
+export const scheduleTasksTable = pgTable("schedule_tasks", {
+  id: serial("id").primaryKey(),
+  quarter: text("quarter").notNull(),
+  timeLabel: text("time_label").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  voiceScript: text("voice_script"),
+  isCompleted: boolean("is_completed").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  order: integer("order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const symptomLogsTable = pgTable("symptom_logs", {
+  id: serial("id").primaryKey(),
+  loggedAt: timestamp("logged_at").notNull().defaultNow(),
+  ptsdTrigger: boolean("ptsd_trigger").notNull().default(false),
+  hallucinationIntensity: integer("hallucination_intensity").notNull().default(0),
+  motivationLevel: integer("motivation_level").notNull().default(3),
+  behaviorNotes: text("behavior_notes"),
+  loggedBy: text("logged_by").notNull().default("Raymo"),
+});
+
+export const voiceScriptsTable = pgTable("voice_scripts", {
+  id: serial("id").primaryKey(),
+  taskKey: text("task_key").notNull().unique(),
+  label: text("label").notNull(),
+  scriptText: text("script_text").notNull(),
+  tone: text("tone").notNull().default("gentle"),
+  isActive: boolean("is_active").notNull().default(true),
+  lastPatched: timestamp("last_patched"),
+  patchNote: text("patch_note"),
+});
+
+export const haldolCycleTable = pgTable("haldol_cycle", {
+  id: serial("id").primaryKey(),
+  lastInjectionDate: date("last_injection_date").notNull(),
+  notes: text("notes"),
+});
+
+export const insertAppStateSchema = createInsertSchema(appStateTable).omit({ id: true });
+export const insertScheduleTaskSchema = createInsertSchema(scheduleTasksTable).omit({ id: true });
+export const insertSymptomLogSchema = createInsertSchema(symptomLogsTable).omit({ id: true });
+export const insertVoiceScriptSchema = createInsertSchema(voiceScriptsTable).omit({ id: true });
+export const insertHaldolCycleSchema = createInsertSchema(haldolCycleTable).omit({ id: true });
+
+export type AppState = typeof appStateTable.$inferSelect;
+export type ScheduleTask = typeof scheduleTasksTable.$inferSelect;
+export type SymptomLog = typeof symptomLogsTable.$inferSelect;
+export type VoiceScript = typeof voiceScriptsTable.$inferSelect;
+export type HaldolCycle = typeof haldolCycleTable.$inferSelect;
+
+export type InsertAppState = z.infer<typeof insertAppStateSchema>;
+export type InsertScheduleTask = z.infer<typeof insertScheduleTaskSchema>;
+export type InsertSymptomLog = z.infer<typeof insertSymptomLogSchema>;
+export type InsertVoiceScript = z.infer<typeof insertVoiceScriptSchema>;
+export type InsertHaldolCycle = z.infer<typeof insertHaldolCycleSchema>;

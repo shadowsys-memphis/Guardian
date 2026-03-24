@@ -1,22 +1,30 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: br(AI)n App API - Caregiver AI System
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: schedule
+    description: Daily schedule and tasks (Q1-Q4 quarters)
+  - name: symptoms
+    description: Symptom and motivation logging
+  - name: scripts
+    description: Voice script management for Jessica
+  - name: state
+    description: Live app state management
+  - name: haldol
+    description: Haldol cycle tracking
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,279 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /state:
+    get:
+      operationId: getAppState
+      tags: [state]
+      summary: Get current live app state
+      responses:
+        "200":
+          description: Current app state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+    put:
+      operationId: updateAppState
+      tags: [state]
+      summary: Update live app state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAppStateInput"
+      responses:
+        "200":
+          description: Updated app state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppState"
+
+  /schedule:
+    get:
+      operationId: getSchedule
+      tags: [schedule]
+      summary: Get full daily schedule with Q1-Q4 tasks
+      responses:
+        "200":
+          description: Daily schedule
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScheduleTask"
+    post:
+      operationId: createScheduleTask
+      tags: [schedule]
+      summary: Create a new schedule task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduleTaskInput"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleTask"
+
+  /schedule/{id}:
+    put:
+      operationId: updateScheduleTask
+      tags: [schedule]
+      summary: Update a schedule task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScheduleTaskInput"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleTask"
+    delete:
+      operationId: deleteScheduleTask
+      tags: [schedule]
+      summary: Delete a schedule task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /schedule/{id}/complete:
+    post:
+      operationId: completeScheduleTask
+      tags: [schedule]
+      summary: Mark a task as completed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Task marked complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleTask"
+
+  /symptoms:
+    get:
+      operationId: getSymptomLogs
+      tags: [symptoms]
+      summary: Get symptom logs (most recent first)
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Symptom logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SymptomLog"
+    post:
+      operationId: createSymptomLog
+      tags: [symptoms]
+      summary: Log a symptom/behavior observation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSymptomLogInput"
+      responses:
+        "201":
+          description: Created symptom log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SymptomLog"
+
+  /scripts:
+    get:
+      operationId: getVoiceScripts
+      tags: [scripts]
+      summary: Get all voice scripts for Jessica
+      responses:
+        "200":
+          description: Voice scripts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VoiceScript"
+    post:
+      operationId: createVoiceScript
+      tags: [scripts]
+      summary: Create a new voice script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVoiceScriptInput"
+      responses:
+        "201":
+          description: Created script
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceScript"
+
+  /scripts/{id}:
+    put:
+      operationId: updateVoiceScript
+      tags: [scripts]
+      summary: Update (patch) a voice script - live real-time update
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVoiceScriptInput"
+      responses:
+        "200":
+          description: Updated script
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceScript"
+    delete:
+      operationId: deleteVoiceScript
+      tags: [scripts]
+      summary: Delete a voice script
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /scripts/active:
+    get:
+      operationId: getActiveScripts
+      tags: [scripts]
+      summary: Get currently active scripts (for phone system)
+      responses:
+        "200":
+          description: Active scripts for the phone system
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VoiceScript"
+
+  /haldol:
+    get:
+      operationId: getHaldolCycle
+      tags: [haldol]
+      summary: Get current Haldol 14-day cycle status
+      responses:
+        "200":
+          description: Haldol cycle info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HaldolCycle"
+    put:
+      operationId: updateHaldolCycle
+      tags: [haldol]
+      summary: Update Haldol cycle (set injection date, notes)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateHaldolCycleInput"
+      responses:
+        "200":
+          description: Updated cycle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HaldolCycle"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +315,281 @@ components:
       required:
         - status
 
+    AppState:
+      type: object
+      properties:
+        id:
+          type: integer
+        currentQuarter:
+          type: string
+          enum: [Q1, Q2, Q3, Q4]
+        zombieMode:
+          type: boolean
+          description: "True when Pops is in rest mode (high symptom days 1-5 of Haldol cycle)"
+        motivationLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+        lastUpdated:
+          type: string
+          format: date-time
+        activeMessage:
+          type: string
+          description: "Message shown prominently on Pops' display"
+        notes:
+          type: string
+      required:
+        - id
+        - currentQuarter
+        - zombieMode
+        - motivationLevel
+        - lastUpdated
+
+    UpdateAppStateInput:
+      type: object
+      properties:
+        currentQuarter:
+          type: string
+          enum: [Q1, Q2, Q3, Q4]
+        zombieMode:
+          type: boolean
+        motivationLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+        activeMessage:
+          type: string
+        notes:
+          type: string
+
+    ScheduleTask:
+      type: object
+      properties:
+        id:
+          type: integer
+        quarter:
+          type: string
+          enum: [Q1, Q2, Q3, Q4]
+        timeLabel:
+          type: string
+          description: "e.g. '0600', '0800-1200'"
+        title:
+          type: string
+        description:
+          type: string
+        voiceScript:
+          type: string
+          description: "What Jessica says when initiating this task"
+        isCompleted:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        order:
+          type: integer
+        isActive:
+          type: boolean
+      required:
+        - id
+        - quarter
+        - timeLabel
+        - title
+        - isCompleted
+        - order
+        - isActive
+
+    CreateScheduleTaskInput:
+      type: object
+      properties:
+        quarter:
+          type: string
+          enum: [Q1, Q2, Q3, Q4]
+        timeLabel:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        voiceScript:
+          type: string
+        order:
+          type: integer
+      required:
+        - quarter
+        - timeLabel
+        - title
+        - order
+
+    UpdateScheduleTaskInput:
+      type: object
+      properties:
+        quarter:
+          type: string
+          enum: [Q1, Q2, Q3, Q4]
+        timeLabel:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        voiceScript:
+          type: string
+        order:
+          type: integer
+        isActive:
+          type: boolean
+
+    SymptomLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        loggedAt:
+          type: string
+          format: date-time
+        ptsdTrigger:
+          type: boolean
+        hallucinationIntensity:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: "0 = none, 5 = severe"
+        motivationLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+        behaviorNotes:
+          type: string
+        loggedBy:
+          type: string
+          description: "Who logged this (Raymo, Jessica, auto)"
+      required:
+        - id
+        - loggedAt
+        - hallucinationIntensity
+        - motivationLevel
+
+    CreateSymptomLogInput:
+      type: object
+      properties:
+        ptsdTrigger:
+          type: boolean
+        hallucinationIntensity:
+          type: integer
+          minimum: 0
+          maximum: 5
+        motivationLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+        behaviorNotes:
+          type: string
+        loggedBy:
+          type: string
+      required:
+        - hallucinationIntensity
+        - motivationLevel
+
+    VoiceScript:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskKey:
+          type: string
+          description: "Unique key tying this to a schedule task or trigger (e.g. 'morning_meds', 'wake_up')"
+        label:
+          type: string
+          description: "Human-readable label for Raymo"
+        scriptText:
+          type: string
+          description: "What Jessica says verbatim"
+        tone:
+          type: string
+          enum: [gentle, grounding, urgent, encouraging, calm]
+        isActive:
+          type: boolean
+        lastPatched:
+          type: string
+          format: date-time
+          nullable: true
+        patchNote:
+          type: string
+          description: "Why Raymo changed this script"
+      required:
+        - id
+        - taskKey
+        - label
+        - scriptText
+        - tone
+        - isActive
+
+    CreateVoiceScriptInput:
+      type: object
+      properties:
+        taskKey:
+          type: string
+        label:
+          type: string
+        scriptText:
+          type: string
+        tone:
+          type: string
+          enum: [gentle, grounding, urgent, encouraging, calm]
+        isActive:
+          type: boolean
+      required:
+        - taskKey
+        - label
+        - scriptText
+        - tone
+
+    UpdateVoiceScriptInput:
+      type: object
+      properties:
+        scriptText:
+          type: string
+        tone:
+          type: string
+          enum: [gentle, grounding, urgent, encouraging, calm]
+        isActive:
+          type: boolean
+        patchNote:
+          type: string
+
+    HaldolCycle:
+      type: object
+      properties:
+        id:
+          type: integer
+        lastInjectionDate:
+          type: string
+          format: date
+          description: "Date of the last Haldol injection"
+        cycleDay:
+          type: integer
+          description: "Current day within the 14-day cycle (1-14)"
+        isZombiePhase:
+          type: boolean
+          description: "True on days 1-5 when symptoms are typically highest"
+        nextInjectionDate:
+          type: string
+          format: date
+        notes:
+          type: string
+      required:
+        - id
+        - lastInjectionDate
+        - cycleDay
+        - isZombiePhase
+        - nextInjectionDate
+
+    UpdateHaldolCycleInput:
+      type: object
+      properties:
+        lastInjectionDate:
+          type: string
+          format: date
+        notes:
+          type: string

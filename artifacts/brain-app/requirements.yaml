@@ -1,0 +1,12 @@
+packages:
+  "framer-motion": "For smooth page transitions and micro-interactions in the dashboard"
+  "date-fns": "For date formatting in the admin and haldol views"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility for merging tailwind classes safely"
+
+images: []
+
+notes:
+  - Using generated React Query hooks from @workspace/api-client-react
+  - Pops view requires refetchInterval for live passive updating
+  - Using custom Military Navy & Gold theme via CSS variables
