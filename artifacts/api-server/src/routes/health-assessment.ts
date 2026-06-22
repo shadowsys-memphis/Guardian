@@ -48,6 +48,18 @@ const SEED_QUESTIONS = [
 async function ensureSeeded() {
   // Safe migration: add higher_is_better column if not already present
   await db.execute(sql`ALTER TABLE health_questions ADD COLUMN IF NOT EXISTS higher_is_better BOOLEAN NOT NULL DEFAULT TRUE`);
+
+  // Polarity backfill: always ensure negative-polarity questions have higherIsBetter=false
+  // (needed for rows seeded before the column existed — column default was TRUE for all)
+  const negativeTexts = SEED_QUESTIONS
+    .filter((q) => q.higherIsBetter === false)
+    .map((q) => q.text);
+  if (negativeTexts.length > 0) {
+    await db.execute(
+      sql`UPDATE health_questions SET higher_is_better = FALSE WHERE text = ANY(${sql.raw(`ARRAY[${negativeTexts.map((t) => `'${t.replace(/'/g, "''")}'`).join(",")}]`)})`
+    );
+  }
+
   const existing = await db.select().from(healthQuestionsTable).limit(1);
   if (existing.length > 0) return;
   await db.insert(healthQuestionsTable).values(

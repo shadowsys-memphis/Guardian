@@ -359,17 +359,22 @@ function HealthSessionsSection() {
                           <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest mb-2">Topics Covered This Call</p>
                           <div className="flex flex-wrap gap-1.5">
                             {coverageFromDps(dataPoints as any[]).map((cat) => {
-                              const catQuestions = (allQuestions as any[] ?? []).filter((q) => q.category === cat && q.active);
+                              // Show only the specific questions actually asked in this session
+                              // by looking up questionIds from the data points for this category
+                              const askedQIds = [...new Set((dataPoints as any[])
+                                .filter((d) => d.category === cat && d.questionId)
+                                .map((d) => d.questionId as number))];
+                              const askedQuestions = askedQIds.map((id) => questionsMap[id]).filter(Boolean);
                               return (
                                 <div key={cat} className="group relative">
                                   <span className="px-2 py-0.5 rounded-sm bg-primary/10 border border-primary/30 text-xs text-primary font-bold uppercase cursor-default">
                                     {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat] ?? cat}
                                   </span>
-                                  {catQuestions.length > 0 && (
+                                  {askedQuestions.length > 0 && (
                                     <div className="absolute bottom-full left-0 mb-1 z-10 w-64 p-2 bg-card border border-border rounded-sm shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                      <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Questions asked:</p>
-                                      {catQuestions.slice(0, 3).map((q: any) => (
-                                        <p key={q.id} className="text-xs text-foreground/80 leading-snug">· {q.text}</p>
+                                      <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Questions asked this session:</p>
+                                      {askedQuestions.map((text, i) => (
+                                        <p key={i} className="text-xs text-foreground/80 leading-snug">· {text}</p>
                                       ))}
                                     </div>
                                   )}

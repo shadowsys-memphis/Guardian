@@ -299,35 +299,32 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       content: cleanContent,
     });
 
-    if (healthDataTags.length > 0) {
-      const sessionRows = await db.select().from(callSessionsTable)
-        .where(eq(callSessionsTable.conversationId, conversationId))
-        .orderBy(desc(callSessionsTable.id))
-        .limit(1);
-      if (sessionRows[0]) {
-        // Auto-close session if > 30 minutes old
-        const startedAt = sessionRows[0].startedAt ? new Date(sessionRows[0].startedAt) : null;
-        if (startedAt && !sessionRows[0].endedAt && (Date.now() - startedAt.getTime()) > 30 * 60 * 1000) {
-          const dataPoints = await db.select().from(healthDataPointsTable).where(eq(healthDataPointsTable.sessionId, sessionRows[0].id));
-          const categories = [...new Set(dataPoints.map((d) => d.category))];
-          const flagged = dataPoints.some((d) => d.flagged);
-          const summary = `Auto-closed after 30 minutes. Covered: ${categories.join(", ") || "none"}. ${dataPoints.length} data point(s).${flagged ? " ⚠️ Flagged." : ""}`;
-          await db.update(callSessionsTable).set({ endedAt: new Date(), summary, flagged }).where(eq(callSessionsTable.id, sessionRows[0].id));
-        } else {
-          for (const tag of healthDataTags) {
-            // Prefer the questionId extracted from the tag (set by Gemini using qid: in prompt)
-            // Fall back to first matching category question if Gemini omitted it
-            const resolvedQuestionId = tag.questionId ?? (questions.find((q) => q.category === tag.category)?.id ?? null);
-            await saveHealthDataPoint({
-              sessionId: sessionRows[0].id,
-              questionId: resolvedQuestionId,
-              category: tag.category,
-              rawResponse: tag.rawResponse,
-              parsedValue: tag.parsedValue,
-              parsedIntensity: tag.parsedIntensity,
-            }).catch((e) => req.log.warn({ e }, "Failed to save health data point"));
-          }
-        }
+    // Session lifecycle management: runs on every message (not gated on healthDataTags)
+    const sessionRows = await db.select().from(callSessionsTable)
+      .where(eq(callSessionsTable.conversationId, conversationId))
+      .orderBy(desc(callSessionsTable.id))
+      .limit(1);
+    if (sessionRows[0] && !sessionRows[0].endedAt) {
+      // Always save health data points first (so boundary-response data is never dropped)
+      for (const tag of healthDataTags) {
+        const resolvedQuestionId = tag.questionId ?? (questions.find((q) => q.category === tag.category)?.id ?? null);
+        await saveHealthDataPoint({
+          sessionId: sessionRows[0].id,
+          questionId: resolvedQuestionId,
+          category: tag.category,
+          rawResponse: tag.rawResponse,
+          parsedValue: tag.parsedValue,
+          parsedIntensity: tag.parsedIntensity,
+        }).catch((e) => req.log.warn({ e }, "Failed to save health data point"));
+      }
+      // Then check timeout — auto-close if session > 30 minutes old regardless of tag presence
+      const startedAt = sessionRows[0].startedAt ? new Date(sessionRows[0].startedAt) : null;
+      if (startedAt && (Date.now() - startedAt.getTime()) > 30 * 60 * 1000) {
+        const dataPoints = await db.select().from(healthDataPointsTable).where(eq(healthDataPointsTable.sessionId, sessionRows[0].id));
+        const categories = [...new Set(dataPoints.map((d) => d.category))];
+        const flagged = dataPoints.some((d) => d.flagged);
+        const summary = `Auto-closed after 30 minutes. Covered: ${categories.join(", ") || "none"}. ${dataPoints.length} data point(s).${flagged ? " ⚠️ Flagged." : ""}`;
+        await db.update(callSessionsTable).set({ endedAt: new Date(), summary, flagged }).where(eq(callSessionsTable.id, sessionRows[0].id));
       }
     }
 
