@@ -41,6 +41,7 @@ export function JessicaPhone() {
   const [isMuted, setIsMuted] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [deviceCommandResult, setDeviceCommandResult] = useState<DeviceCommandResult | null>(null);
+  const [healthDataCount, setHealthDataCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const synth = useRef<SpeechSynthesis | null>(null);
 
@@ -92,14 +93,20 @@ export function JessicaPhone() {
     }
   };
 
-  const endCall = () => {
+  const endCall = async () => {
     synth.current?.cancel();
+    if (conversationId) {
+      try {
+        await fetch(`${BASE_URL}/api/gemini/conversations/${conversationId}/end`, { method: "POST" });
+      } catch {}
+    }
     setCallState("ended");
     setTimeout(() => {
       setCallState("idle");
       setMessages([]);
       setConversationId(null);
       setDeviceCommandResult(null);
+      setHealthDataCount(0);
     }, 2000);
   };
 
@@ -152,10 +159,13 @@ export function JessicaPhone() {
               );
             }
             if (data.done) {
-              const cmd = parseDeviceCommand(fullContent);
+              const cmd = data.deviceCommand ?? parseDeviceCommand(fullContent);
               if (cmd) {
                 setDeviceCommandResult(cmd);
                 executeDeviceCommand(cmd);
+              }
+              if (data.healthDataCount) {
+                setHealthDataCount((prev) => prev + (data.healthDataCount as number));
               }
               const cleanContent = stripDeviceCommand(fullContent);
               setMessages((prev) =>
@@ -260,6 +270,12 @@ export function JessicaPhone() {
             <p className="text-xl font-display font-bold text-primary tracking-widest uppercase">JESSICA ACTIVE</p>
             <p className="text-xs text-muted-foreground uppercase tracking-widest">Gemini AI · br(AI)n Coordinator</p>
           </div>
+          {healthDataCount > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-success/10 border border-success/30 rounded-sm">
+              <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+              <span className="text-xs font-display text-success uppercase tracking-widest">{healthDataCount} health data point{healthDataCount !== 1 ? "s" : ""}</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button

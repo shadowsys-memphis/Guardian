@@ -366,6 +366,128 @@ export interface CreateIntercomMessageInput {
   salt: string;
 }
 
+export type HealthQuestionCategory =
+  (typeof HealthQuestionCategory)[keyof typeof HealthQuestionCategory];
+
+export const HealthQuestionCategory = {
+  mood: "mood",
+  medication: "medication",
+  sleep: "sleep",
+  appetite: "appetite",
+  cognition: "cognition",
+  voices: "voices",
+  energy: "energy",
+  task: "task",
+} as const;
+
+export type HealthQuestionResponseType =
+  (typeof HealthQuestionResponseType)[keyof typeof HealthQuestionResponseType];
+
+export const HealthQuestionResponseType = {
+  yes_no: "yes_no",
+  scale_1_5: "scale_1_5",
+  free_text: "free_text",
+} as const;
+
+export interface HealthQuestion {
+  id: number;
+  text: string;
+  category: HealthQuestionCategory;
+  responseType: HealthQuestionResponseType;
+  /** JSON array of cycle day numbers when this question is prioritized. null = always ask */
+  cycleDays?: string | null;
+  /**
+   * @minimum 1
+   * @maximum 10
+   */
+  priority: number;
+  alwaysAsk: boolean;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface CreateHealthQuestionInput {
+  text: string;
+  category: string;
+  responseType?: string;
+  cycleDays?: string | null;
+  priority?: number;
+  alwaysAsk?: boolean;
+  active?: boolean;
+}
+
+export interface UpdateHealthQuestionInput {
+  text?: string;
+  category?: string;
+  responseType?: string;
+  cycleDays?: string | null;
+  priority?: number;
+  alwaysAsk?: boolean;
+  active?: boolean;
+}
+
+export interface CallSession {
+  id: number;
+  conversationId?: number | null;
+  sessionDate: string;
+  cycleDay?: number | null;
+  startedAt: string;
+  endedAt?: string | null;
+  summary?: string | null;
+  flagged: boolean;
+}
+
+export interface StartCallSessionInput {
+  conversationId?: number;
+  cycleDay?: number;
+}
+
+export interface HealthDataPoint {
+  id: number;
+  sessionId: number;
+  questionId?: number | null;
+  category: string;
+  rawResponse: string;
+  parsedValue?: string | null;
+  parsedIntensity?: string | null;
+  flagged: boolean;
+  createdAt: string;
+}
+
+/**
+ * Map of category -> status (green/yellow/red)
+ */
+export type AssessmentSummaryCategoryStatus = { [key: string]: string };
+
+export interface AssessmentSummary {
+  sessionId?: number | null;
+  sessionDate?: string | null;
+  cycleDay?: number | null;
+  dataPoints: HealthDataPoint[];
+  /** Map of category -> status (green/yellow/red) */
+  categoryStatus: AssessmentSummaryCategoryStatus;
+  flagged: boolean;
+  totalDataPoints: number;
+}
+
+export interface TrendDataPoint {
+  date: string;
+  cycleDay?: number | null;
+  category: string;
+  averageValue?: number | null;
+  count: number;
+  flagged: boolean;
+}
+
+export interface AssessmentSettings {
+  /** HH:MM format, e.g. 22:00 */
+  quietWindowStart?: string;
+  /** HH:MM format, e.g. 07:00 */
+  quietWindowEnd?: string;
+  /** Hours of inactivity before Jessica initiates a check-in */
+  engagementIntervalHours?: number;
+}
+
 export type GetSymptomLogsParams = {
   limit?: number;
 };
@@ -375,5 +497,9 @@ export type GetGovernorNotesParams = {
 };
 
 export type GetIntercomMessagesParams = {
+  limit?: number;
+};
+
+export type ListCallSessionsParams = {
   limit?: number;
 };

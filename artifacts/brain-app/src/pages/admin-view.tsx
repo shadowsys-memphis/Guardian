@@ -23,12 +23,20 @@ import {
   useGetVoiceScripts, useUpdateVoiceScript,
   useGetHaldolCycle, useUpdateHaldolCycle,
   useGetGovernorPillars, useGetGovernorNotes, useCreateGovernorNote,
+  useListHealthQuestions, useCreateHealthQuestion, useUpdateHealthQuestion, useDeleteHealthQuestion,
+  useGetTodaySummary, useListCallSessions, useGetSessionDataPoints, useGetAssessmentTrends,
+  useGetAssessmentSettings, useUpdateAssessmentSettings,
   type UpdateAppStateInput,
   type VoiceScript,
   type ScheduleTask,
   type GovernorPillar,
   type GovernorNote,
+  type HealthQuestion,
+  type CallSession,
+  type HealthDataPoint,
+  type AssessmentSummary,
 } from "@workspace/api-client-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +45,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "governor";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "governor" | "health";
 
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -61,6 +69,7 @@ export function AdminView() {
           <NavButton active={activeTab === "symptoms"} onClick={() => setActiveTab("symptoms")} icon={<HeartPulse size={18} />} label="Symptom Log" />
           <NavButton active={activeTab === "scripts"} onClick={() => setActiveTab("scripts")} icon={<Mic size={18} />} label="Voice Scripts" />
           <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
+          <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
           <div className="border-t border-border/30 my-2 pt-2">
             <NavButton active={activeTab === "governor"} onClick={() => setActiveTab("governor")} icon={<Cpu size={18} />} label="Governor" />
           </div>
@@ -78,9 +87,367 @@ export function AdminView() {
           {activeTab === "symptoms" && <SymptomsTab />}
           {activeTab === "scripts" && <ScriptsTab />}
           {activeTab === "haldol" && <HaldolTab />}
+          {activeTab === "health" && <HealthIntelligenceTab />}
           {activeTab === "governor" && <GovernorTab />}
         </div>
       </main>
+    </div>
+  );
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  mood: "Mood", medication: "Medication", sleep: "Sleep", appetite: "Appetite",
+  cognition: "Cognition", voices: "Voices", energy: "Energy", task: "Tasks",
+};
+const CATEGORY_ICONS: Record<string, string> = {
+  mood: "😐", medication: "💊", sleep: "🌙", appetite: "🍽️",
+  cognition: "🧠", voices: "👂", energy: "⚡", task: "✅",
+};
+const STATUS_COLORS: Record<string, string> = {
+  green: "border-success/40 bg-success/10 text-success",
+  yellow: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
+  red: "border-destructive/50 bg-destructive/10 text-destructive",
+  unknown: "border-border bg-secondary text-muted-foreground",
+};
+
+function HealthIntelligenceTab() {
+  const [activeSection, setActiveSection] = useState<"summary" | "sessions" | "questions" | "settings">("summary");
+  return (
+    <div className="space-y-6">
+      <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
+        <div>
+          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Health Intelligence</h2>
+          <p className="text-muted-foreground">Pops' health data extracted from Jessica's daily conversations.</p>
+        </div>
+        <div className="flex gap-2">
+          {(["summary", "sessions", "questions", "settings"] as const).map((s) => (
+            <button key={s} onClick={() => setActiveSection(s)}
+              className={`px-3 py-1.5 text-xs font-display uppercase tracking-widest rounded-sm border transition-colors ${activeSection === s ? "bg-primary/10 border-primary/40 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </header>
+      {activeSection === "summary" && <HealthSummarySection />}
+      {activeSection === "sessions" && <HealthSessionsSection />}
+      {activeSection === "questions" && <HealthQuestionsSection />}
+      {activeSection === "settings" && <HealthSettingsSection />}
+    </div>
+  );
+}
+
+function HealthSummarySection() {
+  const { data: summary } = useGetTodaySummary({ query: { refetchInterval: 30000 } });
+  const { data: trends } = useGetAssessmentTrends();
+  const { data: haldol } = useGetHaldolCycle();
+  const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
+
+  const trendsByCategory = (category: string) => {
+    if (!trends) return [];
+    return (trends as any[])
+      .filter((t) => t.category === category)
+      .slice(-30)
+      .map((t) => ({ date: t.date.slice(5), value: t.averageValue ?? 0, day: t.cycleDay }));
+  };
+
+  const flaggedCategories = CATS.filter((c) => (summary as any)?.categoryStatus?.[c] === "red");
+
+  return (
+    <div className="space-y-6">
+      {flaggedCategories.length > 0 && (
+        <div className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/40 rounded-md">
+          <AlertTriangle className="text-destructive shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="text-sm font-bold text-destructive uppercase tracking-widest">Anomaly Alert</p>
+            <p className="text-sm text-destructive/80 mt-1">
+              Flagged categories today: {flaggedCategories.map((c) => CATEGORY_LABELS[c]).join(", ")}. Review the session log below.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest mb-3">Today's Assessment</h3>
+        {(!summary || (summary as any).totalDataPoints === 0) ? (
+          <div className="p-8 text-center border border-border/40 rounded-md">
+            <p className="text-muted-foreground">No call session recorded yet today.</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Start a Jessica call to begin collecting health data.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {CATS.map((cat) => {
+              const status = (summary as any)?.categoryStatus?.[cat] ?? "unknown";
+              return (
+                <div key={cat} className={`border rounded-md p-4 text-center transition-colors ${STATUS_COLORS[status]}`}>
+                  <div className="text-2xl mb-1">{CATEGORY_ICONS[cat]}</div>
+                  <div className="text-xs font-display uppercase tracking-widest">{CATEGORY_LABELS[cat]}</div>
+                  <div className="text-xs mt-1 opacity-70 capitalize">{status === "unknown" ? "no data" : status}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {(summary as any)?.totalDataPoints > 0 && (
+          <p className="text-xs text-muted-foreground mt-2">
+            {(summary as any).totalDataPoints} data points from today · Cycle Day {(summary as any).cycleDay ?? haldol?.cycleDay ?? "--"}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest mb-3">30-Day Trends</h3>
+        {(!trends || (trends as any[]).length === 0) ? (
+          <p className="text-muted-foreground italic text-sm">No trend data yet. Data builds up over daily calls.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {["mood", "voices", "sleep", "medication"].map((cat) => {
+              const data = trendsByCategory(cat);
+              if (data.length === 0) return null;
+              return (
+                <Card key={cat}>
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm font-display uppercase tracking-widest text-muted-foreground">
+                      {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4 px-2">
+                    <ResponsiveContainer width="100%" height={120}>
+                      <LineChart data={data}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#888" }} />
+                        <YAxis tick={{ fontSize: 9, fill: "#888" }} domain={[0, 1]} />
+                        <Tooltip
+                          contentStyle={{ background: "#1a1a1a", border: "1px solid #333", fontSize: 11 }}
+                          formatter={(v: number) => [v.toFixed(2), CATEGORY_LABELS[cat]]}
+                        />
+                        <Line type="monotone" dataKey="value" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HealthSessionsSection() {
+  const { data: sessions } = useListCallSessions({ limit: 20 });
+  const [selectedSession, setSelectedSession] = useState<number | null>(null);
+  const { data: dataPoints } = useGetSessionDataPoints(selectedSession ?? 0, {
+    query: { enabled: selectedSession !== null },
+  });
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">Call Session Log</h3>
+      {(!sessions || (sessions as any[]).length === 0) ? (
+        <p className="text-muted-foreground italic">No sessions recorded yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {(sessions as any[]).map((session) => (
+            <Card key={session.id} className={session.flagged ? "border-destructive/40" : ""}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-foreground">{session.sessionDate}</span>
+                      {session.cycleDay && <Badge variant="outline" className="text-xs">Day {session.cycleDay}</Badge>}
+                      {session.flagged && <Badge variant="destructive" className="text-xs animate-pulse">⚠ Flagged</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{session.summary ?? "In progress..."}</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setSelectedSession(selectedSession === session.id ? null : session.id)}>
+                    {selectedSession === session.id ? "Hide" : "View Data"}
+                  </Button>
+                </div>
+                {selectedSession === session.id && dataPoints && (
+                  <div className="mt-4 pt-4 border-t border-border/40 space-y-2">
+                    {(dataPoints as any[]).length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">No structured data points captured in this session.</p>
+                    ) : (
+                      (dataPoints as any[]).map((dp) => (
+                        <div key={dp.id} className={`flex items-start gap-3 p-2 rounded-sm text-xs ${dp.flagged ? "bg-destructive/10" : "bg-secondary/30"}`}>
+                          <span className="shrink-0">{CATEGORY_ICONS[dp.category] ?? "📊"}</span>
+                          <div className="flex-1">
+                            <span className="text-muted-foreground uppercase font-bold tracking-widest">{CATEGORY_LABELS[dp.category] ?? dp.category}</span>
+                            {dp.parsedValue && <span className="ml-2 text-primary">→ {dp.parsedValue}</span>}
+                            {dp.parsedIntensity && dp.parsedIntensity !== "none" && <span className="ml-1 text-yellow-400">({dp.parsedIntensity})</span>}
+                            <p className="text-muted-foreground/60 mt-0.5 italic">"{dp.rawResponse}"</p>
+                          </div>
+                          {dp.flagged && <AlertTriangle size={12} className="text-destructive shrink-0" />}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HealthQuestionsSection() {
+  const { data: questions, refetch } = useListHealthQuestions();
+  const createQ = useCreateHealthQuestion();
+  const updateQ = useUpdateHealthQuestion();
+  const deleteQ = useDeleteHealthQuestion();
+  const { toast } = useToast();
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState({ text: "", category: "mood", responseType: "yes_no", priority: 5, alwaysAsk: false });
+
+  const resetForm = () => { setForm({ text: "", category: "mood", responseType: "yes_no", priority: 5, alwaysAsk: false }); setEditingId(null); setShowForm(false); };
+
+  const handleSave = () => {
+    if (!form.text.trim()) return;
+    if (editingId) {
+      updateQ.mutate({ id: editingId, data: form }, { onSuccess: () => { toast({ title: "Question updated" }); resetForm(); refetch(); } });
+    } else {
+      createQ.mutate({ data: form }, { onSuccess: () => { toast({ title: "Question added" }); resetForm(); refetch(); } });
+    }
+  };
+
+  const toggleActive = (q: any) => {
+    updateQ.mutate({ id: q.id, data: { active: !q.active } }, { onSuccess: () => refetch() });
+  };
+
+  const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">Question Library</h3>
+        <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}><Plus size={14} className="mr-1" /> Add Question</Button>
+      </div>
+
+      {showForm && (
+        <Card className="border-primary/40">
+          <CardContent className="pt-4 space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Question Text</label>
+              <Input value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} placeholder="How'd you sleep last night?" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Category</label>
+                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className="flex h-9 w-full rounded-sm border border-border bg-input px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                  {CATS.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Response Type</label>
+                <select value={form.responseType} onChange={(e) => setForm({ ...form, responseType: e.target.value })}
+                  className="flex h-9 w-full rounded-sm border border-border bg-input px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                  <option value="yes_no">Yes / No</option>
+                  <option value="scale_1_5">Scale 1–5</option>
+                  <option value="free_text">Free Text</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Priority (1–10)</label>
+                <input type="range" min={1} max={10} value={form.priority} onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value) })} className="w-32 accent-primary" />
+                <span className="text-xs text-primary ml-2">{form.priority}</span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <input type="checkbox" checked={form.alwaysAsk} onChange={(e) => setForm({ ...form, alwaysAsk: e.target.checked })} className="accent-primary" />
+                Always ask (every call)
+              </label>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button size="sm" onClick={handleSave} disabled={createQ.isPending || updateQ.isPending}>{editingId ? "Update" : "Add"} Question</Button>
+              <Button size="sm" variant="ghost" onClick={resetForm}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="space-y-2">
+        {(questions as any[] ?? []).map((q) => (
+          <div key={q.id} className={`flex items-start gap-3 p-3 rounded-sm border transition-colors ${q.active ? "border-border bg-card" : "border-border/30 bg-secondary/20 opacity-50"}`}>
+            <span className="text-lg shrink-0">{CATEGORY_ICONS[q.category] ?? "❓"}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-foreground">{q.text}</p>
+              <div className="flex gap-2 mt-1 flex-wrap">
+                <span className="text-xs text-muted-foreground uppercase font-bold">{CATEGORY_LABELS[q.category]}</span>
+                <span className="text-xs text-muted-foreground">· {q.responseType.replace("_", " ")}</span>
+                <span className="text-xs text-muted-foreground">· Priority {q.priority}</span>
+                {q.alwaysAsk && <Badge variant="outline" className="text-xs text-success border-success/40">Always Ask</Badge>}
+              </div>
+            </div>
+            <div className="flex gap-1 shrink-0">
+              <button onClick={() => toggleActive(q)} className={`p-1.5 rounded-sm border text-xs transition-colors ${q.active ? "border-success/40 text-success hover:bg-success/10" : "border-border text-muted-foreground hover:bg-secondary"}`} title={q.active ? "Disable" : "Enable"}>
+                {q.active ? <Check size={12} /> : <Plus size={12} />}
+              </button>
+              <button onClick={() => { setEditingId(q.id); setForm({ text: q.text, category: q.category, responseType: q.responseType, priority: q.priority, alwaysAsk: q.alwaysAsk }); setShowForm(true); }}
+                className="p-1.5 rounded-sm border border-border text-muted-foreground hover:bg-secondary transition-colors">
+                <Edit2 size={12} />
+              </button>
+              <button onClick={() => { if (confirm("Delete question?")) deleteQ.mutate({ id: q.id }, { onSuccess: () => refetch() }); }}
+                className="p-1.5 rounded-sm border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors">
+                <Trash2 size={12} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HealthSettingsSection() {
+  const { data: settings } = useGetAssessmentSettings();
+  const updateSettings = useUpdateAssessmentSettings();
+  const { toast } = useToast();
+  const [form, setForm] = useState({ quietWindowStart: "22:00", quietWindowEnd: "07:00", engagementIntervalHours: 4 });
+
+  useState(() => {
+    if (settings) setForm({ quietWindowStart: (settings as any).quietWindowStart ?? "22:00", quietWindowEnd: (settings as any).quietWindowEnd ?? "07:00", engagementIntervalHours: (settings as any).engagementIntervalHours ?? 4 });
+  });
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSettings.mutate({ data: form }, { onSuccess: () => toast({ title: "Settings saved" }) });
+  };
+
+  return (
+    <div className="space-y-6 max-w-lg">
+      <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">Assessment Settings</h3>
+      <Card>
+        <CardHeader>
+          <CardTitle>Quiet Window</CardTitle>
+          <CardDescription>Jessica will not initiate check-ins during these hours.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSave} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Start (e.g. 22:00)</label>
+                <Input value={form.quietWindowStart} onChange={(e) => setForm({ ...form, quietWindowStart: e.target.value })} placeholder="22:00" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">End (e.g. 07:00)</label>
+                <Input value={form.quietWindowEnd} onChange={(e) => setForm({ ...form, quietWindowEnd: e.target.value })} placeholder="07:00" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Engagement Interval (hours)</label>
+              <p className="text-xs text-muted-foreground">If Pops hasn't had a check-in in this many hours, Jessica initiates one.</p>
+              <Input type="number" min={1} max={12} value={form.engagementIntervalHours} onChange={(e) => setForm({ ...form, engagementIntervalHours: parseInt(e.target.value) })} />
+            </div>
+            <Button type="submit" disabled={updateSettings.isPending}>Save Settings</Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

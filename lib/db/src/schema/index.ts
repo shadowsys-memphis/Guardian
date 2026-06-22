@@ -126,3 +126,59 @@ export type SmartHomeDevice = typeof smartHomeDevicesTable.$inferSelect;
 export type IntercomMessage = typeof intercomeMessagesTable.$inferSelect;
 export type InsertSmartHomeDevice = z.infer<typeof insertSmartHomeDeviceSchema>;
 export type InsertIntercomMessage = z.infer<typeof insertIntercomMessageSchema>;
+
+export const healthQuestionsTable = pgTable("health_questions", {
+  id: serial("id").primaryKey(),
+  text: text("text").notNull(),
+  category: text("category").notNull(),
+  responseType: text("response_type").notNull().default("yes_no"),
+  cycleDays: text("cycle_days"),
+  priority: integer("priority").notNull().default(5),
+  alwaysAsk: boolean("always_ask").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const callSessionsTable = pgTable("call_sessions", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id"),
+  sessionDate: date("session_date").notNull(),
+  cycleDay: integer("cycle_day"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  endedAt: timestamp("ended_at"),
+  summary: text("summary"),
+  flagged: boolean("flagged").notNull().default(false),
+});
+
+export const healthDataPointsTable = pgTable("health_data_points", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull(),
+  questionId: integer("question_id"),
+  category: text("category").notNull(),
+  rawResponse: text("raw_response").notNull(),
+  parsedValue: text("parsed_value"),
+  parsedIntensity: text("parsed_intensity"),
+  flagged: boolean("flagged").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const appSettingsTable = pgTable("app_settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertHealthQuestionSchema = createInsertSchema(healthQuestionsTable).omit({ id: true, createdAt: true });
+export const insertCallSessionSchema = createInsertSchema(callSessionsTable).omit({ id: true });
+export const insertHealthDataPointSchema = createInsertSchema(healthDataPointsTable).omit({ id: true, createdAt: true });
+export const insertAppSettingSchema = createInsertSchema(appSettingsTable).omit({ id: true, updatedAt: true });
+
+export type HealthQuestion = typeof healthQuestionsTable.$inferSelect;
+export type CallSession = typeof callSessionsTable.$inferSelect;
+export type HealthDataPoint = typeof healthDataPointsTable.$inferSelect;
+export type AppSetting = typeof appSettingsTable.$inferSelect;
+export type InsertHealthQuestion = z.infer<typeof insertHealthQuestionSchema>;
+export type InsertCallSession = z.infer<typeof insertCallSessionSchema>;
+export type InsertHealthDataPoint = z.infer<typeof insertHealthDataPointSchema>;
+export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;

@@ -18,7 +18,11 @@ import type {
 
 import type {
   AppState,
+  AssessmentSettings,
+  AssessmentSummary,
+  CallSession,
   CreateGovernorNoteInput,
+  CreateHealthQuestionInput,
   CreateIntercomMessageInput,
   CreateScheduleTaskInput,
   CreateSymptomLogInput,
@@ -35,13 +39,19 @@ import type {
   GovernorNote,
   GovernorPillar,
   HaldolCycle,
+  HealthDataPoint,
+  HealthQuestion,
   HealthStatus,
   IntercomMessage,
+  ListCallSessionsParams,
   ScheduleTask,
   SmartHomeDevice,
+  StartCallSessionInput,
   SymptomLog,
+  TrendDataPoint,
   UpdateAppStateInput,
   UpdateHaldolCycleInput,
+  UpdateHealthQuestionInput,
   UpdateScheduleTaskInput,
   UpdateSmartHomeDeviceInput,
   UpdateVoiceScriptInput,
@@ -2573,4 +2583,1007 @@ export const usePostIntercomMessage = <
   TContext
 > => {
   return useMutation(getPostIntercomMessageMutationOptions(options));
+};
+
+/**
+ * @summary List all health assessment questions
+ */
+export const getListHealthQuestionsUrl = () => {
+  return `/api/health-assessment/questions`;
+};
+
+export const listHealthQuestions = async (
+  options?: RequestInit,
+): Promise<HealthQuestion[]> => {
+  return customFetch<HealthQuestion[]>(getListHealthQuestionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListHealthQuestionsQueryKey = () => {
+  return [`/api/health-assessment/questions`] as const;
+};
+
+export const getListHealthQuestionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listHealthQuestions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listHealthQuestions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListHealthQuestionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listHealthQuestions>>
+  > = ({ signal }) => listHealthQuestions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listHealthQuestions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListHealthQuestionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listHealthQuestions>>
+>;
+export type ListHealthQuestionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all health assessment questions
+ */
+
+export function useListHealthQuestions<
+  TData = Awaited<ReturnType<typeof listHealthQuestions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listHealthQuestions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListHealthQuestionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new health question
+ */
+export const getCreateHealthQuestionUrl = () => {
+  return `/api/health-assessment/questions`;
+};
+
+export const createHealthQuestion = async (
+  createHealthQuestionInput: CreateHealthQuestionInput,
+  options?: RequestInit,
+): Promise<HealthQuestion> => {
+  return customFetch<HealthQuestion>(getCreateHealthQuestionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createHealthQuestionInput),
+  });
+};
+
+export const getCreateHealthQuestionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createHealthQuestion>>,
+    TError,
+    { data: BodyType<CreateHealthQuestionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createHealthQuestion>>,
+  TError,
+  { data: BodyType<CreateHealthQuestionInput> },
+  TContext
+> => {
+  const mutationKey = ["createHealthQuestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createHealthQuestion>>,
+    { data: BodyType<CreateHealthQuestionInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createHealthQuestion(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateHealthQuestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createHealthQuestion>>
+>;
+export type CreateHealthQuestionMutationBody =
+  BodyType<CreateHealthQuestionInput>;
+export type CreateHealthQuestionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new health question
+ */
+export const useCreateHealthQuestion = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createHealthQuestion>>,
+    TError,
+    { data: BodyType<CreateHealthQuestionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createHealthQuestion>>,
+  TError,
+  { data: BodyType<CreateHealthQuestionInput> },
+  TContext
+> => {
+  return useMutation(getCreateHealthQuestionMutationOptions(options));
+};
+
+/**
+ * @summary Update a health question
+ */
+export const getUpdateHealthQuestionUrl = (id: number) => {
+  return `/api/health-assessment/questions/${id}`;
+};
+
+export const updateHealthQuestion = async (
+  id: number,
+  updateHealthQuestionInput: UpdateHealthQuestionInput,
+  options?: RequestInit,
+): Promise<HealthQuestion> => {
+  return customFetch<HealthQuestion>(getUpdateHealthQuestionUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateHealthQuestionInput),
+  });
+};
+
+export const getUpdateHealthQuestionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateHealthQuestion>>,
+    TError,
+    { id: number; data: BodyType<UpdateHealthQuestionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateHealthQuestion>>,
+  TError,
+  { id: number; data: BodyType<UpdateHealthQuestionInput> },
+  TContext
+> => {
+  const mutationKey = ["updateHealthQuestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateHealthQuestion>>,
+    { id: number; data: BodyType<UpdateHealthQuestionInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateHealthQuestion(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateHealthQuestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateHealthQuestion>>
+>;
+export type UpdateHealthQuestionMutationBody =
+  BodyType<UpdateHealthQuestionInput>;
+export type UpdateHealthQuestionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a health question
+ */
+export const useUpdateHealthQuestion = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateHealthQuestion>>,
+    TError,
+    { id: number; data: BodyType<UpdateHealthQuestionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateHealthQuestion>>,
+  TError,
+  { id: number; data: BodyType<UpdateHealthQuestionInput> },
+  TContext
+> => {
+  return useMutation(getUpdateHealthQuestionMutationOptions(options));
+};
+
+/**
+ * @summary Delete a health question
+ */
+export const getDeleteHealthQuestionUrl = (id: number) => {
+  return `/api/health-assessment/questions/${id}`;
+};
+
+export const deleteHealthQuestion = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteHealthQuestionUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteHealthQuestionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteHealthQuestion>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteHealthQuestion>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteHealthQuestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteHealthQuestion>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteHealthQuestion(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteHealthQuestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteHealthQuestion>>
+>;
+
+export type DeleteHealthQuestionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a health question
+ */
+export const useDeleteHealthQuestion = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteHealthQuestion>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteHealthQuestion>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteHealthQuestionMutationOptions(options));
+};
+
+/**
+ * @summary List call sessions (most recent first)
+ */
+export const getListCallSessionsUrl = (params?: ListCallSessionsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/health-assessment/sessions?${stringifiedParams}`
+    : `/api/health-assessment/sessions`;
+};
+
+export const listCallSessions = async (
+  params?: ListCallSessionsParams,
+  options?: RequestInit,
+): Promise<CallSession[]> => {
+  return customFetch<CallSession[]>(getListCallSessionsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCallSessionsQueryKey = (
+  params?: ListCallSessionsParams,
+) => {
+  return [
+    `/api/health-assessment/sessions`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListCallSessionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCallSessions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListCallSessionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCallSessions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListCallSessionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCallSessions>>
+  > = ({ signal }) => listCallSessions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCallSessions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCallSessionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCallSessions>>
+>;
+export type ListCallSessionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List call sessions (most recent first)
+ */
+
+export function useListCallSessions<
+  TData = Awaited<ReturnType<typeof listCallSessions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListCallSessionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCallSessions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCallSessionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Start a new call session
+ */
+export const getStartCallSessionUrl = () => {
+  return `/api/health-assessment/sessions`;
+};
+
+export const startCallSession = async (
+  startCallSessionInput: StartCallSessionInput,
+  options?: RequestInit,
+): Promise<CallSession> => {
+  return customFetch<CallSession>(getStartCallSessionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(startCallSessionInput),
+  });
+};
+
+export const getStartCallSessionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startCallSession>>,
+    TError,
+    { data: BodyType<StartCallSessionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof startCallSession>>,
+  TError,
+  { data: BodyType<StartCallSessionInput> },
+  TContext
+> => {
+  const mutationKey = ["startCallSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof startCallSession>>,
+    { data: BodyType<StartCallSessionInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return startCallSession(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StartCallSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof startCallSession>>
+>;
+export type StartCallSessionMutationBody = BodyType<StartCallSessionInput>;
+export type StartCallSessionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Start a new call session
+ */
+export const useStartCallSession = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startCallSession>>,
+    TError,
+    { data: BodyType<StartCallSessionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof startCallSession>>,
+  TError,
+  { data: BodyType<StartCallSessionInput> },
+  TContext
+> => {
+  return useMutation(getStartCallSessionMutationOptions(options));
+};
+
+/**
+ * @summary End a call session
+ */
+export const getEndCallSessionUrl = (id: number) => {
+  return `/api/health-assessment/sessions/${id}/end`;
+};
+
+export const endCallSession = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CallSession> => {
+  return customFetch<CallSession>(getEndCallSessionUrl(id), {
+    ...options,
+    method: "PUT",
+  });
+};
+
+export const getEndCallSessionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof endCallSession>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof endCallSession>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["endCallSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof endCallSession>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return endCallSession(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EndCallSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof endCallSession>>
+>;
+
+export type EndCallSessionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary End a call session
+ */
+export const useEndCallSession = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof endCallSession>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof endCallSession>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getEndCallSessionMutationOptions(options));
+};
+
+/**
+ * @summary Get all health data points for a session
+ */
+export const getGetSessionDataPointsUrl = (id: number) => {
+  return `/api/health-assessment/sessions/${id}/data-points`;
+};
+
+export const getSessionDataPoints = async (
+  id: number,
+  options?: RequestInit,
+): Promise<HealthDataPoint[]> => {
+  return customFetch<HealthDataPoint[]>(getGetSessionDataPointsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSessionDataPointsQueryKey = (id: number) => {
+  return [`/api/health-assessment/sessions/${id}/data-points`] as const;
+};
+
+export const getGetSessionDataPointsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSessionDataPoints>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSessionDataPoints>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSessionDataPointsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSessionDataPoints>>
+  > = ({ signal }) => getSessionDataPoints(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSessionDataPoints>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSessionDataPointsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSessionDataPoints>>
+>;
+export type GetSessionDataPointsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get all health data points for a session
+ */
+
+export function useGetSessionDataPoints<
+  TData = Awaited<ReturnType<typeof getSessionDataPoints>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSessionDataPoints>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSessionDataPointsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get today's assessment summary grouped by category
+ */
+export const getGetTodaySummaryUrl = () => {
+  return `/api/health-assessment/summary/today`;
+};
+
+export const getTodaySummary = async (
+  options?: RequestInit,
+): Promise<AssessmentSummary> => {
+  return customFetch<AssessmentSummary>(getGetTodaySummaryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTodaySummaryQueryKey = () => {
+  return [`/api/health-assessment/summary/today`] as const;
+};
+
+export const getGetTodaySummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTodaySummary>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTodaySummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTodaySummaryQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTodaySummary>>> = ({
+    signal,
+  }) => getTodaySummary({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTodaySummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTodaySummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTodaySummary>>
+>;
+export type GetTodaySummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get today's assessment summary grouped by category
+ */
+
+export function useGetTodaySummary<
+  TData = Awaited<ReturnType<typeof getTodaySummary>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTodaySummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTodaySummaryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get 30-day trend data grouped by category and date
+ */
+export const getGetAssessmentTrendsUrl = () => {
+  return `/api/health-assessment/trends`;
+};
+
+export const getAssessmentTrends = async (
+  options?: RequestInit,
+): Promise<TrendDataPoint[]> => {
+  return customFetch<TrendDataPoint[]>(getGetAssessmentTrendsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAssessmentTrendsQueryKey = () => {
+  return [`/api/health-assessment/trends`] as const;
+};
+
+export const getGetAssessmentTrendsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssessmentTrends>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentTrends>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAssessmentTrendsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAssessmentTrends>>
+  > = ({ signal }) => getAssessmentTrends({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentTrends>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAssessmentTrendsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssessmentTrends>>
+>;
+export type GetAssessmentTrendsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get 30-day trend data grouped by category and date
+ */
+
+export function useGetAssessmentTrends<
+  TData = Awaited<ReturnType<typeof getAssessmentTrends>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentTrends>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAssessmentTrendsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get assessment settings (quiet window, etc.)
+ */
+export const getGetAssessmentSettingsUrl = () => {
+  return `/api/health-assessment/settings`;
+};
+
+export const getAssessmentSettings = async (
+  options?: RequestInit,
+): Promise<AssessmentSettings> => {
+  return customFetch<AssessmentSettings>(getGetAssessmentSettingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAssessmentSettingsQueryKey = () => {
+  return [`/api/health-assessment/settings`] as const;
+};
+
+export const getGetAssessmentSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssessmentSettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAssessmentSettingsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAssessmentSettings>>
+  > = ({ signal }) => getAssessmentSettings({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentSettings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAssessmentSettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssessmentSettings>>
+>;
+export type GetAssessmentSettingsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get assessment settings (quiet window, etc.)
+ */
+
+export function useGetAssessmentSettings<
+  TData = Awaited<ReturnType<typeof getAssessmentSettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAssessmentSettingsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update assessment settings
+ */
+export const getUpdateAssessmentSettingsUrl = () => {
+  return `/api/health-assessment/settings`;
+};
+
+export const updateAssessmentSettings = async (
+  assessmentSettings: AssessmentSettings,
+  options?: RequestInit,
+): Promise<AssessmentSettings> => {
+  return customFetch<AssessmentSettings>(getUpdateAssessmentSettingsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(assessmentSettings),
+  });
+};
+
+export const getUpdateAssessmentSettingsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAssessmentSettings>>,
+    TError,
+    { data: BodyType<AssessmentSettings> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAssessmentSettings>>,
+  TError,
+  { data: BodyType<AssessmentSettings> },
+  TContext
+> => {
+  const mutationKey = ["updateAssessmentSettings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAssessmentSettings>>,
+    { data: BodyType<AssessmentSettings> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateAssessmentSettings(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAssessmentSettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAssessmentSettings>>
+>;
+export type UpdateAssessmentSettingsMutationBody = BodyType<AssessmentSettings>;
+export type UpdateAssessmentSettingsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update assessment settings
+ */
+export const useUpdateAssessmentSettings = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAssessmentSettings>>,
+    TError,
+    { data: BodyType<AssessmentSettings> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAssessmentSettings>>,
+  TError,
+  { data: BodyType<AssessmentSettings> },
+  TContext
+> => {
+  return useMutation(getUpdateAssessmentSettingsMutationOptions(options));
 };

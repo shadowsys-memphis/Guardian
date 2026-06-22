@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import {
   useGetAppState,
   useGetHaldolCycle,
+  useGetTodaySummary,
   getGetAppStateQueryKey,
   getGetHaldolCycleQueryKey,
   type HaldolCycle,
@@ -37,6 +38,7 @@ export function PopsView() {
   const { data: haldol } = useGetHaldolCycle({
     query: { queryKey: getGetHaldolCycleQueryKey(), refetchInterval: 60000 },
   });
+  const { data: todaySummary } = useGetTodaySummary({ query: { refetchInterval: 60000 } });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -80,7 +82,7 @@ export function PopsView() {
         )}
       </main>
 
-      {haldol && <HaldolBar haldol={haldol} />}
+      {haldol && <HaldolBar haldol={haldol} todaySummary={todaySummary ?? null} />}
     </div>
   );
 }
@@ -153,20 +155,35 @@ function ActiveMessage({ message }: { message: string }) {
   );
 }
 
-function HaldolBar({ haldol }: { haldol: HaldolCycle }) {
+function HaldolBar({ haldol, todaySummary }: { haldol: HaldolCycle; todaySummary: any | null }) {
+  const hasCheckin = todaySummary && (todaySummary as any).totalDataPoints > 0;
+  const flagged = hasCheckin && (todaySummary as any).flagged;
   return (
     <footer className="bg-card border-t border-border px-8 py-5 shrink-0">
-      <div className="flex justify-between items-center mb-2">
+      <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
         <p className="text-lg font-display text-muted-foreground uppercase tracking-widest">
           Medication Cycle — Day{" "}
           <span className="text-primary font-bold">{haldol.cycleDay}</span> of 14
         </p>
-        <p className="text-sm text-muted-foreground">
-          Next:{" "}
-          <span className="text-primary font-bold">
-            {haldol.nextInjectionDate}
-          </span>
-        </p>
+        <div className="flex items-center gap-4">
+          {hasCheckin ? (
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-sm border text-xs font-display uppercase tracking-widest ${flagged ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-success/40 bg-success/10 text-success"}`}>
+              <div className={`h-1.5 w-1.5 rounded-full ${flagged ? "bg-destructive animate-pulse" : "bg-success"}`} />
+              {flagged ? "Check-in flagged" : `Check-in done · ${(todaySummary as any).totalDataPoints} pts`}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-sm border border-border text-xs font-display uppercase tracking-widest text-muted-foreground">
+              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+              No check-in today
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">
+            Next:{" "}
+            <span className="text-primary font-bold">
+              {haldol.nextInjectionDate}
+            </span>
+          </p>
+        </div>
       </div>
 
       <div className="h-3 w-full bg-secondary rounded-full overflow-hidden flex">

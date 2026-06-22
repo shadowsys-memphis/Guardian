@@ -9,6 +9,7 @@ import governorRouter from "./governor";
 import geminiRouter from "./gemini";
 import smarthomeRouter from "./smarthome";
 import intercomRouter from "./intercom";
+import healthAssessmentRouter from "./health-assessment";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(governorRouter);
 router.use(geminiRouter);
 router.use(smarthomeRouter);
 router.use(intercomRouter);
+router.use(healthAssessmentRouter);
 
 export default router;

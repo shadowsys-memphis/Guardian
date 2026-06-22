@@ -27,6 +27,8 @@ tags:
     description: Smart home device controls (Alexa/Sonos)
   - name: intercom
     description: E2EE encrypted family intercom
+  - name: health-assessment
+    description: Jessica health assessment sessions, questions, and data points
 paths:
   /healthz:
     get:
@@ -559,6 +561,212 @@ paths:
               schema:
                 $ref: "#/components/schemas/IntercomMessage"
 
+  /health-assessment/questions:
+    get:
+      operationId: listHealthQuestions
+      tags: [health-assessment]
+      summary: List all health assessment questions
+      responses:
+        "200":
+          description: List of questions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HealthQuestion"
+    post:
+      operationId: createHealthQuestion
+      tags: [health-assessment]
+      summary: Create a new health question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHealthQuestionInput"
+      responses:
+        "201":
+          description: Created question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthQuestion"
+
+  /health-assessment/questions/{id}:
+    put:
+      operationId: updateHealthQuestion
+      tags: [health-assessment]
+      summary: Update a health question
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateHealthQuestionInput"
+      responses:
+        "200":
+          description: Updated question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthQuestion"
+    delete:
+      operationId: deleteHealthQuestion
+      tags: [health-assessment]
+      summary: Delete a health question
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /health-assessment/sessions:
+    get:
+      operationId: listCallSessions
+      tags: [health-assessment]
+      summary: List call sessions (most recent first)
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CallSession"
+    post:
+      operationId: startCallSession
+      tags: [health-assessment]
+      summary: Start a new call session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartCallSessionInput"
+      responses:
+        "201":
+          description: Started session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallSession"
+
+  /health-assessment/sessions/{id}/end:
+    put:
+      operationId: endCallSession
+      tags: [health-assessment]
+      summary: End a call session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ended session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallSession"
+
+  /health-assessment/sessions/{id}/data-points:
+    get:
+      operationId: getSessionDataPoints
+      tags: [health-assessment]
+      summary: Get all health data points for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of data points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HealthDataPoint"
+
+  /health-assessment/summary/today:
+    get:
+      operationId: getTodaySummary
+      tags: [health-assessment]
+      summary: Get today's assessment summary grouped by category
+      responses:
+        "200":
+          description: Today's summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentSummary"
+
+  /health-assessment/trends:
+    get:
+      operationId: getAssessmentTrends
+      tags: [health-assessment]
+      summary: Get 30-day trend data grouped by category and date
+      responses:
+        "200":
+          description: Trend data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrendDataPoint"
+
+  /health-assessment/settings:
+    get:
+      operationId: getAssessmentSettings
+      tags: [health-assessment]
+      summary: Get assessment settings (quiet window, etc.)
+      responses:
+        "200":
+          description: Settings object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentSettings"
+    put:
+      operationId: updateAssessmentSettings
+      tags: [health-assessment]
+      summary: Update assessment settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentSettings"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentSettings"
+
 components:
   schemas:
     HealthStatus:
@@ -1081,3 +1289,225 @@ components:
         - ciphertext
         - iv
         - salt
+
+    HealthQuestion:
+      type: object
+      properties:
+        id:
+          type: integer
+        text:
+          type: string
+        category:
+          type: string
+          enum: [mood, medication, sleep, appetite, cognition, voices, energy, task]
+        responseType:
+          type: string
+          enum: [yes_no, scale_1_5, free_text]
+        cycleDays:
+          type: string
+          nullable: true
+          description: "JSON array of cycle day numbers when this question is prioritized. null = always ask"
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+        alwaysAsk:
+          type: boolean
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - text
+        - category
+        - responseType
+        - priority
+        - alwaysAsk
+        - active
+        - createdAt
+
+    CreateHealthQuestionInput:
+      type: object
+      properties:
+        text:
+          type: string
+        category:
+          type: string
+        responseType:
+          type: string
+        cycleDays:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+        alwaysAsk:
+          type: boolean
+        active:
+          type: boolean
+      required:
+        - text
+        - category
+
+    UpdateHealthQuestionInput:
+      type: object
+      properties:
+        text:
+          type: string
+        category:
+          type: string
+        responseType:
+          type: string
+        cycleDays:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+        alwaysAsk:
+          type: boolean
+        active:
+          type: boolean
+
+    CallSession:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+          nullable: true
+        sessionDate:
+          type: string
+          format: date
+        cycleDay:
+          type: integer
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        flagged:
+          type: boolean
+      required:
+        - id
+        - sessionDate
+        - startedAt
+        - flagged
+
+    StartCallSessionInput:
+      type: object
+      properties:
+        conversationId:
+          type: integer
+        cycleDay:
+          type: integer
+      required: []
+
+    HealthDataPoint:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        questionId:
+          type: integer
+          nullable: true
+        category:
+          type: string
+        rawResponse:
+          type: string
+        parsedValue:
+          type: string
+          nullable: true
+        parsedIntensity:
+          type: string
+          nullable: true
+        flagged:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - category
+        - rawResponse
+        - flagged
+        - createdAt
+
+    AssessmentSummary:
+      type: object
+      properties:
+        sessionId:
+          type: integer
+          nullable: true
+        sessionDate:
+          type: string
+          nullable: true
+        cycleDay:
+          type: integer
+          nullable: true
+        dataPoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/HealthDataPoint"
+        categoryStatus:
+          type: object
+          description: "Map of category -> status (green/yellow/red)"
+          additionalProperties:
+            type: string
+        flagged:
+          type: boolean
+        totalDataPoints:
+          type: integer
+      required:
+        - flagged
+        - totalDataPoints
+        - dataPoints
+        - categoryStatus
+
+    TrendDataPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        cycleDay:
+          type: integer
+          nullable: true
+        category:
+          type: string
+        averageValue:
+          type: number
+          nullable: true
+        count:
+          type: integer
+        flagged:
+          type: boolean
+      required:
+        - date
+        - category
+        - count
+        - flagged
+
+    AssessmentSettings:
+      type: object
+      properties:
+        quietWindowStart:
+          type: string
+          description: "HH:MM format, e.g. 22:00"
+        quietWindowEnd:
+          type: string
+          description: "HH:MM format, e.g. 07:00"
+        engagementIntervalHours:
+          type: integer
+          description: "Hours of inactivity before Jessica initiates a check-in"
+      required: []

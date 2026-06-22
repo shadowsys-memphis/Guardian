@@ -605,3 +605,255 @@ export const PostIntercomMessageBody = zod.object({
   iv: zod.string(),
   salt: zod.string(),
 });
+
+/**
+ * @summary List all health assessment questions
+ */
+export const listHealthQuestionsResponsePriorityMax = 10;
+
+export const ListHealthQuestionsResponseItem = zod.object({
+  id: zod.number(),
+  text: zod.string(),
+  category: zod.enum([
+    "mood",
+    "medication",
+    "sleep",
+    "appetite",
+    "cognition",
+    "voices",
+    "energy",
+    "task",
+  ]),
+  responseType: zod.enum(["yes_no", "scale_1_5", "free_text"]),
+  cycleDays: zod
+    .string()
+    .nullish()
+    .describe(
+      "JSON array of cycle day numbers when this question is prioritized. null = always ask",
+    ),
+  priority: zod.number().min(1).max(listHealthQuestionsResponsePriorityMax),
+  alwaysAsk: zod.boolean(),
+  active: zod.boolean(),
+  createdAt: zod.date(),
+});
+export const ListHealthQuestionsResponse = zod.array(
+  ListHealthQuestionsResponseItem,
+);
+
+/**
+ * @summary Create a new health question
+ */
+export const CreateHealthQuestionBody = zod.object({
+  text: zod.string(),
+  category: zod.string(),
+  responseType: zod.string().optional(),
+  cycleDays: zod.string().nullish(),
+  priority: zod.number().optional(),
+  alwaysAsk: zod.boolean().optional(),
+  active: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a health question
+ */
+export const UpdateHealthQuestionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateHealthQuestionBody = zod.object({
+  text: zod.string().optional(),
+  category: zod.string().optional(),
+  responseType: zod.string().optional(),
+  cycleDays: zod.string().nullish(),
+  priority: zod.number().optional(),
+  alwaysAsk: zod.boolean().optional(),
+  active: zod.boolean().optional(),
+});
+
+export const updateHealthQuestionResponsePriorityMax = 10;
+
+export const UpdateHealthQuestionResponse = zod.object({
+  id: zod.number(),
+  text: zod.string(),
+  category: zod.enum([
+    "mood",
+    "medication",
+    "sleep",
+    "appetite",
+    "cognition",
+    "voices",
+    "energy",
+    "task",
+  ]),
+  responseType: zod.enum(["yes_no", "scale_1_5", "free_text"]),
+  cycleDays: zod
+    .string()
+    .nullish()
+    .describe(
+      "JSON array of cycle day numbers when this question is prioritized. null = always ask",
+    ),
+  priority: zod.number().min(1).max(updateHealthQuestionResponsePriorityMax),
+  alwaysAsk: zod.boolean(),
+  active: zod.boolean(),
+  createdAt: zod.date(),
+});
+
+/**
+ * @summary Delete a health question
+ */
+export const DeleteHealthQuestionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List call sessions (most recent first)
+ */
+export const listCallSessionsQueryLimitDefault = 30;
+
+export const ListCallSessionsQueryParams = zod.object({
+  limit: zod.coerce.number().default(listCallSessionsQueryLimitDefault),
+});
+
+export const ListCallSessionsResponseItem = zod.object({
+  id: zod.number(),
+  conversationId: zod.number().nullish(),
+  sessionDate: zod.date(),
+  cycleDay: zod.number().nullish(),
+  startedAt: zod.date(),
+  endedAt: zod.date().nullish(),
+  summary: zod.string().nullish(),
+  flagged: zod.boolean(),
+});
+export const ListCallSessionsResponse = zod.array(ListCallSessionsResponseItem);
+
+/**
+ * @summary Start a new call session
+ */
+export const StartCallSessionBody = zod.object({
+  conversationId: zod.number().optional(),
+  cycleDay: zod.number().optional(),
+});
+
+/**
+ * @summary End a call session
+ */
+export const EndCallSessionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const EndCallSessionResponse = zod.object({
+  id: zod.number(),
+  conversationId: zod.number().nullish(),
+  sessionDate: zod.date(),
+  cycleDay: zod.number().nullish(),
+  startedAt: zod.date(),
+  endedAt: zod.date().nullish(),
+  summary: zod.string().nullish(),
+  flagged: zod.boolean(),
+});
+
+/**
+ * @summary Get all health data points for a session
+ */
+export const GetSessionDataPointsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetSessionDataPointsResponseItem = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  questionId: zod.number().nullish(),
+  category: zod.string(),
+  rawResponse: zod.string(),
+  parsedValue: zod.string().nullish(),
+  parsedIntensity: zod.string().nullish(),
+  flagged: zod.boolean(),
+  createdAt: zod.date(),
+});
+export const GetSessionDataPointsResponse = zod.array(
+  GetSessionDataPointsResponseItem,
+);
+
+/**
+ * @summary Get today's assessment summary grouped by category
+ */
+export const GetTodaySummaryResponse = zod.object({
+  sessionId: zod.number().nullish(),
+  sessionDate: zod.string().nullish(),
+  cycleDay: zod.number().nullish(),
+  dataPoints: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      questionId: zod.number().nullish(),
+      category: zod.string(),
+      rawResponse: zod.string(),
+      parsedValue: zod.string().nullish(),
+      parsedIntensity: zod.string().nullish(),
+      flagged: zod.boolean(),
+      createdAt: zod.date(),
+    }),
+  ),
+  categoryStatus: zod
+    .record(zod.string(), zod.string())
+    .describe("Map of category -> status (green\/yellow\/red)"),
+  flagged: zod.boolean(),
+  totalDataPoints: zod.number(),
+});
+
+/**
+ * @summary Get 30-day trend data grouped by category and date
+ */
+export const GetAssessmentTrendsResponseItem = zod.object({
+  date: zod.date(),
+  cycleDay: zod.number().nullish(),
+  category: zod.string(),
+  averageValue: zod.number().nullish(),
+  count: zod.number(),
+  flagged: zod.boolean(),
+});
+export const GetAssessmentTrendsResponse = zod.array(
+  GetAssessmentTrendsResponseItem,
+);
+
+/**
+ * @summary Get assessment settings (quiet window, etc.)
+ */
+export const GetAssessmentSettingsResponse = zod.object({
+  quietWindowStart: zod
+    .string()
+    .optional()
+    .describe("HH:MM format, e.g. 22:00"),
+  quietWindowEnd: zod.string().optional().describe("HH:MM format, e.g. 07:00"),
+  engagementIntervalHours: zod
+    .number()
+    .optional()
+    .describe("Hours of inactivity before Jessica initiates a check-in"),
+});
+
+/**
+ * @summary Update assessment settings
+ */
+export const UpdateAssessmentSettingsBody = zod.object({
+  quietWindowStart: zod
+    .string()
+    .optional()
+    .describe("HH:MM format, e.g. 22:00"),
+  quietWindowEnd: zod.string().optional().describe("HH:MM format, e.g. 07:00"),
+  engagementIntervalHours: zod
+    .number()
+    .optional()
+    .describe("Hours of inactivity before Jessica initiates a check-in"),
+});
+
+export const UpdateAssessmentSettingsResponse = zod.object({
+  quietWindowStart: zod
+    .string()
+    .optional()
+    .describe("HH:MM format, e.g. 22:00"),
+  quietWindowEnd: zod.string().optional().describe("HH:MM format, e.g. 07:00"),
+  engagementIntervalHours: zod
+    .number()
+    .optional()
+    .describe("Hours of inactivity before Jessica initiates a check-in"),
+});
