@@ -1844,6 +1844,29 @@ components:
         - status
         - createdAt
 
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        cartId:
+          type: integer
+        ingredientName:
+          type: string
+        totalQuantity:
+          type: string
+        unit:
+          type: string
+        estimatedCostCents:
+          type: integer
+      required:
+        - id
+        - cartId
+        - ingredientName
+        - totalQuantity
+        - unit
+        - estimatedCostCents
+
     CartWithMeals:
       allOf:
         - $ref: "#/components/schemas/GroceryCart"
@@ -1853,6 +1876,10 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/MealWithIngredients"
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/CartItem"
 
     AddMealToCartInput:
       type: object

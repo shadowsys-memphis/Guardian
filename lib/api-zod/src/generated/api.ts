@@ -988,6 +988,18 @@ export const GetCartResponse = zod
             ),
         )
         .optional(),
+      items: zod
+        .array(
+          zod.object({
+            id: zod.number(),
+            cartId: zod.number(),
+            ingredientName: zod.string(),
+            totalQuantity: zod.string(),
+            unit: zod.string(),
+            estimatedCostCents: zod.number(),
+          }),
+        )
+        .optional(),
     }),
   );
 

@@ -1523,6 +1523,20 @@ function ShopperTab() {
               Cart is {cartStatus}. A new cart will be created next Monday.
             </p>
           )}
+
+          {(cart?.items ?? []).length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border/30">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Shopping List</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                {(cart?.items ?? []).map((item: any) => (
+                  <div key={item.id} className="flex justify-between text-xs">
+                    <span className="text-foreground/80">{item.ingredientName} <span className="text-muted-foreground">×{item.totalQuantity} {item.unit}</span></span>
+                    <span className="text-muted-foreground">{fmtDollars(item.estimatedCostCents)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

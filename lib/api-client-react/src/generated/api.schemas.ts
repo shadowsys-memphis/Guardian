@@ -552,8 +552,18 @@ export interface GroceryCart {
   createdAt: string;
 }
 
+export interface CartItem {
+  id: number;
+  cartId: number;
+  ingredientName: string;
+  totalQuantity: string;
+  unit: string;
+  estimatedCostCents: number;
+}
+
 export type CartWithMeals = GroceryCart & {
   meals?: MealWithIngredients[];
+  items?: CartItem[];
 };
 
 export interface AddMealToCartInput {

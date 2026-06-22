@@ -5,6 +5,7 @@ import {
   mealIngredientsTable,
   groceryCartsTable,
   cartMealsTable,
+  cartItemsTable,
   mealCravingsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -124,6 +125,16 @@ export async function ensureMealsSeeded() {
     )
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS cart_items (
+      id SERIAL PRIMARY KEY,
+      cart_id INTEGER NOT NULL,
+      ingredient_name TEXT NOT NULL,
+      total_quantity TEXT NOT NULL DEFAULT '1',
+      unit TEXT NOT NULL DEFAULT 'each',
+      estimated_cost_cents INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS meal_cravings (
       id SERIAL PRIMARY KEY,
       meal_name TEXT NOT NULL,
@@ -178,19 +189,40 @@ async function getOrCreateCart(): Promise<typeof groceryCartsTable.$inferSelect>
   return created;
 }
 
-async function recalcCartTotal(cartId: number): Promise<void> {
+async function rebuildCartItems(cartId: number): Promise<void> {
+  await db.delete(cartItemsTable).where(eq(cartItemsTable.cartId, cartId));
   const cartMealRows = await db.select().from(cartMealsTable).where(eq(cartMealsTable.cartId, cartId));
   if (cartMealRows.length === 0) {
     await db.update(groceryCartsTable).set({ totalEstimatedCostCents: 0 }).where(eq(groceryCartsTable.id, cartId));
     return;
   }
   const mealIds = cartMealRows.map((r) => r.mealId);
-  const meals = await db.select().from(mealsTable).where(
+  const ingredients = await db.select().from(mealIngredientsTable).where(
     mealIds.length === 1
-      ? eq(mealsTable.id, mealIds[0])
-      : sql`${mealsTable.id} = ANY(${sql.raw(`ARRAY[${mealIds.join(",")}]`)})`
+      ? eq(mealIngredientsTable.mealId, mealIds[0])
+      : sql`${mealIngredientsTable.mealId} = ANY(${sql.raw(`ARRAY[${mealIds.join(",")}]`)})`
   );
-  const total = meals.reduce((sum, m) => sum + m.estimatedCostCents, 0);
+  // aggregate by name+unit across all selected meals
+  const agg = new Map<string, { cost: number; qty: number; unit: string }>();
+  for (const ing of ingredients) {
+    const key = `${ing.name}|${ing.unit}`;
+    const qty = parseFloat(ing.quantity) || 1;
+    const cur = agg.get(key);
+    if (cur) { cur.cost += ing.estimatedCostCents; cur.qty += qty; }
+    else agg.set(key, { cost: ing.estimatedCostCents, qty, unit: ing.unit });
+  }
+  if (agg.size > 0) {
+    await db.insert(cartItemsTable).values(
+      Array.from(agg.entries()).map(([key, v]) => ({
+        cartId,
+        ingredientName: key.split("|")[0],
+        totalQuantity: v.qty % 1 === 0 ? String(v.qty) : v.qty.toFixed(1),
+        unit: v.unit,
+        estimatedCostCents: v.cost,
+      }))
+    );
+  }
+  const total = Array.from(agg.values()).reduce((s, v) => s + v.cost, 0);
   await db.update(groceryCartsTable).set({ totalEstimatedCostCents: total }).where(eq(groceryCartsTable.id, cartId));
 }
 
@@ -296,13 +328,18 @@ router.post("/shopper/sync", async (req, res) => {
 
       if (currentMealId && ingName) {
         const costCents = costStr ? Math.round(parseFloat(costStr) * 100) : 0;
-        await db.insert(mealIngredientsTable).values({
-          mealId: currentMealId,
-          name: ingName,
-          quantity: quantity || "1",
-          unit: unit || "each",
-          estimatedCostCents: isNaN(costCents) ? 0 : costCents,
-        });
+        const existingIng = await db.select().from(mealIngredientsTable)
+          .where(and(eq(mealIngredientsTable.mealId, currentMealId), eq(mealIngredientsTable.name, ingName)))
+          .limit(1);
+        if (!existingIng[0]) {
+          await db.insert(mealIngredientsTable).values({
+            mealId: currentMealId,
+            name: ingName,
+            quantity: quantity || "1",
+            unit: unit || "each",
+            estimatedCostCents: isNaN(costCents) ? 0 : costCents,
+          });
+        }
       }
     }
     res.json({ ok: true, mealsImported: imported, rowsProcessed: lines.length - 1 });
@@ -326,20 +363,19 @@ router.get("/shopper/cart", async (req, res) => {
           ? eq(mealsTable.id, mealIds[0])
           : sql`${mealsTable.id} = ANY(${sql.raw(`ARRAY[${mealIds.join(",")}]`)})`
       );
-      const ingredients = mealIds.length > 0
-        ? await db.select().from(mealIngredientsTable).where(
-            mealIds.length === 1
-              ? eq(mealIngredientsTable.mealId, mealIds[0])
-              : sql`${mealIngredientsTable.mealId} = ANY(${sql.raw(`ARRAY[${mealIds.join(",")}]`)})`
-          )
-        : [];
+      const ingredients = await db.select().from(mealIngredientsTable).where(
+        mealIds.length === 1
+          ? eq(mealIngredientsTable.mealId, mealIds[0])
+          : sql`${mealIngredientsTable.mealId} = ANY(${sql.raw(`ARRAY[${mealIds.join(",")}]`)})`
+      );
       meals = mealRows.map((m) => ({
         ...m,
         ingredients: ingredients.filter((i) => i.mealId === m.id),
         cartMealId: cartMealRows.find((r) => r.mealId === m.id)?.id,
       }));
     }
-    res.json({ ...cart, meals });
+    const items = await db.select().from(cartItemsTable).where(eq(cartItemsTable.cartId, cart.id));
+    res.json({ ...cart, meals, items });
   } catch (err) {
     req.log.error({ err }, "Failed to get cart");
     res.status(500).json({ error: "Failed to get cart" });
@@ -355,7 +391,7 @@ router.post("/shopper/cart/meals", async (req, res) => {
       return res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
     }
     await db.insert(cartMealsTable).values({ cartId: cart.id, mealId });
-    await recalcCartTotal(cart.id);
+    await rebuildCartItems(cart.id);
     res.status(201).json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to add meal to cart");
@@ -368,7 +404,7 @@ router.delete("/shopper/cart/meals/:cartMealId", async (req, res) => {
   try {
     const cartMealId = parseInt(req.params.cartMealId, 10);
     const [removed] = await db.delete(cartMealsTable).where(eq(cartMealsTable.id, cartMealId)).returning();
-    if (removed) await recalcCartTotal(removed.cartId);
+    if (removed) await rebuildCartItems(removed.cartId);
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to remove meal from cart");

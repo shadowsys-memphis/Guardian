@@ -204,6 +204,15 @@ export const cartMealsTable = pgTable("cart_meals", {
   mealId: integer("meal_id").notNull(),
 });
 
+export const cartItemsTable = pgTable("cart_items", {
+  id: serial("id").primaryKey(),
+  cartId: integer("cart_id").notNull(),
+  ingredientName: text("ingredient_name").notNull(),
+  totalQuantity: text("total_quantity").notNull().default("1"),
+  unit: text("unit").notNull().default("each"),
+  estimatedCostCents: integer("estimated_cost_cents").notNull().default(0),
+});
+
 export const mealCravingsTable = pgTable("meal_cravings", {
   id: serial("id").primaryKey(),
   mealName: text("meal_name").notNull(),

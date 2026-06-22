@@ -5,9 +5,11 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
+import type { CartItem } from "./cartItem";
 import type { GroceryCart } from "./groceryCart";
 import type { MealWithIngredients } from "./mealWithIngredients";
 
 export type CartWithMeals = GroceryCart & {
   meals?: MealWithIngredients[];
+  items?: CartItem[];
 };

@@ -16,6 +16,7 @@ export * from "./assessmentSettings";
 export * from "./assessmentSummary";
 export * from "./assessmentSummaryCategoryStatus";
 export * from "./callSession";
+export * from "./cartItem";
 export * from "./cartWithMeals";
 export * from "./createCravingInput";
 export * from "./createCravingInputSource";
