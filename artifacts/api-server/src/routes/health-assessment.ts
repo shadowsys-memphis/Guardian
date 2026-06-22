@@ -6,7 +6,7 @@ import {
   healthDataPointsTable,
   appSettingsTable,
 } from "@workspace/db";
-import { eq, desc, asc, and, gte, lte } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -61,7 +61,7 @@ async function ensureSeeded() {
   );
 }
 
-async function getSettings(): Promise<typeof DEFAULT_SETTINGS> {
+export async function getSettings(): Promise<typeof DEFAULT_SETTINGS> {
   const rows = await db.select().from(appSettingsTable).where(
     eq(appSettingsTable.key, "assessment_settings")
   );
@@ -249,7 +249,7 @@ router.get("/health-assessment/trends", async (req, res) => {
     const sessionIds = sessions.map((s) => s.id);
     if (sessionIds.length === 0) return res.json([]);
     const allPoints = await db.select().from(healthDataPointsTable).where(
-      and(...sessionIds.map((id) => eq(healthDataPointsTable.sessionId, id)))
+      inArray(healthDataPointsTable.sessionId, sessionIds)
     );
     const byDateCategory: Record<string, { date: string; cycleDay: number | null; category: string; values: number[]; count: number; flagged: boolean }> = {};
     for (const session of sessions) {
@@ -311,6 +311,11 @@ router.put("/health-assessment/settings", async (req, res) => {
     res.status(400).json({ error: "Failed to update settings" });
   }
 });
+
+export function isInQuietWindow(currentHHMM: string, start: string, end: string): boolean {
+  if (start <= end) return currentHHMM >= start && currentHHMM < end;
+  return currentHHMM >= start || currentHHMM < end;
+}
 
 export async function saveHealthDataPoint(data: {
   sessionId: number;

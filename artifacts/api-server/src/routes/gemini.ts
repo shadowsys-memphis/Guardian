@@ -10,7 +10,7 @@ import {
 import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, asc, desc } from "drizzle-orm";
 import { z } from "zod";
-import { saveHealthDataPoint, getActiveQuestionsForCycleDay } from "./health-assessment";
+import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQuietWindow } from "./health-assessment";
 
 const router: IRouter = Router();
 
@@ -118,6 +118,15 @@ router.get("/gemini/conversations", async (req, res) => {
 
 router.post("/gemini/conversations", async (req, res) => {
   try {
+    const settings = await getSettings();
+    const now = new Date();
+    const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    if (isInQuietWindow(currentHHMM, settings.quietWindowStart, settings.quietWindowEnd)) {
+      return res.status(423).json({
+        error: "quiet_window",
+        message: `Jessica is in quiet mode until ${settings.quietWindowEnd}. Pops should be resting.`,
+      });
+    }
     const { title } = z.object({ title: z.string() }).parse(req.body);
     const [created] = await db.insert(conversationsTable).values({ title }).returning();
     const { cycleDay } = await getCurrentCycleInfo();
@@ -223,6 +232,7 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
     ];
 
     let fullResponse = "";
+    let prevVisibleLength = 0;
 
     const stream = await ai.models.generateContentStream({
       model: "gemini-2.5-flash",
@@ -234,8 +244,12 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       const text = chunk.text;
       if (text) {
         fullResponse += text;
-        const visibleText = stripSystemTags(fullResponse);
-        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        const currentVisible = stripSystemTags(fullResponse);
+        const delta = currentVisible.slice(prevVisibleLength);
+        if (delta) {
+          res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+          prevVisibleLength = currentVisible.length;
+        }
       }
     }
 

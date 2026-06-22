@@ -301,16 +301,22 @@ function HealthQuestionsSection() {
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ text: "", category: "mood", responseType: "yes_no", priority: 5, alwaysAsk: false });
+  const [form, setForm] = useState({ text: "", category: "mood", responseType: "yes_no", priority: 5, alwaysAsk: false, cycleDays: "" });
 
-  const resetForm = () => { setForm({ text: "", category: "mood", responseType: "yes_no", priority: 5, alwaysAsk: false }); setEditingId(null); setShowForm(false); };
+  const resetForm = () => { setForm({ text: "", category: "mood", responseType: "yes_no", priority: 5, alwaysAsk: false, cycleDays: "" }); setEditingId(null); setShowForm(false); };
+
+  const parseCycleDays = (val: string): string | null => {
+    const nums = val.trim().split(/[\s,]+/).map(Number).filter((n) => !isNaN(n) && n >= 1 && n <= 14);
+    return nums.length > 0 ? JSON.stringify(nums) : null;
+  };
 
   const handleSave = () => {
     if (!form.text.trim()) return;
+    const payload = { ...form, cycleDays: form.cycleDays ? parseCycleDays(form.cycleDays) : null };
     if (editingId) {
-      updateQ.mutate({ id: editingId, data: form }, { onSuccess: () => { toast({ title: "Question updated" }); resetForm(); refetch(); } });
+      updateQ.mutate({ id: editingId, data: payload }, { onSuccess: () => { toast({ title: "Question updated" }); resetForm(); refetch(); } });
     } else {
-      createQ.mutate({ data: form }, { onSuccess: () => { toast({ title: "Question added" }); resetForm(); refetch(); } });
+      createQ.mutate({ data: payload }, { onSuccess: () => { toast({ title: "Question added" }); resetForm(); refetch(); } });
     }
   };
 
@@ -352,7 +358,7 @@ function HealthQuestionsSection() {
                 </select>
               </div>
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 flex-wrap">
               <div className="space-y-1">
                 <label className="text-xs font-bold uppercase text-muted-foreground">Priority (1–10)</label>
                 <input type="range" min={1} max={10} value={form.priority} onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value) })} className="w-32 accent-primary" />
@@ -362,6 +368,15 @@ function HealthQuestionsSection() {
                 <input type="checkbox" checked={form.alwaysAsk} onChange={(e) => setForm({ ...form, alwaysAsk: e.target.checked })} className="accent-primary" />
                 Always ask (every call)
               </label>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Cycle Days (optional)</label>
+              <p className="text-xs text-muted-foreground/60">Only ask on specific days of the 14-day cycle. Enter day numbers separated by commas (e.g. 1,2,3,4,5). Leave blank to ask on any day.</p>
+              <Input
+                value={form.cycleDays}
+                onChange={(e) => setForm({ ...form, cycleDays: e.target.value })}
+                placeholder="e.g. 1,2,3,4,5  (leave blank = any day)"
+              />
             </div>
             <div className="flex gap-2 pt-2">
               <Button size="sm" onClick={handleSave} disabled={createQ.isPending || updateQ.isPending}>{editingId ? "Update" : "Add"} Question</Button>
@@ -388,7 +403,7 @@ function HealthQuestionsSection() {
               <button onClick={() => toggleActive(q)} className={`p-1.5 rounded-sm border text-xs transition-colors ${q.active ? "border-success/40 text-success hover:bg-success/10" : "border-border text-muted-foreground hover:bg-secondary"}`} title={q.active ? "Disable" : "Enable"}>
                 {q.active ? <Check size={12} /> : <Plus size={12} />}
               </button>
-              <button onClick={() => { setEditingId(q.id); setForm({ text: q.text, category: q.category, responseType: q.responseType, priority: q.priority, alwaysAsk: q.alwaysAsk }); setShowForm(true); }}
+              <button onClick={() => { setEditingId(q.id); setForm({ text: q.text, category: q.category, responseType: q.responseType, priority: q.priority, alwaysAsk: q.alwaysAsk, cycleDays: q.cycleDays ? JSON.parse(q.cycleDays).join(",") : "" }); setShowForm(true); }}
                 className="p-1.5 rounded-sm border border-border text-muted-foreground hover:bg-secondary transition-colors">
                 <Edit2 size={12} />
               </button>
