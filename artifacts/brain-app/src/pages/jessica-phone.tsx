@@ -42,6 +42,7 @@ export function JessicaPhone() {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [deviceCommandResult, setDeviceCommandResult] = useState<DeviceCommandResult | null>(null);
   const [healthDataCount, setHealthDataCount] = useState(0);
+  const [quietWindowMessage, setQuietWindowMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const synth = useRef<SpeechSynthesis | null>(null);
 
@@ -69,12 +70,21 @@ export function JessicaPhone() {
 
   const startCall = async () => {
     setCallState("calling");
+    setQuietWindowMessage(null);
     try {
       const res = await fetch(`${BASE_URL}/api/gemini/conversations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: `Jessica Call — ${format(new Date(), "MMM dd HH:mm")}` }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 423 && body.error === "quiet_window") {
+          setQuietWindowMessage(body.message ?? "Jessica is in quiet mode right now.");
+        }
+        setCallState("idle");
+        return;
+      }
       const convo = await res.json();
       setConversationId(convo.id);
       setTimeout(() => {
@@ -235,10 +245,16 @@ export function JessicaPhone() {
             </button>
           )}
 
-          {callState === "idle" && (
+          {callState === "idle" && !quietWindowMessage && (
             <p className="text-muted-foreground/50 text-sm uppercase tracking-widest font-display">
               Tap to Call Jessica
             </p>
+          )}
+          {quietWindowMessage && (
+            <div className="max-w-sm mx-auto px-6 py-3 bg-secondary/60 border border-border rounded-sm text-center">
+              <p className="text-xs font-display text-muted-foreground uppercase tracking-widest mb-1">Quiet Mode Active</p>
+              <p className="text-sm text-foreground/70">{quietWindowMessage}</p>
+            </div>
           )}
         </div>
       </div>

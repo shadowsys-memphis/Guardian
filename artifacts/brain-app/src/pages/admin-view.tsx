@@ -136,31 +136,102 @@ function HealthIntelligenceTab() {
   );
 }
 
+const CYCLE_DAY_COLORS = ["#ef4444","#ef4444","#ef4444","#ef4444","#ef4444","#f97316","#f97316","#eab308","#eab308","#84cc16","#22c55e","#22c55e","#22c55e","#22c55e"];
+
+function CycleDayHeatmap({ trends, haldolCycleDay }: { trends: any[]; haldolCycleDay: number | null }) {
+  const CATS = ["mood", "voices", "sleep", "medication"];
+  // Build map: cycleDay -> category -> averageValue
+  const grid: Record<number, Record<string, number>> = {};
+  for (const t of trends) {
+    if (!t.cycleDay) continue;
+    if (!grid[t.cycleDay]) grid[t.cycleDay] = {};
+    if (t.averageValue !== null) grid[t.cycleDay][t.category] = t.averageValue;
+  }
+  const hasCycleData = Object.keys(grid).length > 0;
+  if (!hasCycleData) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 pt-4 px-4">
+        <CardTitle className="text-sm font-display uppercase tracking-widest text-muted-foreground">
+          📅 Cycle-Day Correlation Heatmap
+        </CardTitle>
+        <CardDescription className="text-xs">Average health score per medication cycle day (1–14). Red = high-symptom zone.</CardDescription>
+      </CardHeader>
+      <CardContent className="pb-4 px-4 overflow-x-auto">
+        <div className="min-w-[540px]">
+          <div className="flex gap-1 mb-1">
+            <div className="w-20 shrink-0" />
+            {Array.from({ length: 14 }, (_, i) => i + 1).map((d) => (
+              <div key={d} className={`flex-1 text-center text-xs font-bold ${d === haldolCycleDay ? "text-primary" : "text-muted-foreground/50"}`}>{d}</div>
+            ))}
+          </div>
+          {CATS.map((cat) => (
+            <div key={cat} className="flex gap-1 mb-1 items-center">
+              <div className="w-20 shrink-0 text-xs text-muted-foreground uppercase font-bold">{CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}</div>
+              {Array.from({ length: 14 }, (_, i) => i + 1).map((d) => {
+                const val = grid[d]?.[cat];
+                const isCurrent = d === haldolCycleDay;
+                let bg = "bg-secondary/30";
+                if (val !== undefined) {
+                  if (val >= 0.7) bg = "bg-success/60";
+                  else if (val >= 0.4) bg = "bg-yellow-500/50";
+                  else bg = "bg-destructive/60";
+                }
+                return (
+                  <div key={d} title={val !== undefined ? `Day ${d}: ${val.toFixed(2)}` : `Day ${d}: no data`}
+                    className={`flex-1 h-6 rounded-sm ${bg} ${isCurrent ? "ring-1 ring-primary" : ""} transition-colors`} />
+                );
+              })}
+            </div>
+          ))}
+          <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-destructive/60" /> Low (&lt;0.4)</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-yellow-500/50" /> Mid</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-success/60" /> Good (≥0.7)</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-secondary/30" /> No data</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function HealthSummarySection() {
   const { data: summary } = useGetTodaySummary({ query: { refetchInterval: 30000 } });
-  const { data: trends } = useGetAssessmentTrends();
+  const { data: trendsResp } = useGetAssessmentTrends();
   const { data: haldol } = useGetHaldolCycle();
   const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
 
-  const trendsByCategory = (category: string) => {
-    if (!trends) return [];
-    return (trends as any[])
-      .filter((t) => t.category === category)
-      .slice(-30)
+  const trends: any[] = (trendsResp as any)?.trends ?? (Array.isArray(trendsResp) ? trendsResp : []);
+  const sustainedAnomalies: string[] = (trendsResp as any)?.sustainedAnomalies ?? [];
+
+  const trendsByCategory = (category: string) =>
+    trends.filter((t) => t.category === category).slice(-30)
       .map((t) => ({ date: t.date.slice(5), value: t.averageValue ?? 0, day: t.cycleDay }));
-  };
 
   const flaggedCategories = CATS.filter((c) => (summary as any)?.categoryStatus?.[c] === "red");
 
   return (
     <div className="space-y-6">
-      {flaggedCategories.length > 0 && (
-        <div className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/40 rounded-md">
+      {sustainedAnomalies.length > 0 && (
+        <div className="flex items-start gap-3 p-4 bg-destructive/15 border border-destructive/50 rounded-md">
           <AlertTriangle className="text-destructive shrink-0 mt-0.5" size={20} />
           <div>
-            <p className="text-sm font-bold text-destructive uppercase tracking-widest">Anomaly Alert</p>
+            <p className="text-sm font-bold text-destructive uppercase tracking-widest">Sustained Pattern Alert</p>
             <p className="text-sm text-destructive/80 mt-1">
-              Flagged categories today: {flaggedCategories.map((c) => CATEGORY_LABELS[c]).join(", ")}. Review the session log below.
+              {sustainedAnomalies.map((c) => CATEGORY_LABELS[c]).join(", ")} — flagged in 3+ of last 5 sessions. Consider raising with provider.
+            </p>
+          </div>
+        </div>
+      )}
+      {flaggedCategories.length > 0 && sustainedAnomalies.length === 0 && (
+        <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
+          <AlertTriangle className="text-yellow-400 shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="text-sm font-bold text-yellow-400 uppercase tracking-widest">Today's Alert</p>
+            <p className="text-sm text-yellow-400/80 mt-1">
+              Flagged today: {flaggedCategories.map((c) => CATEGORY_LABELS[c]).join(", ")}.
             </p>
           </div>
         </div>
@@ -177,11 +248,13 @@ function HealthSummarySection() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {CATS.map((cat) => {
               const status = (summary as any)?.categoryStatus?.[cat] ?? "unknown";
+              const isSustained = sustainedAnomalies.includes(cat);
               return (
-                <div key={cat} className={`border rounded-md p-4 text-center transition-colors ${STATUS_COLORS[status]}`}>
+                <div key={cat} className={`border rounded-md p-4 text-center transition-colors ${STATUS_COLORS[status]} ${isSustained ? "ring-2 ring-destructive/60" : ""}`}>
                   <div className="text-2xl mb-1">{CATEGORY_ICONS[cat]}</div>
                   <div className="text-xs font-display uppercase tracking-widest">{CATEGORY_LABELS[cat]}</div>
                   <div className="text-xs mt-1 opacity-70 capitalize">{status === "unknown" ? "no data" : status}</div>
+                  {isSustained && <div className="text-xs text-destructive font-bold mt-1">sustained ↑</div>}
                 </div>
               );
             })}
@@ -194,9 +267,11 @@ function HealthSummarySection() {
         )}
       </div>
 
+      <CycleDayHeatmap trends={trends} haldolCycleDay={haldol?.cycleDay ?? null} />
+
       <div>
         <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest mb-3">30-Day Trends</h3>
-        {(!trends || (trends as any[]).length === 0) ? (
+        {trends.length === 0 ? (
           <p className="text-muted-foreground italic text-sm">No trend data yet. Data builds up over daily calls.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -208,6 +283,7 @@ function HealthSummarySection() {
                   <CardHeader className="pb-2 pt-4 px-4">
                     <CardTitle className="text-sm font-display uppercase tracking-widest text-muted-foreground">
                       {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
+                      {sustainedAnomalies.includes(cat) && <span className="ml-2 text-destructive text-xs">sustained alert</span>}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pb-4 px-2">
@@ -220,7 +296,7 @@ function HealthSummarySection() {
                           contentStyle={{ background: "#1a1a1a", border: "1px solid #333", fontSize: 11 }}
                           formatter={(v: number) => [v.toFixed(2), CATEGORY_LABELS[cat]]}
                         />
-                        <Line type="monotone" dataKey="value" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="value" stroke={sustainedAnomalies.includes(cat) ? "#ef4444" : "#fbbf24"} strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -236,10 +312,18 @@ function HealthSummarySection() {
 
 function HealthSessionsSection() {
   const { data: sessions } = useListCallSessions({ limit: 20 });
+  const { data: allQuestions } = useListHealthQuestions();
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const { data: dataPoints } = useGetSessionDataPoints(selectedSession ?? 0, {
     query: { enabled: selectedSession !== null },
   });
+
+  const questionsMap: Record<number, string> = {};
+  if (allQuestions) {
+    for (const q of allQuestions as any[]) questionsMap[q.id] = q.text;
+  }
+
+  const coverageFromDps = (dps: any[]) => [...new Set(dps.map((d) => d.category))];
 
   return (
     <div className="space-y-4">
@@ -265,22 +349,53 @@ function HealthSessionsSection() {
                   </Button>
                 </div>
                 {selectedSession === session.id && dataPoints && (
-                  <div className="mt-4 pt-4 border-t border-border/40 space-y-2">
+                  <div className="mt-4 pt-4 border-t border-border/40 space-y-3">
                     {(dataPoints as any[]).length === 0 ? (
                       <p className="text-xs text-muted-foreground italic">No structured data points captured in this session.</p>
                     ) : (
-                      (dataPoints as any[]).map((dp) => (
-                        <div key={dp.id} className={`flex items-start gap-3 p-2 rounded-sm text-xs ${dp.flagged ? "bg-destructive/10" : "bg-secondary/30"}`}>
-                          <span className="shrink-0">{CATEGORY_ICONS[dp.category] ?? "📊"}</span>
-                          <div className="flex-1">
-                            <span className="text-muted-foreground uppercase font-bold tracking-widest">{CATEGORY_LABELS[dp.category] ?? dp.category}</span>
-                            {dp.parsedValue && <span className="ml-2 text-primary">→ {dp.parsedValue}</span>}
-                            {dp.parsedIntensity && dp.parsedIntensity !== "none" && <span className="ml-1 text-yellow-400">({dp.parsedIntensity})</span>}
-                            <p className="text-muted-foreground/60 mt-0.5 italic">"{dp.rawResponse}"</p>
+                      <>
+                        <div className="pb-3 border-b border-border/30">
+                          <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest mb-2">Topics Covered This Call</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {coverageFromDps(dataPoints as any[]).map((cat) => {
+                              const catQuestions = (allQuestions as any[] ?? []).filter((q) => q.category === cat && q.active);
+                              return (
+                                <div key={cat} className="group relative">
+                                  <span className="px-2 py-0.5 rounded-sm bg-primary/10 border border-primary/30 text-xs text-primary font-bold uppercase cursor-default">
+                                    {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat] ?? cat}
+                                  </span>
+                                  {catQuestions.length > 0 && (
+                                    <div className="absolute bottom-full left-0 mb-1 z-10 w-64 p-2 bg-card border border-border rounded-sm shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                      <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Questions asked:</p>
+                                      {catQuestions.slice(0, 3).map((q: any) => (
+                                        <p key={q.id} className="text-xs text-foreground/80 leading-snug">· {q.text}</p>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                          {dp.flagged && <AlertTriangle size={12} className="text-destructive shrink-0" />}
                         </div>
-                      ))
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Extracted Data Points</p>
+                          {(dataPoints as any[]).map((dp) => (
+                            <div key={dp.id} className={`flex items-start gap-3 p-2 rounded-sm text-xs ${dp.flagged ? "bg-destructive/10" : "bg-secondary/30"}`}>
+                              <span className="shrink-0">{CATEGORY_ICONS[dp.category] ?? "📊"}</span>
+                              <div className="flex-1">
+                                <span className="text-muted-foreground uppercase font-bold tracking-widest">{CATEGORY_LABELS[dp.category] ?? dp.category}</span>
+                                {dp.parsedValue && <span className="ml-2 text-primary">→ {dp.parsedValue}</span>}
+                                {dp.parsedIntensity && dp.parsedIntensity !== "none" && <span className="ml-1 text-yellow-400">({dp.parsedIntensity})</span>}
+                                {dp.questionId && questionsMap[dp.questionId] && (
+                                  <p className="text-primary/50 mt-0.5 text-xs">Q: {questionsMap[dp.questionId]}</p>
+                                )}
+                                <p className="text-muted-foreground/60 mt-0.5 italic">"{dp.rawResponse}"</p>
+                              </div>
+                              {dp.flagged && <AlertTriangle size={12} className="text-destructive shrink-0" />}
+                            </div>
+                          ))}
+                        </div>
+                      </>
                     )}
                   </div>
                 )}

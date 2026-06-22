@@ -83,6 +83,32 @@ function stripSystemTags(text: string): string {
     .trim();
 }
 
+// Returns only the text that is provably safe to stream to the client:
+// - Complete system tags are removed
+// - Unclosed system tag openings (and everything after) are held back
+// - Partial tag name prefixes at the very end are held back
+function getStreamSafeVisible(accumulated: string): string {
+  // 1. Strip complete closed tags
+  let result = accumulated
+    .replace(/<health_data>[\s\S]*?<\/health_data>/g, "")
+    .replace(/<device_command>[\s\S]*?<\/device_command>/g, "")
+    .trim();
+  // 2. Strip unclosed open tag (opened but closing tag not yet arrived)
+  result = result.replace(/<health_data>[\s\S]*$/, "").trim();
+  result = result.replace(/<device_command>[\s\S]*$/, "").trim();
+  // 3. Strip partial tag prefix at end of string (e.g. "<health_da" or "<dev")
+  const tagPrefixes = ["<health_data", "</health_data", "<device_command", "</device_command"];
+  for (const prefix of tagPrefixes) {
+    for (let i = prefix.length - 1; i >= 1; i--) {
+      if (result.endsWith(prefix.slice(0, i))) {
+        result = result.slice(0, -i).trim();
+        break;
+      }
+    }
+  }
+  return result;
+}
+
 function parseDeviceCommand(text: string): { device: string; action: string; value?: number } | null {
   const match = text.match(/<device_command>([\s\S]*?)<\/device_command>/);
   if (!match) return null;
@@ -232,7 +258,7 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
     ];
 
     let fullResponse = "";
-    let prevVisibleLength = 0;
+    let prevSafeLength = 0;
 
     const stream = await ai.models.generateContentStream({
       model: "gemini-2.5-flash",
@@ -244,13 +270,20 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       const text = chunk.text;
       if (text) {
         fullResponse += text;
-        const currentVisible = stripSystemTags(fullResponse);
-        const delta = currentVisible.slice(prevVisibleLength);
+        const currentSafe = getStreamSafeVisible(fullResponse);
+        const delta = currentSafe.slice(prevSafeLength);
         if (delta) {
           res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
-          prevVisibleLength = currentVisible.length;
+          prevSafeLength = currentSafe.length;
         }
       }
+    }
+
+    // Flush any remaining safe text held back by unclosed-tag guard
+    const finalSafe = getStreamSafeVisible(fullResponse);
+    const finalDelta = finalSafe.slice(prevSafeLength);
+    if (finalDelta) {
+      res.write(`data: ${JSON.stringify({ content: finalDelta })}\n\n`);
     }
 
     const healthDataTags = parseHealthDataTags(fullResponse);

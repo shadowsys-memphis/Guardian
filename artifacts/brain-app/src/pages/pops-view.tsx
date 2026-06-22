@@ -4,6 +4,7 @@ import {
   useGetAppState,
   useGetHaldolCycle,
   useGetTodaySummary,
+  useListCallSessions,
   getGetAppStateQueryKey,
   getGetHaldolCycleQueryKey,
   type HaldolCycle,
@@ -39,6 +40,7 @@ export function PopsView() {
     query: { queryKey: getGetHaldolCycleQueryKey(), refetchInterval: 60000 },
   });
   const { data: todaySummary } = useGetTodaySummary({ query: { refetchInterval: 60000 } });
+  const { data: recentSessions } = useListCallSessions({ limit: 5, query: { refetchInterval: 60000 } });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -82,6 +84,7 @@ export function PopsView() {
         )}
       </main>
 
+      {recentSessions && <CallTimeline sessions={recentSessions} currentTime={currentTime} />}
       {haldol && <HaldolBar haldol={haldol} todaySummary={todaySummary ?? null} />}
     </div>
   );
@@ -151,6 +154,34 @@ function ActiveMessage({ message }: { message: string }) {
       <p className="text-[6vw] md:text-6xl font-display font-bold text-primary leading-tight tracking-wider uppercase">
         "{message.toUpperCase()}"
       </p>
+    </div>
+  );
+}
+
+function CallTimeline({ sessions, currentTime }: { sessions: any; currentTime: Date }) {
+  const today = currentTime.toISOString().split("T")[0];
+  const todaySessions = (sessions as any[] ?? []).filter((s: any) => s.sessionDate === today);
+  if (todaySessions.length === 0) return null;
+
+  return (
+    <div className="bg-secondary/20 border-t border-border/30 px-8 py-3 shrink-0">
+      <div className="flex items-center gap-6 overflow-x-auto">
+        <span className="text-xs font-display text-muted-foreground/50 uppercase tracking-widest shrink-0">Today's Calls</span>
+        {todaySessions.map((s: any) => {
+          const started = s.startedAt ? new Date(s.startedAt) : null;
+          const ended = s.endedAt ? new Date(s.endedAt) : null;
+          return (
+            <div key={s.id} className={`flex items-center gap-2 shrink-0 px-3 py-1.5 rounded-sm border ${s.flagged ? "border-destructive/40 bg-destructive/10" : ended ? "border-success/30 bg-success/5" : "border-primary/40 bg-primary/5 animate-pulse"}`}>
+              <div className={`h-1.5 w-1.5 rounded-full ${s.flagged ? "bg-destructive" : ended ? "bg-success" : "bg-primary animate-pulse"}`} />
+              <span className="text-xs font-display uppercase tracking-widest">
+                {started ? format(started, "HH:mm") : "--:--"}
+                {ended ? ` → ${format(ended, "HH:mm")}` : " → Live"}
+              </span>
+              {s.flagged && <span className="text-xs text-destructive">⚠</span>}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

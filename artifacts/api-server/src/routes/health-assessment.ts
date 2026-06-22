@@ -272,8 +272,18 @@ router.get("/health-assessment/trends", async (req, res) => {
       averageValue: d.values.length > 0 ? d.values.reduce((a, b) => a + b, 0) / d.values.length : null,
       count: d.count,
       flagged: d.flagged,
-    }));
-    res.json(result.sort((a, b) => a.date.localeCompare(b.date)));
+    })).sort((a, b) => a.date.localeCompare(b.date));
+
+    // Sustained anomaly detection: flag category if it's been bad in 3+ of last 5 sessions
+    const sustainedAnomalies: string[] = [];
+    const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
+    for (const cat of CATS) {
+      const catEntries = result.filter((r) => r.category === cat).slice(-5);
+      const badCount = catEntries.filter((r) => r.flagged || (r.averageValue !== null && r.averageValue < 0.3)).length;
+      if (badCount >= 3) sustainedAnomalies.push(cat);
+    }
+
+    res.json({ trends: result, sustainedAnomalies });
   } catch (err) {
     req.log.error({ err }, "Failed to get trends");
     res.status(500).json({ error: "Failed to get trends" });
