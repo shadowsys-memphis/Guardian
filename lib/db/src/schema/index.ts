@@ -136,6 +136,7 @@ export const healthQuestionsTable = pgTable("health_questions", {
   priority: integer("priority").notNull().default(5),
   alwaysAsk: boolean("always_ask").notNull().default(false),
   active: boolean("active").notNull().default(true),
+  higherIsBetter: boolean("higher_is_better").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

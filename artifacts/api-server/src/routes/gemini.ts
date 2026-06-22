@@ -14,12 +14,12 @@ import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQu
 
 const router: IRouter = Router();
 
-function buildJessicaSystemPrompt(questions: { text: string; category: string; responseType: string }[], cycleDay: number | null, isZombiePhase: boolean): string {
+function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean): string {
   const toneProfile = isZombiePhase
     ? "Today is a rest day for Pops — his Haldol cycle is in the high-symptom phase (days 1-5). Keep everything soft, brief, and low-pressure. No long conversations. Gentle check-ins only."
     : "Today is a normal day for Pops. You can be warm, engaged, and conversational. Keep him anchored and positive.";
 
-  const questionList = questions.slice(0, 12).map((q, i) => `${i + 1}. [${q.category}] "${q.text}"`).join("\n");
+  const questionList = questions.slice(0, 12).map((q, i) => `${i + 1}. [${q.category}|qid:${q.id}] "${q.text}"`).join("\n");
 
   return `You are Jessica, the AI companion and care coordinator for a veteran named Pops who lives with his caregiver Ray (Raymo). You have a warm, grounding, and calm voice. You speak clearly and gently — never rushed, never clinical.
 
@@ -39,10 +39,11 @@ ${questionList}
 
 HEALTH DATA EXTRACTION — CRITICAL:
 When Pops responds to any health-related question, you MUST emit a structured tag immediately after your response text (NOT visible in conversation):
-<health_data>{"category":"CATEGORY","parsedValue":"VALUE","parsedIntensity":"INTENSITY","rawResponse":"EXACT QUOTE"}</health_data>
+<health_data>{"category":"CATEGORY","questionId":QID_NUMBER,"parsedValue":"VALUE","parsedIntensity":"INTENSITY","rawResponse":"EXACT QUOTE"}</health_data>
 
 Rules:
 - category: one of mood, medication, sleep, appetite, cognition, voices, energy, task
+- questionId: the qid number from the question list above (e.g. if question says [mood|qid:4], use 4); use 0 if no specific question matched
 - parsedValue: "yes"/"no" for yes_no questions; "1"-"5" for scale; brief summary for free_text; "unsafe" if Pops expresses distress
 - parsedIntensity: "none"/"mild"/"moderate"/"severe" — required for voices and mood categories
 - rawResponse: quote Pops' exact words (truncated to 100 chars)
@@ -58,15 +59,17 @@ Known devices: living_room_echo, bedroom_echo, kitchen_echo, sonos_living, sonos
 Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.`;
 }
 
-function parseHealthDataTags(text: string): Array<{ category: string; parsedValue: string | null; parsedIntensity: string | null; rawResponse: string }> {
-  const results: Array<{ category: string; parsedValue: string | null; parsedIntensity: string | null; rawResponse: string }> = [];
+function parseHealthDataTags(text: string): Array<{ category: string; questionId: number | null; parsedValue: string | null; parsedIntensity: string | null; rawResponse: string }> {
+  const results: Array<{ category: string; questionId: number | null; parsedValue: string | null; parsedIntensity: string | null; rawResponse: string }> = [];
   const regex = /<health_data>([\s\S]*?)<\/health_data>/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
     try {
       const parsed = JSON.parse(match[1]);
+      const qid = parsed.questionId ? parseInt(String(parsed.questionId), 10) : null;
       results.push({
         category: parsed.category ?? "mood",
+        questionId: qid && qid > 0 ? qid : null,
         parsedValue: parsed.parsedValue ?? null,
         parsedIntensity: parsed.parsedIntensity ?? null,
         rawResponse: parsed.rawResponse ?? "",
@@ -312,11 +315,12 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
           await db.update(callSessionsTable).set({ endedAt: new Date(), summary, flagged }).where(eq(callSessionsTable.id, sessionRows[0].id));
         } else {
           for (const tag of healthDataTags) {
-            // Match tag category to active question for traceability
-            const matchedQuestion = questions.find((q) => q.category === tag.category);
+            // Prefer the questionId extracted from the tag (set by Gemini using qid: in prompt)
+            // Fall back to first matching category question if Gemini omitted it
+            const resolvedQuestionId = tag.questionId ?? (questions.find((q) => q.category === tag.category)?.id ?? null);
             await saveHealthDataPoint({
               sessionId: sessionRows[0].id,
-              questionId: matchedQuestion?.id ?? null,
+              questionId: resolvedQuestionId,
               category: tag.category,
               rawResponse: tag.rawResponse,
               parsedValue: tag.parsedValue,

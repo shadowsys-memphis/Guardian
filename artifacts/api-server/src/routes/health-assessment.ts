@@ -6,7 +6,7 @@ import {
   healthDataPointsTable,
   appSettingsTable,
 } from "@workspace/db";
-import { eq, desc, asc, and, gte, lte, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -18,34 +18,36 @@ const DEFAULT_SETTINGS = {
 };
 
 const SEED_QUESTIONS = [
-  { text: "How'd you sleep last night — okay, rough, or good?", category: "sleep", responseType: "free_text", priority: 9, alwaysAsk: true },
-  { text: "How's your energy today — low, okay, or pretty good?", category: "energy", responseType: "free_text", priority: 9, alwaysAsk: true },
-  { text: "Did you take your morning medications?", category: "medication", responseType: "yes_no", priority: 10, alwaysAsk: true },
-  { text: "How are you feeling overall today — doing alright?", category: "mood", responseType: "free_text", priority: 8, alwaysAsk: true },
-  { text: "Have you eaten anything today?", category: "appetite", responseType: "yes_no", priority: 8, alwaysAsk: true },
-  { text: "Any of those background voices been active today?", category: "voices", responseType: "yes_no", priority: 9, alwaysAsk: true },
-  { text: "If the voices have been around, how loud or bothersome have they been — mild, moderate, or pretty rough?", category: "voices", responseType: "free_text", priority: 7, alwaysAsk: false, cycleDays: "[1,2,3,4,5]" },
-  { text: "Have you been feeling any tension or on edge today?", category: "mood", responseType: "yes_no", priority: 7, alwaysAsk: false },
-  { text: "Did you have any nightmares or rough nights?", category: "sleep", responseType: "yes_no", priority: 7, alwaysAsk: false, cycleDays: "[1,2,3,4,5,6,7]" },
-  { text: "How's your appetite been — eating okay?", category: "appetite", responseType: "free_text", priority: 6, alwaysAsk: false },
-  { text: "Any headaches or physical discomfort today?", category: "cognition", responseType: "yes_no", priority: 6, alwaysAsk: false },
-  { text: "Have you been able to focus okay, or does your mind feel foggy?", category: "cognition", responseType: "free_text", priority: 7, alwaysAsk: false },
-  { text: "Did you take your evening medications?", category: "medication", responseType: "yes_no", priority: 10, alwaysAsk: true, cycleDays: null },
-  { text: "Have you had any water today — staying hydrated?", category: "appetite", responseType: "yes_no", priority: 5, alwaysAsk: false },
-  { text: "Any moments today where you felt really anxious or overwhelmed?", category: "mood", responseType: "yes_no", priority: 8, alwaysAsk: false },
-  { text: "How are you feeling about your day — anything on your mind?", category: "mood", responseType: "free_text", priority: 6, alwaysAsk: false },
-  { text: "Did you get outside or move around at all today?", category: "energy", responseType: "yes_no", priority: 5, alwaysAsk: false },
-  { text: "Have you been feeling more withdrawn or isolated than usual?", category: "mood", responseType: "yes_no", priority: 7, alwaysAsk: false, cycleDays: "[1,2,3,4,5,6,7]" },
-  { text: "Did you complete your scheduled tasks today?", category: "task", responseType: "yes_no", priority: 8, alwaysAsk: true },
-  { text: "Is there anything you need from Raymo today?", category: "task", responseType: "free_text", priority: 6, alwaysAsk: true },
-  { text: "How intense have the voices been on a scale — quiet, mild, or loud?", category: "voices", responseType: "free_text", priority: 8, alwaysAsk: false, cycleDays: "[1,2,3,4,5]" },
-  { text: "Any moments of feeling unsafe or really distressed today?", category: "mood", responseType: "yes_no", priority: 10, alwaysAsk: false },
-  { text: "Did you sleep at all, or was it a tough night?", category: "sleep", responseType: "free_text", priority: 8, alwaysAsk: false, cycleDays: "[1,2,3,4,5]" },
-  { text: "What did you eat today — anything good?", category: "appetite", responseType: "free_text", priority: 5, alwaysAsk: false },
-  { text: "Are you feeling more tired than usual today?", category: "energy", responseType: "yes_no", priority: 7, alwaysAsk: false, cycleDays: "[1,2,3,4,5,6,7]" },
+  { text: "How'd you sleep last night — okay, rough, or good?", category: "sleep", responseType: "free_text", priority: 9, alwaysAsk: true, higherIsBetter: true },
+  { text: "How's your energy today — low, okay, or pretty good?", category: "energy", responseType: "free_text", priority: 9, alwaysAsk: true, higherIsBetter: true },
+  { text: "Did you take your morning medications?", category: "medication", responseType: "yes_no", priority: 10, alwaysAsk: true, higherIsBetter: true },
+  { text: "How are you feeling overall today — doing alright?", category: "mood", responseType: "free_text", priority: 8, alwaysAsk: true, higherIsBetter: true },
+  { text: "Have you eaten anything today?", category: "appetite", responseType: "yes_no", priority: 8, alwaysAsk: true, higherIsBetter: true },
+  { text: "Any of those background voices been active today?", category: "voices", responseType: "yes_no", priority: 9, alwaysAsk: true, higherIsBetter: false },
+  { text: "If the voices have been around, how loud or bothersome have they been — mild, moderate, or pretty rough?", category: "voices", responseType: "free_text", priority: 7, alwaysAsk: false, cycleDays: "[1,2,3,4,5]", higherIsBetter: false },
+  { text: "Have you been feeling any tension or on edge today?", category: "mood", responseType: "yes_no", priority: 7, alwaysAsk: false, higherIsBetter: false },
+  { text: "Did you have any nightmares or rough nights?", category: "sleep", responseType: "yes_no", priority: 7, alwaysAsk: false, cycleDays: "[1,2,3,4,5,6,7]", higherIsBetter: false },
+  { text: "How's your appetite been — eating okay?", category: "appetite", responseType: "free_text", priority: 6, alwaysAsk: false, higherIsBetter: true },
+  { text: "Any headaches or physical discomfort today?", category: "cognition", responseType: "yes_no", priority: 6, alwaysAsk: false, higherIsBetter: false },
+  { text: "Have you been able to focus okay, or does your mind feel foggy?", category: "cognition", responseType: "free_text", priority: 7, alwaysAsk: false, higherIsBetter: true },
+  { text: "Did you take your evening medications?", category: "medication", responseType: "yes_no", priority: 10, alwaysAsk: true, cycleDays: null, higherIsBetter: true },
+  { text: "Have you had any water today — staying hydrated?", category: "appetite", responseType: "yes_no", priority: 5, alwaysAsk: false, higherIsBetter: true },
+  { text: "Any moments today where you felt really anxious or overwhelmed?", category: "mood", responseType: "yes_no", priority: 8, alwaysAsk: false, higherIsBetter: false },
+  { text: "How are you feeling about your day — anything on your mind?", category: "mood", responseType: "free_text", priority: 6, alwaysAsk: false, higherIsBetter: true },
+  { text: "Did you get outside or move around at all today?", category: "energy", responseType: "yes_no", priority: 5, alwaysAsk: false, higherIsBetter: true },
+  { text: "Have you been feeling more withdrawn or isolated than usual?", category: "mood", responseType: "yes_no", priority: 7, alwaysAsk: false, cycleDays: "[1,2,3,4,5,6,7]", higherIsBetter: false },
+  { text: "Did you complete your scheduled tasks today?", category: "task", responseType: "yes_no", priority: 8, alwaysAsk: true, higherIsBetter: true },
+  { text: "Is there anything you need from Raymo today?", category: "task", responseType: "free_text", priority: 6, alwaysAsk: true, higherIsBetter: true },
+  { text: "How intense have the voices been on a scale — quiet, mild, or loud?", category: "voices", responseType: "free_text", priority: 8, alwaysAsk: false, cycleDays: "[1,2,3,4,5]", higherIsBetter: false },
+  { text: "Any moments of feeling unsafe or really distressed today?", category: "mood", responseType: "yes_no", priority: 10, alwaysAsk: false, higherIsBetter: false },
+  { text: "Did you sleep at all, or was it a tough night?", category: "sleep", responseType: "free_text", priority: 8, alwaysAsk: false, cycleDays: "[1,2,3,4,5]", higherIsBetter: true },
+  { text: "What did you eat today — anything good?", category: "appetite", responseType: "free_text", priority: 5, alwaysAsk: false, higherIsBetter: true },
+  { text: "Are you feeling more tired than usual today?", category: "energy", responseType: "yes_no", priority: 7, alwaysAsk: false, cycleDays: "[1,2,3,4,5,6,7]", higherIsBetter: false },
 ];
 
 async function ensureSeeded() {
+  // Safe migration: add higher_is_better column if not already present
+  await db.execute(sql`ALTER TABLE health_questions ADD COLUMN IF NOT EXISTS higher_is_better BOOLEAN NOT NULL DEFAULT TRUE`);
   const existing = await db.select().from(healthQuestionsTable).limit(1);
   if (existing.length > 0) return;
   await db.insert(healthQuestionsTable).values(
@@ -57,6 +59,7 @@ async function ensureSeeded() {
       alwaysAsk: q.alwaysAsk ?? false,
       cycleDays: (q as any).cycleDays ?? null,
       active: true,
+      higherIsBetter: q.higherIsBetter ?? true,
     }))
   );
 }
@@ -229,6 +232,7 @@ router.get("/health-assessment/summary/today", async (req, res) => {
       sessionId: session.id,
       sessionDate: session.sessionDate,
       cycleDay: session.cycleDay,
+      lastSessionStartedAt: session.startedAt ? session.startedAt.toISOString() : null,
       dataPoints,
       categoryStatus,
       flagged: session.flagged,
@@ -291,6 +295,14 @@ router.get("/health-assessment/trends", async (req, res) => {
     const allPoints = await db.select().from(healthDataPointsTable).where(
       inArray(healthDataPointsTable.sessionId, sessionIds)
     );
+    // Build a polarity lookup: questionId -> higherIsBetter
+    const questionIds = [...new Set(allPoints.map((p) => p.questionId).filter(Boolean) as number[])];
+    const polarityMap: Record<number, boolean> = {};
+    if (questionIds.length > 0) {
+      const qs = await db.select({ id: healthQuestionsTable.id, higherIsBetter: healthQuestionsTable.higherIsBetter })
+        .from(healthQuestionsTable).where(inArray(healthQuestionsTable.id, questionIds));
+      for (const q of qs) polarityMap[q.id] = q.higherIsBetter;
+    }
     const byDateCategory: Record<string, { date: string; cycleDay: number | null; category: string; values: number[]; count: number; flagged: boolean }> = {};
     for (const session of sessions) {
       const pts = allPoints.filter((p) => p.sessionId === session.id);
@@ -301,8 +313,13 @@ router.get("/health-assessment/trends", async (req, res) => {
         }
         byDateCategory[key].count++;
         if (pt.flagged) byDateCategory[key].flagged = true;
-        const numVal = pt.parsedValue === "yes" ? 1 : pt.parsedValue === "no" ? 0 : parseFloat(pt.parsedValue ?? "");
-        if (!isNaN(numVal)) byDateCategory[key].values.push(numVal);
+        const higherIsBetter = pt.questionId ? (polarityMap[pt.questionId] ?? true) : true;
+        let rawVal = pt.parsedValue === "yes" ? 1 : pt.parsedValue === "no" ? 0 : parseFloat(pt.parsedValue ?? "");
+        if (!isNaN(rawVal)) {
+          // Flip score for negative-polarity yes/no questions: yes=bad → score 0, no=good → score 1
+          const normalized = (!higherIsBetter && (pt.parsedValue === "yes" || pt.parsedValue === "no")) ? 1 - rawVal : rawVal;
+          byDateCategory[key].values.push(normalized);
+        }
       }
     }
     const result = Object.values(byDateCategory).map((d) => ({
@@ -384,7 +401,7 @@ export async function saveHealthDataPoint(data: {
   return point;
 }
 
-export async function getActiveQuestionsForCycleDay(cycleDay: number | null) {
+export async function getActiveQuestionsForCycleDay(cycleDay: number | null): Promise<{ id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[]> {
   await ensureSeeded();
   const questions = await db.select().from(healthQuestionsTable).where(eq(healthQuestionsTable.active, true)).orderBy(desc(healthQuestionsTable.priority));
   return questions.filter((q) => {
@@ -397,7 +414,13 @@ export async function getActiveQuestionsForCycleDay(cycleDay: number | null) {
     } catch {
       return false;
     }
-  });
+  }).map((q) => ({
+    id: q.id,
+    text: q.text,
+    category: q.category,
+    responseType: q.responseType,
+    higherIsBetter: q.higherIsBetter,
+  }));
 }
 
 export default router;

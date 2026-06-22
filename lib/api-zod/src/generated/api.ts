@@ -781,6 +781,10 @@ export const GetTodaySummaryResponse = zod.object({
   sessionId: zod.number().nullish(),
   sessionDate: zod.string().nullish(),
   cycleDay: zod.number().nullish(),
+  lastSessionStartedAt: zod
+    .string()
+    .nullish()
+    .describe("ISO timestamp of when today's session started"),
   dataPoints: zod.array(
     zod.object({
       id: zod.number(),

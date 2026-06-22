@@ -12,6 +12,8 @@ export interface AssessmentSummary {
   sessionId?: number | null;
   sessionDate?: string | null;
   cycleDay?: number | null;
+  /** ISO timestamp of when today's session started */
+  lastSessionStartedAt?: string | null;
   dataPoints: HealthDataPoint[];
   /** Map of category -> status (green/yellow/red) */
   categoryStatus: AssessmentSummaryCategoryStatus;

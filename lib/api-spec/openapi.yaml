@@ -1468,6 +1468,10 @@ components:
         cycleDay:
           type: integer
           nullable: true
+        lastSessionStartedAt:
+          type: string
+          nullable: true
+          description: "ISO timestamp of when today's session started"
         dataPoints:
           type: array
           items:
