@@ -297,10 +297,83 @@ export interface CreateGovernorNoteInput {
   noteText: string;
 }
 
+export interface GeminiConversation {
+  id: number;
+  title: string;
+  createdAt: string;
+}
+
+export interface GeminiMessage {
+  id: number;
+  conversationId: number;
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface GeminiConversationInput {
+  title: string;
+}
+
+export interface GeminiMessageInput {
+  content: string;
+}
+
+export interface GeminiConversationWithMessages {
+  id: number;
+  title: string;
+  createdAt: string;
+  messages: GeminiMessage[];
+}
+
+export interface GeminiError {
+  error: string;
+}
+
+export interface SmartHomeDevice {
+  id: number;
+  deviceKey: string;
+  name: string;
+  type: string;
+  room: string;
+  isOn: boolean;
+  volume?: number | null;
+  brightness?: number | null;
+  meta?: string | null;
+  updatedAt: string;
+}
+
+export interface UpdateSmartHomeDeviceInput {
+  isOn?: boolean;
+  volume?: number;
+  brightness?: number;
+  meta?: string;
+}
+
+export interface IntercomMessage {
+  id: number;
+  sender: string;
+  ciphertext: string;
+  iv: string;
+  salt: string;
+  createdAt: string;
+}
+
+export interface CreateIntercomMessageInput {
+  sender: string;
+  ciphertext: string;
+  iv: string;
+  salt: string;
+}
+
 export type GetSymptomLogsParams = {
   limit?: number;
 };
 
 export type GetGovernorNotesParams = {
+  limit?: number;
+};
+
+export type GetIntercomMessagesParams = {
   limit?: number;
 };

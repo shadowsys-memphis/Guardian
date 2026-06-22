@@ -12,6 +12,9 @@
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/integrations-gemini-ai": "workspace:*",
+    "@google/genai": "^1.52.0",
+    "zod": "catalog:",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
     "drizzle-orm": "catalog:",

@@ -6,6 +6,9 @@ import symptomsRouter from "./symptoms";
 import scriptsRouter from "./scripts";
 import haldolRouter from "./haldol";
 import governorRouter from "./governor";
+import geminiRouter from "./gemini";
+import smarthomeRouter from "./smarthome";
+import intercomRouter from "./intercom";
 
 const router: IRouter = Router();
 
@@ -16,5 +19,8 @@ router.use(symptomsRouter);
 router.use(scriptsRouter);
 router.use(haldolRouter);
 router.use(governorRouter);
+router.use(geminiRouter);
+router.use(smarthomeRouter);
+router.use(intercomRouter);
 
 export default router;

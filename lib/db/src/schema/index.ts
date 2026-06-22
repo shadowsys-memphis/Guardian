@@ -70,6 +70,31 @@ export const governorNotesTable = pgTable("governor_notes", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export * from "./conversations";
+export * from "./messages";
+
+export const smartHomeDevicesTable = pgTable("smart_home_devices", {
+  id: serial("id").primaryKey(),
+  deviceKey: text("device_key").notNull().unique(),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  room: text("room").notNull(),
+  isOn: boolean("is_on").notNull().default(false),
+  volume: integer("volume"),
+  brightness: integer("brightness"),
+  meta: text("meta"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const intercomeMessagesTable = pgTable("intercom_messages", {
+  id: serial("id").primaryKey(),
+  sender: text("sender").notNull(),
+  ciphertext: text("ciphertext").notNull(),
+  iv: text("iv").notNull(),
+  salt: text("salt").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertAppStateSchema = createInsertSchema(appStateTable).omit({ id: true });
 export const insertScheduleTaskSchema = createInsertSchema(scheduleTasksTable).omit({ id: true });
 export const insertSymptomLogSchema = createInsertSchema(symptomLogsTable).omit({ id: true });
@@ -93,3 +118,11 @@ export type InsertVoiceScript = z.infer<typeof insertVoiceScriptSchema>;
 export type InsertHaldolCycle = z.infer<typeof insertHaldolCycleSchema>;
 export type InsertGovernorPillar = z.infer<typeof insertGovernorPillarSchema>;
 export type InsertGovernorNote = z.infer<typeof insertGovernorNoteSchema>;
+
+export const insertSmartHomeDeviceSchema = createInsertSchema(smartHomeDevicesTable).omit({ id: true });
+export const insertIntercomMessageSchema = createInsertSchema(intercomeMessagesTable).omit({ id: true });
+
+export type SmartHomeDevice = typeof smartHomeDevicesTable.$inferSelect;
+export type IntercomMessage = typeof intercomeMessagesTable.$inferSelect;
+export type InsertSmartHomeDevice = z.infer<typeof insertSmartHomeDeviceSchema>;
+export type InsertIntercomMessage = z.infer<typeof insertIntercomMessageSchema>;

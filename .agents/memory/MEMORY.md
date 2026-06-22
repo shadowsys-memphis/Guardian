@@ -1,0 +1,1 @@
+- [Brain App Architecture](brain-app-arch.md) — E2EE vault gate wraps all routes; new features: Jessica AI phone, smart home, intercom, all built on /api routes.

@@ -451,3 +451,157 @@ export const CreateGovernorNoteBody = zod.object({
   pillarKey: zod.string().optional(),
   noteText: zod.string(),
 });
+
+/**
+ * @summary List all conversations
+ */
+export const ListGeminiConversationsResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.date(),
+});
+export const ListGeminiConversationsResponse = zod.array(
+  ListGeminiConversationsResponseItem,
+);
+
+/**
+ * @summary Create a new conversation
+ */
+export const CreateGeminiConversationBody = zod.object({
+  title: zod.string(),
+});
+
+/**
+ * @summary Get conversation with messages
+ */
+export const GetGeminiConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetGeminiConversationResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.date(),
+  messages: zod.array(
+    zod.object({
+      id: zod.number(),
+      conversationId: zod.number(),
+      role: zod.string(),
+      content: zod.string(),
+      createdAt: zod.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Delete a conversation
+ */
+export const DeleteGeminiConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List messages in a conversation
+ */
+export const ListGeminiMessagesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListGeminiMessagesResponseItem = zod.object({
+  id: zod.number(),
+  conversationId: zod.number(),
+  role: zod.string(),
+  content: zod.string(),
+  createdAt: zod.date(),
+});
+export const ListGeminiMessagesResponse = zod.array(
+  ListGeminiMessagesResponseItem,
+);
+
+/**
+ * @summary Send a message and receive an AI response (SSE stream)
+ */
+export const SendGeminiMessageParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SendGeminiMessageBody = zod.object({
+  content: zod.string(),
+});
+
+/**
+ * @summary Get all smart home devices and their state
+ */
+export const GetSmartHomeDevicesResponseItem = zod.object({
+  id: zod.number(),
+  deviceKey: zod.string(),
+  name: zod.string(),
+  type: zod.string(),
+  room: zod.string(),
+  isOn: zod.boolean(),
+  volume: zod.number().nullish(),
+  brightness: zod.number().nullish(),
+  meta: zod.string().nullish(),
+  updatedAt: zod.date(),
+});
+export const GetSmartHomeDevicesResponse = zod.array(
+  GetSmartHomeDevicesResponseItem,
+);
+
+/**
+ * @summary Update a device state
+ */
+export const UpdateSmartHomeDeviceParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const UpdateSmartHomeDeviceBody = zod.object({
+  isOn: zod.boolean().optional(),
+  volume: zod.number().optional(),
+  brightness: zod.number().optional(),
+  meta: zod.string().optional(),
+});
+
+export const UpdateSmartHomeDeviceResponse = zod.object({
+  id: zod.number(),
+  deviceKey: zod.string(),
+  name: zod.string(),
+  type: zod.string(),
+  room: zod.string(),
+  isOn: zod.boolean(),
+  volume: zod.number().nullish(),
+  brightness: zod.number().nullish(),
+  meta: zod.string().nullish(),
+  updatedAt: zod.date(),
+});
+
+/**
+ * @summary Get recent encrypted intercom messages
+ */
+export const getIntercomMessagesQueryLimitDefault = 50;
+
+export const GetIntercomMessagesQueryParams = zod.object({
+  limit: zod.coerce.number().default(getIntercomMessagesQueryLimitDefault),
+});
+
+export const GetIntercomMessagesResponseItem = zod.object({
+  id: zod.number(),
+  sender: zod.string(),
+  ciphertext: zod.string(),
+  iv: zod.string(),
+  salt: zod.string(),
+  createdAt: zod.date(),
+});
+export const GetIntercomMessagesResponse = zod.array(
+  GetIntercomMessagesResponseItem,
+);
+
+/**
+ * @summary Post an encrypted message to the intercom
+ */
+export const PostIntercomMessageBody = zod.object({
+  sender: zod.string(),
+  ciphertext: zod.string(),
+  iv: zod.string(),
+  salt: zod.string(),
+});

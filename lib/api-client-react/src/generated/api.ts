@@ -19,20 +19,31 @@ import type {
 import type {
   AppState,
   CreateGovernorNoteInput,
+  CreateIntercomMessageInput,
   CreateScheduleTaskInput,
   CreateSymptomLogInput,
   CreateVoiceScriptInput,
+  GeminiConversation,
+  GeminiConversationInput,
+  GeminiConversationWithMessages,
+  GeminiError,
+  GeminiMessage,
+  GeminiMessageInput,
   GetGovernorNotesParams,
+  GetIntercomMessagesParams,
   GetSymptomLogsParams,
   GovernorNote,
   GovernorPillar,
   HaldolCycle,
   HealthStatus,
+  IntercomMessage,
   ScheduleTask,
+  SmartHomeDevice,
   SymptomLog,
   UpdateAppStateInput,
   UpdateHaldolCycleInput,
   UpdateScheduleTaskInput,
+  UpdateSmartHomeDeviceInput,
   UpdateVoiceScriptInput,
   VoiceScript,
 } from "./api.schemas";
@@ -1700,4 +1711,866 @@ export const useCreateGovernorNote = <
   TContext
 > => {
   return useMutation(getCreateGovernorNoteMutationOptions(options));
+};
+
+/**
+ * @summary List all conversations
+ */
+export const getListGeminiConversationsUrl = () => {
+  return `/api/gemini/conversations`;
+};
+
+export const listGeminiConversations = async (
+  options?: RequestInit,
+): Promise<GeminiConversation[]> => {
+  return customFetch<GeminiConversation[]>(getListGeminiConversationsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListGeminiConversationsQueryKey = () => {
+  return [`/api/gemini/conversations`] as const;
+};
+
+export const getListGeminiConversationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listGeminiConversations>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listGeminiConversations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListGeminiConversationsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listGeminiConversations>>
+  > = ({ signal }) => listGeminiConversations({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listGeminiConversations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListGeminiConversationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listGeminiConversations>>
+>;
+export type ListGeminiConversationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all conversations
+ */
+
+export function useListGeminiConversations<
+  TData = Awaited<ReturnType<typeof listGeminiConversations>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listGeminiConversations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListGeminiConversationsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new conversation
+ */
+export const getCreateGeminiConversationUrl = () => {
+  return `/api/gemini/conversations`;
+};
+
+export const createGeminiConversation = async (
+  geminiConversationInput: GeminiConversationInput,
+  options?: RequestInit,
+): Promise<GeminiConversation> => {
+  return customFetch<GeminiConversation>(getCreateGeminiConversationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(geminiConversationInput),
+  });
+};
+
+export const getCreateGeminiConversationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createGeminiConversation>>,
+    TError,
+    { data: BodyType<GeminiConversationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createGeminiConversation>>,
+  TError,
+  { data: BodyType<GeminiConversationInput> },
+  TContext
+> => {
+  const mutationKey = ["createGeminiConversation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createGeminiConversation>>,
+    { data: BodyType<GeminiConversationInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createGeminiConversation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateGeminiConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createGeminiConversation>>
+>;
+export type CreateGeminiConversationMutationBody =
+  BodyType<GeminiConversationInput>;
+export type CreateGeminiConversationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new conversation
+ */
+export const useCreateGeminiConversation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createGeminiConversation>>,
+    TError,
+    { data: BodyType<GeminiConversationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createGeminiConversation>>,
+  TError,
+  { data: BodyType<GeminiConversationInput> },
+  TContext
+> => {
+  return useMutation(getCreateGeminiConversationMutationOptions(options));
+};
+
+/**
+ * @summary Get conversation with messages
+ */
+export const getGetGeminiConversationUrl = (id: number) => {
+  return `/api/gemini/conversations/${id}`;
+};
+
+export const getGeminiConversation = async (
+  id: number,
+  options?: RequestInit,
+): Promise<GeminiConversationWithMessages> => {
+  return customFetch<GeminiConversationWithMessages>(
+    getGetGeminiConversationUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetGeminiConversationQueryKey = (id: number) => {
+  return [`/api/gemini/conversations/${id}`] as const;
+};
+
+export const getGetGeminiConversationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGeminiConversation>>,
+  TError = ErrorType<GeminiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getGeminiConversation>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetGeminiConversationQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGeminiConversation>>
+  > = ({ signal }) => getGeminiConversation(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGeminiConversation>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetGeminiConversationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGeminiConversation>>
+>;
+export type GetGeminiConversationQueryError = ErrorType<GeminiError>;
+
+/**
+ * @summary Get conversation with messages
+ */
+
+export function useGetGeminiConversation<
+  TData = Awaited<ReturnType<typeof getGeminiConversation>>,
+  TError = ErrorType<GeminiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getGeminiConversation>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetGeminiConversationQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete a conversation
+ */
+export const getDeleteGeminiConversationUrl = (id: number) => {
+  return `/api/gemini/conversations/${id}`;
+};
+
+export const deleteGeminiConversation = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteGeminiConversationUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteGeminiConversationMutationOptions = <
+  TError = ErrorType<GeminiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteGeminiConversation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteGeminiConversation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteGeminiConversation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteGeminiConversation>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteGeminiConversation(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteGeminiConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteGeminiConversation>>
+>;
+
+export type DeleteGeminiConversationMutationError = ErrorType<GeminiError>;
+
+/**
+ * @summary Delete a conversation
+ */
+export const useDeleteGeminiConversation = <
+  TError = ErrorType<GeminiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteGeminiConversation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteGeminiConversation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteGeminiConversationMutationOptions(options));
+};
+
+/**
+ * @summary List messages in a conversation
+ */
+export const getListGeminiMessagesUrl = (id: number) => {
+  return `/api/gemini/conversations/${id}/messages`;
+};
+
+export const listGeminiMessages = async (
+  id: number,
+  options?: RequestInit,
+): Promise<GeminiMessage[]> => {
+  return customFetch<GeminiMessage[]>(getListGeminiMessagesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListGeminiMessagesQueryKey = (id: number) => {
+  return [`/api/gemini/conversations/${id}/messages`] as const;
+};
+
+export const getListGeminiMessagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listGeminiMessages>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listGeminiMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListGeminiMessagesQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listGeminiMessages>>
+  > = ({ signal }) => listGeminiMessages(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listGeminiMessages>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListGeminiMessagesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listGeminiMessages>>
+>;
+export type ListGeminiMessagesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List messages in a conversation
+ */
+
+export function useListGeminiMessages<
+  TData = Awaited<ReturnType<typeof listGeminiMessages>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listGeminiMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListGeminiMessagesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Send a message and receive an AI response (SSE stream)
+ */
+export const getSendGeminiMessageUrl = (id: number) => {
+  return `/api/gemini/conversations/${id}/messages`;
+};
+
+export const sendGeminiMessage = async (
+  id: number,
+  geminiMessageInput: GeminiMessageInput,
+  options?: RequestInit,
+): Promise<unknown> => {
+  return customFetch<unknown>(getSendGeminiMessageUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(geminiMessageInput),
+  });
+};
+
+export const getSendGeminiMessageMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendGeminiMessage>>,
+    TError,
+    { id: number; data: BodyType<GeminiMessageInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendGeminiMessage>>,
+  TError,
+  { id: number; data: BodyType<GeminiMessageInput> },
+  TContext
+> => {
+  const mutationKey = ["sendGeminiMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendGeminiMessage>>,
+    { id: number; data: BodyType<GeminiMessageInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return sendGeminiMessage(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendGeminiMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendGeminiMessage>>
+>;
+export type SendGeminiMessageMutationBody = BodyType<GeminiMessageInput>;
+export type SendGeminiMessageMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Send a message and receive an AI response (SSE stream)
+ */
+export const useSendGeminiMessage = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendGeminiMessage>>,
+    TError,
+    { id: number; data: BodyType<GeminiMessageInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendGeminiMessage>>,
+  TError,
+  { id: number; data: BodyType<GeminiMessageInput> },
+  TContext
+> => {
+  return useMutation(getSendGeminiMessageMutationOptions(options));
+};
+
+/**
+ * @summary Get all smart home devices and their state
+ */
+export const getGetSmartHomeDevicesUrl = () => {
+  return `/api/smarthome/devices`;
+};
+
+export const getSmartHomeDevices = async (
+  options?: RequestInit,
+): Promise<SmartHomeDevice[]> => {
+  return customFetch<SmartHomeDevice[]>(getGetSmartHomeDevicesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSmartHomeDevicesQueryKey = () => {
+  return [`/api/smarthome/devices`] as const;
+};
+
+export const getGetSmartHomeDevicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSmartHomeDevices>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSmartHomeDevices>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSmartHomeDevicesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSmartHomeDevices>>
+  > = ({ signal }) => getSmartHomeDevices({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSmartHomeDevices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSmartHomeDevicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSmartHomeDevices>>
+>;
+export type GetSmartHomeDevicesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get all smart home devices and their state
+ */
+
+export function useGetSmartHomeDevices<
+  TData = Awaited<ReturnType<typeof getSmartHomeDevices>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSmartHomeDevices>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSmartHomeDevicesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a device state
+ */
+export const getUpdateSmartHomeDeviceUrl = (key: string) => {
+  return `/api/smarthome/devices/${key}`;
+};
+
+export const updateSmartHomeDevice = async (
+  key: string,
+  updateSmartHomeDeviceInput: UpdateSmartHomeDeviceInput,
+  options?: RequestInit,
+): Promise<SmartHomeDevice> => {
+  return customFetch<SmartHomeDevice>(getUpdateSmartHomeDeviceUrl(key), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSmartHomeDeviceInput),
+  });
+};
+
+export const getUpdateSmartHomeDeviceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSmartHomeDevice>>,
+    TError,
+    { key: string; data: BodyType<UpdateSmartHomeDeviceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSmartHomeDevice>>,
+  TError,
+  { key: string; data: BodyType<UpdateSmartHomeDeviceInput> },
+  TContext
+> => {
+  const mutationKey = ["updateSmartHomeDevice"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSmartHomeDevice>>,
+    { key: string; data: BodyType<UpdateSmartHomeDeviceInput> }
+  > = (props) => {
+    const { key, data } = props ?? {};
+
+    return updateSmartHomeDevice(key, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSmartHomeDeviceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSmartHomeDevice>>
+>;
+export type UpdateSmartHomeDeviceMutationBody =
+  BodyType<UpdateSmartHomeDeviceInput>;
+export type UpdateSmartHomeDeviceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a device state
+ */
+export const useUpdateSmartHomeDevice = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSmartHomeDevice>>,
+    TError,
+    { key: string; data: BodyType<UpdateSmartHomeDeviceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSmartHomeDevice>>,
+  TError,
+  { key: string; data: BodyType<UpdateSmartHomeDeviceInput> },
+  TContext
+> => {
+  return useMutation(getUpdateSmartHomeDeviceMutationOptions(options));
+};
+
+/**
+ * @summary Get recent encrypted intercom messages
+ */
+export const getGetIntercomMessagesUrl = (
+  params?: GetIntercomMessagesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/intercom/messages?${stringifiedParams}`
+    : `/api/intercom/messages`;
+};
+
+export const getIntercomMessages = async (
+  params?: GetIntercomMessagesParams,
+  options?: RequestInit,
+): Promise<IntercomMessage[]> => {
+  return customFetch<IntercomMessage[]>(getGetIntercomMessagesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetIntercomMessagesQueryKey = (
+  params?: GetIntercomMessagesParams,
+) => {
+  return [`/api/intercom/messages`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetIntercomMessagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getIntercomMessages>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetIntercomMessagesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getIntercomMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetIntercomMessagesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getIntercomMessages>>
+  > = ({ signal }) =>
+    getIntercomMessages(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getIntercomMessages>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetIntercomMessagesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getIntercomMessages>>
+>;
+export type GetIntercomMessagesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get recent encrypted intercom messages
+ */
+
+export function useGetIntercomMessages<
+  TData = Awaited<ReturnType<typeof getIntercomMessages>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetIntercomMessagesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getIntercomMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetIntercomMessagesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Post an encrypted message to the intercom
+ */
+export const getPostIntercomMessageUrl = () => {
+  return `/api/intercom/messages`;
+};
+
+export const postIntercomMessage = async (
+  createIntercomMessageInput: CreateIntercomMessageInput,
+  options?: RequestInit,
+): Promise<IntercomMessage> => {
+  return customFetch<IntercomMessage>(getPostIntercomMessageUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createIntercomMessageInput),
+  });
+};
+
+export const getPostIntercomMessageMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postIntercomMessage>>,
+    TError,
+    { data: BodyType<CreateIntercomMessageInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postIntercomMessage>>,
+  TError,
+  { data: BodyType<CreateIntercomMessageInput> },
+  TContext
+> => {
+  const mutationKey = ["postIntercomMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postIntercomMessage>>,
+    { data: BodyType<CreateIntercomMessageInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postIntercomMessage(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostIntercomMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postIntercomMessage>>
+>;
+export type PostIntercomMessageMutationBody =
+  BodyType<CreateIntercomMessageInput>;
+export type PostIntercomMessageMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Post an encrypted message to the intercom
+ */
+export const usePostIntercomMessage = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postIntercomMessage>>,
+    TError,
+    { data: BodyType<CreateIntercomMessageInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof postIntercomMessage>>,
+  TError,
+  { data: BodyType<CreateIntercomMessageInput> },
+  TContext
+> => {
+  return useMutation(getPostIntercomMessageMutationOptions(options));
 };
