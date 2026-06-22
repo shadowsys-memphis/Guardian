@@ -870,3 +870,170 @@ export const UpdateAssessmentSettingsResponse = zod.object({
     .optional()
     .describe("Hours of inactivity before Jessica initiates a check-in"),
 });
+
+/**
+ * @summary List all active meals with ingredients
+ */
+export const ListMealsResponseItem = zod
+  .object({
+    id: zod.number(),
+    name: zod.string(),
+    description: zod.string().nullish(),
+    estimatedCostCents: zod.number(),
+    active: zod.boolean(),
+    createdAt: zod.date(),
+  })
+  .and(
+    zod.object({
+      ingredients: zod
+        .array(
+          zod.object({
+            id: zod.number(),
+            mealId: zod.number(),
+            name: zod.string(),
+            quantity: zod.string(),
+            unit: zod.string(),
+            estimatedCostCents: zod.number(),
+          }),
+        )
+        .optional(),
+    }),
+  );
+export const ListMealsResponse = zod.array(ListMealsResponseItem);
+
+/**
+ * @summary Create a new meal
+ */
+export const createMealBodyEstimatedCostCentsDefault = 0;
+
+export const CreateMealBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+  estimatedCostCents: zod
+    .number()
+    .default(createMealBodyEstimatedCostCentsDefault),
+  ingredients: zod
+    .array(
+      zod.object({
+        name: zod.string().optional(),
+        quantity: zod.string().optional(),
+        unit: zod.string().optional(),
+        estimatedCostCents: zod.number().optional(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * @summary Soft-delete a meal
+ */
+export const DeleteMealParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Import meals from a publicly-shared Google Sheet (CSV)
+ */
+export const SyncFromSheetsBody = zod.object({
+  sheetId: zod.string().describe("Google Sheets spreadsheet ID"),
+});
+
+export const SyncFromSheetsResponse = zod.object({
+  ok: zod.boolean(),
+  mealsImported: zod.number(),
+  rowsProcessed: zod.number(),
+});
+
+/**
+ * @summary Get or create this week's grocery cart
+ */
+export const GetCartResponse = zod
+  .object({
+    id: zod.number(),
+    weekStartDate: zod.date(),
+    budgetCents: zod.number(),
+    totalEstimatedCostCents: zod.number(),
+    status: zod.enum(["pending", "approved", "dismissed"]),
+    approvedAt: zod.date().nullish(),
+    createdAt: zod.date(),
+  })
+  .and(
+    zod.object({
+      meals: zod
+        .array(
+          zod
+            .object({
+              id: zod.number(),
+              name: zod.string(),
+              description: zod.string().nullish(),
+              estimatedCostCents: zod.number(),
+              active: zod.boolean(),
+              createdAt: zod.date(),
+            })
+            .and(
+              zod.object({
+                ingredients: zod
+                  .array(
+                    zod.object({
+                      id: zod.number(),
+                      mealId: zod.number(),
+                      name: zod.string(),
+                      quantity: zod.string(),
+                      unit: zod.string(),
+                      estimatedCostCents: zod.number(),
+                    }),
+                  )
+                  .optional(),
+              }),
+            ),
+        )
+        .optional(),
+    }),
+  );
+
+/**
+ * @summary Add a meal to the current cart
+ */
+export const AddMealToCartBody = zod.object({
+  mealId: zod.number(),
+});
+
+/**
+ * @summary Remove a meal from the current cart
+ */
+export const RemoveMealFromCartParams = zod.object({
+  cartMealId: zod.coerce.number(),
+});
+
+/**
+ * @summary List pending meal cravings from Pops
+ */
+export const ListCravingsResponseItem = zod.object({
+  id: zod.number(),
+  mealName: zod.string(),
+  source: zod.enum(["jessica", "ray"]),
+  status: zod.enum(["pending", "added", "dismissed"]),
+  createdAt: zod.date(),
+});
+export const ListCravingsResponse = zod.array(ListCravingsResponseItem);
+
+/**
+ * @summary Record a meal craving (from Jessica or Ray)
+ */
+export const createCravingBodySourceDefault = `jessica`;
+
+export const CreateCravingBody = zod.object({
+  mealName: zod.string(),
+  source: zod.enum(["jessica", "ray"]).default(createCravingBodySourceDefault),
+});
+
+/**
+ * @summary Update craving status (added or dismissed)
+ */
+export const UpdateCravingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateCravingBody = zod.object({
+  status: zod.enum(["pending", "added", "dismissed"]),
+});

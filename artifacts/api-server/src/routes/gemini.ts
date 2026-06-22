@@ -6,11 +6,13 @@ import {
   callSessionsTable,
   haldolCycleTable,
   healthDataPointsTable,
+  mealCravingsTable,
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQuietWindow } from "./health-assessment";
+import { ensureMealsSeeded } from "./shopper";
 
 const router: IRouter = Router();
 
@@ -56,6 +58,10 @@ When Pops mentions a device command, include at end of response:
 
 Known devices: living_room_echo, bedroom_echo, kitchen_echo, sonos_living, sonos_bedroom, porch_light, kitchen_light, living_room_light.
 
+MEAL CRAVINGS (once per call, optional):
+Once per call, you may casually ask: "Anything you're craving this week?" — only if the conversation is going well and it feels natural. If Pops names a food or meal, emit one tag (invisible to Pops):
+<craving>{"meal":"MEAL NAME"}</craving>
+
 Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.`;
 }
 
@@ -79,10 +85,17 @@ function parseHealthDataTags(text: string): Array<{ category: string; questionId
   return results;
 }
 
+function parseCravingTag(text: string): string | null {
+  const match = text.match(/<craving>([\s\S]*?)<\/craving>/);
+  if (!match) return null;
+  try { return JSON.parse(match[1])?.meal ?? null; } catch { return null; }
+}
+
 function stripSystemTags(text: string): string {
   return text
     .replace(/<health_data>[\s\S]*?<\/health_data>/g, "")
     .replace(/<device_command>[\s\S]*?<\/device_command>/g, "")
+    .replace(/<craving>[\s\S]*?<\/craving>/g, "")
     .trim();
 }
 
@@ -95,12 +108,14 @@ function getStreamSafeVisible(accumulated: string): string {
   let result = accumulated
     .replace(/<health_data>[\s\S]*?<\/health_data>/g, "")
     .replace(/<device_command>[\s\S]*?<\/device_command>/g, "")
+    .replace(/<craving>[\s\S]*?<\/craving>/g, "")
     .trim();
   // 2. Strip unclosed open tag (opened but closing tag not yet arrived)
   result = result.replace(/<health_data>[\s\S]*$/, "").trim();
   result = result.replace(/<device_command>[\s\S]*$/, "").trim();
-  // 3. Strip partial tag prefix at end of string (e.g. "<health_da" or "<dev")
-  const tagPrefixes = ["<health_data", "</health_data", "<device_command", "</device_command"];
+  result = result.replace(/<craving>[\s\S]*$/, "").trim();
+  // 3. Strip partial tag prefix at end of string (e.g. "<health_da" or "<dev" or "<crav")
+  const tagPrefixes = ["<health_data", "</health_data", "<device_command", "</device_command", "<craving", "</craving"];
   for (const prefix of tagPrefixes) {
     for (let i = prefix.length - 1; i >= 1; i--) {
       if (result.endsWith(prefix.slice(0, i))) {
@@ -291,7 +306,14 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
 
     const healthDataTags = parseHealthDataTags(fullResponse);
     const deviceCommand = parseDeviceCommand(fullResponse);
+    const cravingMeal = parseCravingTag(fullResponse);
     const cleanContent = stripSystemTags(fullResponse);
+
+    // Save craving if Pops named a meal
+    if (cravingMeal) {
+      await db.insert(mealCravingsTable).values({ mealName: cravingMeal, source: "jessica", status: "pending" })
+        .catch((e) => req.log.warn({ e }, "Failed to save craving"));
+    }
 
     await db.insert(messagesTable).values({
       conversationId,

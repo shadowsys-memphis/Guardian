@@ -170,6 +170,48 @@ export const appSettingsTable = pgTable("app_settings", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const mealsTable = pgTable("meals", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  estimatedCostCents: integer("estimated_cost_cents").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const mealIngredientsTable = pgTable("meal_ingredients", {
+  id: serial("id").primaryKey(),
+  mealId: integer("meal_id").notNull(),
+  name: text("name").notNull(),
+  quantity: text("quantity").notNull().default("1"),
+  unit: text("unit").notNull().default("each"),
+  estimatedCostCents: integer("estimated_cost_cents").notNull().default(0),
+});
+
+export const groceryCartsTable = pgTable("grocery_carts", {
+  id: serial("id").primaryKey(),
+  weekStartDate: date("week_start_date").notNull(),
+  budgetCents: integer("budget_cents").notNull().default(15000),
+  totalEstimatedCostCents: integer("total_estimated_cost_cents").notNull().default(0),
+  status: text("status").notNull().default("pending"),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const cartMealsTable = pgTable("cart_meals", {
+  id: serial("id").primaryKey(),
+  cartId: integer("cart_id").notNull(),
+  mealId: integer("meal_id").notNull(),
+});
+
+export const mealCravingsTable = pgTable("meal_cravings", {
+  id: serial("id").primaryKey(),
+  mealName: text("meal_name").notNull(),
+  source: text("source").notNull().default("jessica"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertHealthQuestionSchema = createInsertSchema(healthQuestionsTable).omit({ id: true, createdAt: true });
 export const insertCallSessionSchema = createInsertSchema(callSessionsTable).omit({ id: true });
 export const insertHealthDataPointSchema = createInsertSchema(healthDataPointsTable).omit({ id: true, createdAt: true });

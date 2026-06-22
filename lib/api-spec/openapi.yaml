@@ -29,6 +29,8 @@ tags:
     description: E2EE encrypted family intercom
   - name: health-assessment
     description: Jessica health assessment sessions, questions, and data points
+  - name: shopper
+    description: Weekly meal planning, grocery cart building, and Pops craving suggestions
 paths:
   /healthz:
     get:
@@ -780,6 +782,186 @@ paths:
               schema:
                 $ref: "#/components/schemas/AssessmentSettings"
 
+  /shopper/meals:
+    get:
+      operationId: listMeals
+      tags: [shopper]
+      summary: List all active meals with ingredients
+      responses:
+        "200":
+          description: Array of meals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MealWithIngredients"
+    post:
+      operationId: createMeal
+      tags: [shopper]
+      summary: Create a new meal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMealInput"
+      responses:
+        "201":
+          description: Created meal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meal"
+
+  /shopper/meals/{id}:
+    delete:
+      operationId: deleteMeal
+      tags: [shopper]
+      summary: Soft-delete a meal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /shopper/sync:
+    post:
+      operationId: syncFromSheets
+      tags: [shopper]
+      summary: Import meals from a publicly-shared Google Sheet (CSV)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SheetsSyncInput"
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SheetsSyncResult"
+
+  /shopper/cart:
+    get:
+      operationId: getCart
+      tags: [shopper]
+      summary: Get or create this week's grocery cart
+      responses:
+        "200":
+          description: Current cart with meals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartWithMeals"
+
+  /shopper/cart/meals:
+    post:
+      operationId: addMealToCart
+      tags: [shopper]
+      summary: Add a meal to the current cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMealToCartInput"
+      responses:
+        "201":
+          description: Added
+
+  /shopper/cart/meals/{cartMealId}:
+    delete:
+      operationId: removeMealFromCart
+      tags: [shopper]
+      summary: Remove a meal from the current cart
+      parameters:
+        - name: cartMealId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  /shopper/cart/approve:
+    post:
+      operationId: approveCart
+      tags: [shopper]
+      summary: Approve the current week's cart
+      responses:
+        "200":
+          description: Approved
+
+  /shopper/cart/dismiss:
+    post:
+      operationId: dismissCart
+      tags: [shopper]
+      summary: Dismiss the current week's cart
+      responses:
+        "200":
+          description: Dismissed
+
+  /shopper/cravings:
+    get:
+      operationId: listCravings
+      tags: [shopper]
+      summary: List pending meal cravings from Pops
+      responses:
+        "200":
+          description: Array of cravings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MealCraving"
+    post:
+      operationId: createCraving
+      tags: [shopper]
+      summary: Record a meal craving (from Jessica or Ray)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCravingInput"
+      responses:
+        "201":
+          description: Created craving
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealCraving"
+
+  /shopper/cravings/{id}:
+    patch:
+      operationId: updateCraving
+      tags: [shopper]
+      summary: Update craving status (added or dismissed)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCravingInput"
+      responses:
+        "200":
+          description: Updated
+
 components:
   schemas:
     HealthStatus:
@@ -1525,6 +1707,204 @@ components:
           description: Category names flagged in 3+ of the last 5 sessions
       required:
         - sustainedAnomalies
+
+    Meal:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        estimatedCostCents:
+          type: integer
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - estimatedCostCents
+        - active
+        - createdAt
+
+    MealIngredient:
+      type: object
+      properties:
+        id:
+          type: integer
+        mealId:
+          type: integer
+        name:
+          type: string
+        quantity:
+          type: string
+        unit:
+          type: string
+        estimatedCostCents:
+          type: integer
+      required:
+        - id
+        - mealId
+        - name
+        - quantity
+        - unit
+        - estimatedCostCents
+
+    MealWithIngredients:
+      allOf:
+        - $ref: "#/components/schemas/Meal"
+        - type: object
+          properties:
+            ingredients:
+              type: array
+              items:
+                $ref: "#/components/schemas/MealIngredient"
+
+    CreateMealInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        estimatedCostCents:
+          type: integer
+          default: 0
+        ingredients:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              quantity:
+                type: string
+              unit:
+                type: string
+              estimatedCostCents:
+                type: integer
+      required:
+        - name
+
+    SheetsSyncInput:
+      type: object
+      properties:
+        sheetId:
+          type: string
+          description: Google Sheets spreadsheet ID
+      required:
+        - sheetId
+
+    SheetsSyncResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        mealsImported:
+          type: integer
+        rowsProcessed:
+          type: integer
+      required:
+        - ok
+        - mealsImported
+        - rowsProcessed
+
+    GroceryCart:
+      type: object
+      properties:
+        id:
+          type: integer
+        weekStartDate:
+          type: string
+          format: date
+        budgetCents:
+          type: integer
+        totalEstimatedCostCents:
+          type: integer
+        status:
+          type: string
+          enum: [pending, approved, dismissed]
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - weekStartDate
+        - budgetCents
+        - totalEstimatedCostCents
+        - status
+        - createdAt
+
+    CartWithMeals:
+      allOf:
+        - $ref: "#/components/schemas/GroceryCart"
+        - type: object
+          properties:
+            meals:
+              type: array
+              items:
+                $ref: "#/components/schemas/MealWithIngredients"
+
+    AddMealToCartInput:
+      type: object
+      properties:
+        mealId:
+          type: integer
+      required:
+        - mealId
+
+    MealCraving:
+      type: object
+      properties:
+        id:
+          type: integer
+        mealName:
+          type: string
+        source:
+          type: string
+          enum: [jessica, ray]
+        status:
+          type: string
+          enum: [pending, added, dismissed]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - mealName
+        - source
+        - status
+        - createdAt
+
+    CreateCravingInput:
+      type: object
+      properties:
+        mealName:
+          type: string
+        source:
+          type: string
+          enum: [jessica, ray]
+          default: jessica
+      required:
+        - mealName
+
+    UpdateCravingInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, added, dismissed]
+      required:
+        - status
 
     AssessmentSettings:
       type: object

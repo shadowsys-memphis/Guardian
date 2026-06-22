@@ -14,6 +14,11 @@ import {
   Cpu,
   AlertTriangle,
   Clock,
+  ShoppingCart,
+  X,
+  RefreshCw,
+  Flame,
+  CheckCircle,
 } from "lucide-react";
 
 import {
@@ -26,6 +31,9 @@ import {
   useListHealthQuestions, useCreateHealthQuestion, useUpdateHealthQuestion, useDeleteHealthQuestion,
   useGetTodaySummary, useListCallSessions, useGetSessionDataPoints, useGetAssessmentTrends, useGetAssessmentAnomalies,
   useGetAssessmentSettings, useUpdateAssessmentSettings,
+  useListMeals, useCreateMeal, useDeleteMeal, useSyncFromSheets,
+  useGetCart, useAddMealToCart, useRemoveMealFromCart, useApproveCart, useDismissCart,
+  useListCravings, useCreateCraving, useUpdateCraving,
   type UpdateAppStateInput,
   type VoiceScript,
   type ScheduleTask,
@@ -35,6 +43,9 @@ import {
   type CallSession,
   type HealthDataPoint,
   type AssessmentSummary,
+  type MealWithIngredients,
+  type CartWithMeals,
+  type MealCraving,
 } from "@workspace/api-client-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +56,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "governor" | "health";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "governor" | "health" | "shopper";
 
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -70,6 +81,7 @@ export function AdminView() {
           <NavButton active={activeTab === "scripts"} onClick={() => setActiveTab("scripts")} icon={<Mic size={18} />} label="Voice Scripts" />
           <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
           <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
+          <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
           <div className="border-t border-border/30 my-2 pt-2">
             <NavButton active={activeTab === "governor"} onClick={() => setActiveTab("governor")} icon={<Cpu size={18} />} label="Governor" />
           </div>
@@ -88,6 +100,7 @@ export function AdminView() {
           {activeTab === "scripts" && <ScriptsTab />}
           {activeTab === "haldol" && <HaldolTab />}
           {activeTab === "health" && <HealthIntelligenceTab />}
+          {activeTab === "shopper" && <ShopperTab />}
           {activeTab === "governor" && <GovernorTab />}
         </div>
       </main>
@@ -198,7 +211,7 @@ function CycleDayHeatmap({ trends, haldolCycleDay }: { trends: any[]; haldolCycl
 }
 
 function HealthSummarySection() {
-  const { data: summary } = useGetTodaySummary({ query: { refetchInterval: 30000 } });
+  const { data: summary } = useGetTodaySummary({ query: { queryKey: getGetTodaySummaryQueryKey(), refetchInterval: 30000 } });
   const { data: trendsResp } = useGetAssessmentTrends();
   const { data: anomaliesResp } = useGetAssessmentAnomalies();
   const { data: haldol } = useGetHaldolCycle();
@@ -316,7 +329,7 @@ function HealthSessionsSection() {
   const { data: allQuestions } = useListHealthQuestions();
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const { data: dataPoints } = useGetSessionDataPoints(selectedSession ?? 0, {
-    query: { enabled: selectedSession !== null },
+    query: { queryKey: getGetSessionDataPointsQueryKey(selectedSession ?? 0), enabled: selectedSession !== null },
   });
 
   const questionsMap: Record<number, string> = {};
@@ -1363,6 +1376,315 @@ function GovernorTab() {
           No synthesis notes yet. Log your first one above.
         </p>
       )}
+    </div>
+  );
+}
+
+function ShopperTab() {
+  const { toast } = useToast();
+  const [sheetId, setSheetId] = useState("");
+  const [showAddMeal, setShowAddMeal] = useState(false);
+  const [newMealName, setNewMealName] = useState("");
+
+  const { data: meals, refetch: refetchMeals } = useListMeals();
+  const { data: cart, refetch: refetchCart } = useGetCart();
+  const { data: cravings, refetch: refetchCravings } = useListCravings();
+
+  const addMealToCart = useAddMealToCart({ mutation: { onSuccess: () => refetchCart() } });
+  const removeMealFromCart = useRemoveMealFromCart({ mutation: { onSuccess: () => refetchCart() } });
+  const approveCart = useApproveCart({ mutation: { onSuccess: () => { refetchCart(); toast({ title: "Cart approved!", description: "Order is ready." }); } } });
+  const dismissCart = useDismissCart({ mutation: { onSuccess: () => { refetchCart(); toast({ title: "Cart dismissed." }); } } });
+  const syncFromSheets = useSyncFromSheets({ mutation: {
+    onSuccess: (data) => { refetchMeals(); toast({ title: `Synced! ${data.mealsImported} meal(s) imported, ${data.rowsProcessed} rows processed.` }); setSheetId(""); },
+    onError: () => toast({ title: "Sync failed", description: "Make sure the sheet is publicly shared.", variant: "destructive" }),
+  }});
+  const createMeal = useCreateMeal({ mutation: { onSuccess: () => { refetchMeals(); setNewMealName(""); setShowAddMeal(false); toast({ title: "Meal added." }); } } });
+  const deleteMeal = useDeleteMeal({ mutation: { onSuccess: () => { refetchMeals(); refetchCart(); } } });
+  const updateCraving = useUpdateCraving({ mutation: { onSuccess: () => refetchCravings() } });
+
+  const budget = cart?.budgetCents ?? 15000;
+  const spent = cart?.totalEstimatedCostCents ?? 0;
+  const budgetPct = Math.min(100, Math.round((spent / budget) * 100));
+  const cartMealIds = new Set((cart?.meals ?? []).map((m: any) => m.id));
+  const cartStatus = cart?.status ?? "pending";
+  const cartIsLocked = cartStatus !== "pending";
+
+  const fmtDollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+  return (
+    <div className="space-y-6">
+      <header className="mb-6 border-b border-border/50 pb-4">
+        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Shopper</h2>
+        <p className="text-sm text-muted-foreground mt-1">Weekly meal planning &amp; grocery cart for Pops</p>
+      </header>
+
+      {/* Budget Bar */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-display uppercase tracking-widest">Weekly Budget</CardTitle>
+            <div className="flex items-center gap-3">
+              <span className={`text-lg font-bold font-display ${budgetPct >= 90 ? "text-destructive" : budgetPct >= 70 ? "text-yellow-400" : "text-success"}`}>
+                {fmtDollars(spent)}
+              </span>
+              <span className="text-muted-foreground text-sm">of {fmtDollars(budget)}</span>
+              {cartStatus === "approved" && (
+                <span className="px-2 py-0.5 rounded-sm bg-success/10 border border-success/40 text-success text-xs font-bold uppercase">✓ Approved</span>
+              )}
+              {cartStatus === "dismissed" && (
+                <span className="px-2 py-0.5 rounded-sm bg-muted border border-border text-muted-foreground text-xs font-bold uppercase">Dismissed</span>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-4 rounded-sm bg-secondary overflow-hidden">
+            <div
+              className={`h-full transition-all duration-500 rounded-sm ${budgetPct >= 90 ? "bg-destructive" : budgetPct >= 70 ? "bg-yellow-500" : "bg-success"}`}
+              style={{ width: `${budgetPct}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{budgetPct}% of $150 budget used</p>
+        </CardContent>
+      </Card>
+
+      {/* This Week's Cart */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+              <ShoppingCart size={16} /> This Week's Meal Lineup
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">Week of {cart?.weekStartDate ?? "..."}</span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {(cart?.meals ?? []).length === 0 ? (
+            <p className="text-muted-foreground italic text-sm text-center py-4">No meals added yet. Browse the catalog below to add meals.</p>
+          ) : (
+            <div className="space-y-2">
+              {(cart?.meals ?? []).map((meal: any) => (
+                <div key={meal.cartMealId ?? meal.id} className="flex items-start justify-between gap-3 p-3 bg-secondary/30 rounded-sm border border-border/30">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-foreground">{meal.name}</span>
+                      <span className="text-xs text-primary font-bold">{fmtDollars(meal.estimatedCostCents)}</span>
+                    </div>
+                    {meal.description && <p className="text-xs text-muted-foreground mt-0.5">{meal.description}</p>}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {(meal.ingredients ?? []).slice(0, 4).map((ing: any) => (
+                        <span key={ing.id} className="text-xs px-1.5 py-0.5 bg-primary/10 border border-primary/20 rounded-sm text-primary/80">
+                          {ing.name}
+                        </span>
+                      ))}
+                      {(meal.ingredients ?? []).length > 4 && (
+                        <span className="text-xs text-muted-foreground">+{(meal.ingredients ?? []).length - 4} more</span>
+                      )}
+                    </div>
+                  </div>
+                  {!cartIsLocked && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive h-7 w-7 p-0 shrink-0"
+                      onClick={() => removeMealFromCart.mutate({ cartMealId: meal.cartMealId })}
+                      disabled={removeMealFromCart.isPending}
+                    >
+                      <X size={14} />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!cartIsLocked && (cart?.meals ?? []).length > 0 && (
+            <div className="flex gap-2 mt-4 pt-4 border-t border-border/30">
+              <Button
+                className="flex-1"
+                onClick={() => approveCart.mutate()}
+                disabled={approveCart.isPending}
+              >
+                <CheckCircle size={16} className="mr-2" />
+                Approve Order — {fmtDollars(spent)}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => dismissCart.mutate()}
+                disabled={dismissCart.isPending}
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
+
+          {cartIsLocked && (
+            <p className="text-xs text-muted-foreground italic mt-4 pt-3 border-t border-border/30">
+              Cart is {cartStatus}. A new cart will be created next Monday.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Craving Suggestions */}
+      {(cravings ?? []).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+              <Flame size={16} className="text-orange-400" /> Pops' Cravings
+            </CardTitle>
+            <CardDescription className="text-xs">Jessica captured these during check-ins — add to next week if you want</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {(cravings ?? []).map((craving: MealCraving) => (
+                <div key={craving.id} className="flex items-center justify-between gap-3 p-3 bg-orange-500/5 border border-orange-500/20 rounded-sm">
+                  <div className="flex items-center gap-2">
+                    <Flame size={14} className="text-orange-400 shrink-0" />
+                    <span className="text-sm font-semibold">{craving.mealName}</span>
+                    <span className="text-xs text-muted-foreground">via {craving.source}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => updateCraving.mutate({ id: craving.id, data: { status: "added" } })}
+                      disabled={updateCraving.isPending}
+                    >
+                      <Check size={12} className="mr-1" /> Add to List
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => updateCraving.mutate({ id: craving.id, data: { status: "dismissed" } })}
+                      disabled={updateCraving.isPending}
+                    >
+                      <X size={12} />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Meal Catalog */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-display uppercase tracking-widest">Meal Catalog</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setShowAddMeal(!showAddMeal)}>
+              <Plus size={14} className="mr-1" /> New Meal
+            </Button>
+          </div>
+          <CardDescription className="text-xs">Click a meal to add it to this week's cart</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {showAddMeal && (
+            <form
+              className="flex gap-2 mb-4 p-3 bg-secondary/30 rounded-sm border border-border/30"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (newMealName.trim()) createMeal.mutate({ data: { name: newMealName.trim() } });
+              }}
+            >
+              <Input
+                value={newMealName}
+                onChange={(e) => setNewMealName(e.target.value)}
+                placeholder="Meal name..."
+                className="flex-1 h-8 text-sm"
+              />
+              <Button type="submit" size="sm" disabled={createMeal.isPending || !newMealName.trim()} className="h-8">
+                Add
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setShowAddMeal(false)}>
+                <X size={14} />
+              </Button>
+            </form>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {(meals ?? []).map((meal: MealWithIngredients) => {
+              const inCart = cartMealIds.has(meal.id);
+              return (
+                <div
+                  key={meal.id}
+                  className={`p-3 rounded-sm border transition-colors ${inCart ? "bg-primary/10 border-primary/40" : "bg-secondary/20 border-border/30 hover:border-primary/30 hover:bg-secondary/40"}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm">{meal.name}</span>
+                        <span className="text-xs text-primary font-bold">{fmtDollars(meal.estimatedCostCents)}</span>
+                        {inCart && <span className="text-xs text-primary font-bold uppercase">✓ In Cart</span>}
+                      </div>
+                      {meal.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{meal.description}</p>}
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">{meal.ingredients?.length ?? 0} ingredients</p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {!cartIsLocked && !inCart && (
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => addMealToCart.mutate({ data: { mealId: meal.id } })}
+                          disabled={addMealToCart.isPending}
+                        >
+                          <Plus size={12} className="mr-1" /> Add
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteMeal.mutate({ id: meal.id })}
+                        disabled={deleteMeal.isPending}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Google Sheets Sync */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <RefreshCw size={16} /> Sync from Google Sheets
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Paste the ID of a publicly-shared Google Sheet (File → Share → "Anyone with link" view access).
+            Format: Column A = Meal Name, B = Ingredient, C = Quantity, D = Unit, E = Cost ($).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              value={sheetId}
+              onChange={(e) => setSheetId(e.target.value)}
+              placeholder="Sheet ID (from the URL: /spreadsheets/d/HERE/edit)"
+              className="flex-1 text-sm font-mono"
+            />
+            <Button
+              onClick={() => syncFromSheets.mutate({ data: { sheetId } })}
+              disabled={!sheetId.trim() || syncFromSheets.isPending}
+            >
+              {syncFromSheets.isPending ? <RefreshCw size={14} className="animate-spin mr-2" /> : <RefreshCw size={14} className="mr-2" />}
+              Sync
+            </Button>
+          </div>
+          {syncFromSheets.isError && (
+            <p className="text-xs text-destructive mt-2">Sync failed — make sure the sheet is shared publicly with view access.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

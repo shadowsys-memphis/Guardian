@@ -486,6 +486,131 @@ export interface AssessmentAnomalies {
   sustainedAnomalies: string[];
 }
 
+export interface Meal {
+  id: number;
+  name: string;
+  description?: string | null;
+  estimatedCostCents: number;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface MealIngredient {
+  id: number;
+  mealId: number;
+  name: string;
+  quantity: string;
+  unit: string;
+  estimatedCostCents: number;
+}
+
+export type MealWithIngredients = Meal & {
+  ingredients?: MealIngredient[];
+};
+
+export type CreateMealInputIngredientsItem = {
+  name?: string;
+  quantity?: string;
+  unit?: string;
+  estimatedCostCents?: number;
+};
+
+export interface CreateMealInput {
+  name: string;
+  description?: string;
+  estimatedCostCents?: number;
+  ingredients?: CreateMealInputIngredientsItem[];
+}
+
+export interface SheetsSyncInput {
+  /** Google Sheets spreadsheet ID */
+  sheetId: string;
+}
+
+export interface SheetsSyncResult {
+  ok: boolean;
+  mealsImported: number;
+  rowsProcessed: number;
+}
+
+export type GroceryCartStatus =
+  (typeof GroceryCartStatus)[keyof typeof GroceryCartStatus];
+
+export const GroceryCartStatus = {
+  pending: "pending",
+  approved: "approved",
+  dismissed: "dismissed",
+} as const;
+
+export interface GroceryCart {
+  id: number;
+  weekStartDate: string;
+  budgetCents: number;
+  totalEstimatedCostCents: number;
+  status: GroceryCartStatus;
+  approvedAt?: string | null;
+  createdAt: string;
+}
+
+export type CartWithMeals = GroceryCart & {
+  meals?: MealWithIngredients[];
+};
+
+export interface AddMealToCartInput {
+  mealId: number;
+}
+
+export type MealCravingSource =
+  (typeof MealCravingSource)[keyof typeof MealCravingSource];
+
+export const MealCravingSource = {
+  jessica: "jessica",
+  ray: "ray",
+} as const;
+
+export type MealCravingStatus =
+  (typeof MealCravingStatus)[keyof typeof MealCravingStatus];
+
+export const MealCravingStatus = {
+  pending: "pending",
+  added: "added",
+  dismissed: "dismissed",
+} as const;
+
+export interface MealCraving {
+  id: number;
+  mealName: string;
+  source: MealCravingSource;
+  status: MealCravingStatus;
+  createdAt: string;
+}
+
+export type CreateCravingInputSource =
+  (typeof CreateCravingInputSource)[keyof typeof CreateCravingInputSource];
+
+export const CreateCravingInputSource = {
+  jessica: "jessica",
+  ray: "ray",
+} as const;
+
+export interface CreateCravingInput {
+  mealName: string;
+  source?: CreateCravingInputSource;
+}
+
+export type UpdateCravingInputStatus =
+  (typeof UpdateCravingInputStatus)[keyof typeof UpdateCravingInputStatus];
+
+export const UpdateCravingInputStatus = {
+  pending: "pending",
+  added: "added",
+  dismissed: "dismissed",
+} as const;
+
+export interface UpdateCravingInput {
+  status: UpdateCravingInputStatus;
+}
+
 export interface AssessmentSettings {
   /** HH:MM format, e.g. 22:00 */
   quietWindowStart?: string;
