@@ -479,6 +479,11 @@ export interface TrendDataPoint {
   flagged: boolean;
 }
 
+export interface AssessmentAnomalies {
+  /** Category names flagged in 3+ of the last 5 sessions */
+  sustainedAnomalies: string[];
+}
+
 export interface AssessmentSettings {
   /** HH:MM format, e.g. 22:00 */
   quietWindowStart?: string;

@@ -737,6 +737,19 @@ paths:
                 items:
                   $ref: "#/components/schemas/TrendDataPoint"
 
+  /health-assessment/anomalies:
+    get:
+      operationId: getAssessmentAnomalies
+      tags: [health-assessment]
+      summary: Get sustained anomaly categories (flagged in 3+ of last 5 sessions)
+      responses:
+        "200":
+          description: Sustained anomalies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentAnomalies"
+
   /health-assessment/settings:
     get:
       operationId: getAssessmentSettings
@@ -1497,6 +1510,17 @@ components:
         - category
         - count
         - flagged
+
+    AssessmentAnomalies:
+      type: object
+      properties:
+        sustainedAnomalies:
+          type: array
+          items:
+            type: string
+          description: Category names flagged in 3+ of the last 5 sessions
+      required:
+        - sustainedAnomalies
 
     AssessmentSettings:
       type: object

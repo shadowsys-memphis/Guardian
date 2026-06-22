@@ -24,7 +24,7 @@ import {
   useGetHaldolCycle, useUpdateHaldolCycle,
   useGetGovernorPillars, useGetGovernorNotes, useCreateGovernorNote,
   useListHealthQuestions, useCreateHealthQuestion, useUpdateHealthQuestion, useDeleteHealthQuestion,
-  useGetTodaySummary, useListCallSessions, useGetSessionDataPoints, useGetAssessmentTrends,
+  useGetTodaySummary, useListCallSessions, useGetSessionDataPoints, useGetAssessmentTrends, useGetAssessmentAnomalies,
   useGetAssessmentSettings, useUpdateAssessmentSettings,
   type UpdateAppStateInput,
   type VoiceScript,
@@ -200,11 +200,12 @@ function CycleDayHeatmap({ trends, haldolCycleDay }: { trends: any[]; haldolCycl
 function HealthSummarySection() {
   const { data: summary } = useGetTodaySummary({ query: { refetchInterval: 30000 } });
   const { data: trendsResp } = useGetAssessmentTrends();
+  const { data: anomaliesResp } = useGetAssessmentAnomalies();
   const { data: haldol } = useGetHaldolCycle();
   const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
 
-  const trends: any[] = (trendsResp as any)?.trends ?? (Array.isArray(trendsResp) ? trendsResp : []);
-  const sustainedAnomalies: string[] = (trendsResp as any)?.sustainedAnomalies ?? [];
+  const trends: any[] = Array.isArray(trendsResp) ? trendsResp : [];
+  const sustainedAnomalies: string[] = anomaliesResp?.sustainedAnomalies ?? [];
 
   const trendsByCategory = (category: string) =>
     trends.filter((t) => t.category === category).slice(-30)
@@ -540,9 +541,9 @@ function HealthSettingsSection() {
   const { toast } = useToast();
   const [form, setForm] = useState({ quietWindowStart: "22:00", quietWindowEnd: "07:00", engagementIntervalHours: 4 });
 
-  useState(() => {
+  useEffect(() => {
     if (settings) setForm({ quietWindowStart: (settings as any).quietWindowStart ?? "22:00", quietWindowEnd: (settings as any).quietWindowEnd ?? "07:00", engagementIntervalHours: (settings as any).engagementIntervalHours ?? 4 });
-  });
+  }, [settings]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();

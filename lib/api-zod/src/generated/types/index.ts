@@ -10,6 +10,7 @@ export * from "./appState";
 export * from "./appStateComputedQuarter";
 export * from "./appStateCurrentQuarter";
 export * from "./appStateQuarterOverride";
+export * from "./assessmentAnomalies";
 export * from "./assessmentSettings";
 export * from "./assessmentSummary";
 export * from "./assessmentSummaryCategoryStatus";

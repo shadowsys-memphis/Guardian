@@ -4,7 +4,7 @@ import {
   useGetAppState,
   useGetHaldolCycle,
   useGetTodaySummary,
-  useListCallSessions,
+  useGetAssessmentSettings,
   getGetAppStateQueryKey,
   getGetHaldolCycleQueryKey,
   type HaldolCycle,
@@ -40,7 +40,7 @@ export function PopsView() {
     query: { queryKey: getGetHaldolCycleQueryKey(), refetchInterval: 60000 },
   });
   const { data: todaySummary } = useGetTodaySummary({ query: { refetchInterval: 60000 } });
-  const { data: recentSessions } = useListCallSessions({ limit: 5, query: { refetchInterval: 60000 } });
+  const { data: assessmentSettings } = useGetAssessmentSettings({ query: { refetchInterval: 120000 } });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -84,7 +84,7 @@ export function PopsView() {
         )}
       </main>
 
-      {recentSessions && <CallTimeline sessions={recentSessions} currentTime={currentTime} />}
+      {(todaySummary || assessmentSettings) && <CallTimeline todaySummary={todaySummary ?? null} assessmentSettings={assessmentSettings ?? null} currentTime={currentTime} />}
       {haldol && <HaldolBar haldol={haldol} todaySummary={todaySummary ?? null} />}
     </div>
   );
@@ -158,29 +158,46 @@ function ActiveMessage({ message }: { message: string }) {
   );
 }
 
-function CallTimeline({ sessions, currentTime }: { sessions: any; currentTime: Date }) {
-  const today = currentTime.toISOString().split("T")[0];
-  const todaySessions = (sessions as any[] ?? []).filter((s: any) => s.sessionDate === today);
-  if (todaySessions.length === 0) return null;
+function CallTimeline({ todaySummary, assessmentSettings, currentTime }: { todaySummary: any | null; assessmentSettings: any | null; currentTime: Date }) {
+  const intervalHours: number = assessmentSettings?.engagementIntervalHours ?? 4;
+  const hasCheckin = todaySummary && (todaySummary as any).totalDataPoints > 0;
+  const lastCheckinAt = todaySummary?.lastSessionStartedAt ? new Date(todaySummary.lastSessionStartedAt) : null;
+
+  const nextExpected: Date | null = (() => {
+    if (!lastCheckinAt) {
+      // No check-in yet today — show a time from start of today
+      const d = new Date(currentTime);
+      d.setHours(9, 0, 0, 0);
+      if (currentTime < d) return d;
+      const d2 = new Date(d.getTime() + intervalHours * 60 * 60 * 1000);
+      return d2 > currentTime ? d2 : null;
+    }
+    const next = new Date(lastCheckinAt.getTime() + intervalHours * 60 * 60 * 1000);
+    return next > currentTime ? next : null;
+  })();
+
+  if (!hasCheckin && !nextExpected) return null;
 
   return (
     <div className="bg-secondary/20 border-t border-border/30 px-8 py-3 shrink-0">
       <div className="flex items-center gap-6 overflow-x-auto">
-        <span className="text-xs font-display text-muted-foreground/50 uppercase tracking-widest shrink-0">Today's Calls</span>
-        {todaySessions.map((s: any) => {
-          const started = s.startedAt ? new Date(s.startedAt) : null;
-          const ended = s.endedAt ? new Date(s.endedAt) : null;
-          return (
-            <div key={s.id} className={`flex items-center gap-2 shrink-0 px-3 py-1.5 rounded-sm border ${s.flagged ? "border-destructive/40 bg-destructive/10" : ended ? "border-success/30 bg-success/5" : "border-primary/40 bg-primary/5 animate-pulse"}`}>
-              <div className={`h-1.5 w-1.5 rounded-full ${s.flagged ? "bg-destructive" : ended ? "bg-success" : "bg-primary animate-pulse"}`} />
-              <span className="text-xs font-display uppercase tracking-widest">
-                {started ? format(started, "HH:mm") : "--:--"}
-                {ended ? ` → ${format(ended, "HH:mm")}` : " → Live"}
-              </span>
-              {s.flagged && <span className="text-xs text-destructive">⚠</span>}
-            </div>
-          );
-        })}
+        <span className="text-xs font-display text-muted-foreground/50 uppercase tracking-widest shrink-0">Check-In</span>
+        {hasCheckin && (
+          <div className={`flex items-center gap-2 shrink-0 px-3 py-1.5 rounded-sm border ${(todaySummary as any).flagged ? "border-destructive/40 bg-destructive/10" : "border-success/30 bg-success/5"}`}>
+            <div className={`h-1.5 w-1.5 rounded-full ${(todaySummary as any).flagged ? "bg-destructive animate-pulse" : "bg-success"}`} />
+            <span className="text-xs font-display uppercase tracking-widest">
+              {(todaySummary as any).flagged ? "Flagged today" : `Done today · ${(todaySummary as any).totalDataPoints} pts`}
+            </span>
+          </div>
+        )}
+        {nextExpected && (
+          <div className="flex items-center gap-2 shrink-0 px-3 py-1.5 rounded-sm border border-primary/20 bg-primary/5">
+            <div className="h-1.5 w-1.5 rounded-full bg-primary/50" />
+            <span className="text-xs font-display uppercase tracking-widest text-muted-foreground">
+              Next: <span className="text-primary">{format(nextExpected, "HH:mm")}</span>
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

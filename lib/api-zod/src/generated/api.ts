@@ -817,6 +817,15 @@ export const GetAssessmentTrendsResponse = zod.array(
 );
 
 /**
+ * @summary Get sustained anomaly categories (flagged in 3+ of last 5 sessions)
+ */
+export const GetAssessmentAnomaliesResponse = zod.object({
+  sustainedAnomalies: zod
+    .array(zod.string())
+    .describe("Category names flagged in 3+ of the last 5 sessions"),
+});
+
+/**
  * @summary Get assessment settings (quiet window, etc.)
  */
 export const GetAssessmentSettingsResponse = zod.object({

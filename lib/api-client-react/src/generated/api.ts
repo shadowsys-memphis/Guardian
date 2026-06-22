@@ -18,6 +18,7 @@ import type {
 
 import type {
   AppState,
+  AssessmentAnomalies,
   AssessmentSettings,
   AssessmentSummary,
   CallSession,
@@ -3419,6 +3420,82 @@ export function useGetAssessmentTrends<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAssessmentTrendsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get sustained anomaly categories (flagged in 3+ of last 5 sessions)
+ */
+export const getGetAssessmentAnomaliesUrl = () => {
+  return `/api/health-assessment/anomalies`;
+};
+
+export const getAssessmentAnomalies = async (
+  options?: RequestInit,
+): Promise<AssessmentAnomalies> => {
+  return customFetch<AssessmentAnomalies>(getGetAssessmentAnomaliesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAssessmentAnomaliesQueryKey = () => {
+  return [`/api/health-assessment/anomalies`] as const;
+};
+
+export const getGetAssessmentAnomaliesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssessmentAnomalies>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentAnomalies>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAssessmentAnomaliesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAssessmentAnomalies>>
+  > = ({ signal }) => getAssessmentAnomalies({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentAnomalies>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAssessmentAnomaliesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssessmentAnomalies>>
+>;
+export type GetAssessmentAnomaliesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get sustained anomaly categories (flagged in 3+ of last 5 sessions)
+ */
+
+export function useGetAssessmentAnomalies<
+  TData = Awaited<ReturnType<typeof getAssessmentAnomalies>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAssessmentAnomalies>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAssessmentAnomaliesQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -240,6 +240,46 @@ router.get("/health-assessment/summary/today", async (req, res) => {
   }
 });
 
+router.get("/health-assessment/anomalies", async (req, res) => {
+  try {
+    const days30 = new Date();
+    days30.setDate(days30.getDate() - 30);
+    const dateStr = days30.toISOString().split("T")[0];
+    const sessions = await db.select().from(callSessionsTable)
+      .where(gte(callSessionsTable.sessionDate, dateStr))
+      .orderBy(desc(callSessionsTable.id))
+      .limit(5);
+    const sessionIds = sessions.map((s) => s.id);
+    const sustainedAnomalies: string[] = [];
+    const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
+    if (sessionIds.length >= 3) {
+      const dps = sessionIds.length > 0
+        ? await db.select().from(healthDataPointsTable).where(inArray(healthDataPointsTable.sessionId, sessionIds))
+        : [];
+      for (const cat of CATS) {
+        const bySession = new Map<number, { flagged: boolean; values: number[] }>();
+        for (const dp of dps.filter((d) => d.category === cat)) {
+          if (!bySession.has(dp.sessionId)) bySession.set(dp.sessionId, { flagged: false, values: [] });
+          const entry = bySession.get(dp.sessionId)!;
+          if (dp.flagged) entry.flagged = true;
+          const numVal = dp.parsedValue === "yes" ? 1 : dp.parsedValue === "no" ? 0 : parseFloat(dp.parsedValue ?? "");
+          if (!isNaN(numVal)) entry.values.push(numVal);
+        }
+        let badCount = 0;
+        for (const [, entry] of bySession) {
+          const avg = entry.values.length > 0 ? entry.values.reduce((a, b) => a + b, 0) / entry.values.length : null;
+          if (entry.flagged || (avg !== null && avg < 0.3)) badCount++;
+        }
+        if (badCount >= 3) sustainedAnomalies.push(cat);
+      }
+    }
+    res.json({ sustainedAnomalies });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get anomalies");
+    res.status(500).json({ error: "Failed to get anomalies" });
+  }
+});
+
 router.get("/health-assessment/trends", async (req, res) => {
   try {
     const thirtyDaysAgo = new Date();
@@ -274,16 +314,7 @@ router.get("/health-assessment/trends", async (req, res) => {
       flagged: d.flagged,
     })).sort((a, b) => a.date.localeCompare(b.date));
 
-    // Sustained anomaly detection: flag category if it's been bad in 3+ of last 5 sessions
-    const sustainedAnomalies: string[] = [];
-    const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
-    for (const cat of CATS) {
-      const catEntries = result.filter((r) => r.category === cat).slice(-5);
-      const badCount = catEntries.filter((r) => r.flagged || (r.averageValue !== null && r.averageValue < 0.3)).length;
-      if (badCount >= 3) sustainedAnomalies.push(cat);
-    }
-
-    res.json({ trends: result, sustainedAnomalies });
+    res.json(result);
   } catch (err) {
     req.log.error({ err }, "Failed to get trends");
     res.status(500).json({ error: "Failed to get trends" });
