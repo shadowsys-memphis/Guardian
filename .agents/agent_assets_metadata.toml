@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "0683OXnhKD7fzkJe-7aIr"
+uri = "file://brain-source.zip"
+type = "unspecified"
+title = "br(AI)n — source only (no node_modules, no generated, no lock files)"
