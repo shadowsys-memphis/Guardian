@@ -1009,3 +1009,67 @@ export const UpdateCravingParams = zod.object({
 export const UpdateCravingBody = zod.object({
   status: zod.enum(["pending", "added", "dismissed"]),
 });
+
+/**
+ * @summary Get aggregated weekly health report for doctor review
+ */
+export const GetWeeklyReportResponse = zod.object({
+  weekStart: zod.string(),
+  weekEnd: zod.string(),
+  sessionCount: zod.number(),
+  categoryStatus: zod.record(zod.string(), zod.string()),
+  categoryBreakdown: zod.record(
+    zod.string(),
+    zod.object({
+      status: zod.string(),
+      sessionCount: zod.number(),
+      flaggedCount: zod.number(),
+    }),
+  ),
+  flaggedEvents: zod.array(
+    zod.object({
+      date: zod.string(),
+      category: zod.string(),
+      rawResponse: zod.string(),
+      parsedValue: zod.string().nullish(),
+      parsedIntensity: zod.string().nullish(),
+      sessionId: zod.number(),
+    }),
+  ),
+  symptomLogs: zod.array(
+    zod.object({
+      loggedAt: zod.date(),
+      ptsdTrigger: zod.boolean(),
+      hallucinationIntensity: zod.number(),
+      motivationLevel: zod.number(),
+      behaviorNotes: zod.string().nullish(),
+      loggedBy: zod.string(),
+    }),
+  ),
+  foodPreferences: zod.array(zod.string()),
+  voiceActiveDays: zod.number(),
+  narrative: zod.string(),
+});
+
+/**
+ * @summary Get aggregated monthly health report for doctor review
+ */
+export const GetMonthlyReportResponse = zod.object({
+  monthStart: zod.string(),
+  monthEnd: zod.string(),
+  sessionCount: zod.number(),
+  medicationAdherenceRate: zod.number().nullish(),
+  flaggedDays: zod.number(),
+  voiceActiveDays: zod.number(),
+  voiceActiveRate: zod.number(),
+  categoryStatus: zod.record(zod.string(), zod.string()),
+  trendData: zod.array(
+    zod.object({
+      date: zod.string(),
+      category: zod.string(),
+      averageValue: zod.number().nullish(),
+      flagged: zod.boolean(),
+    }),
+  ),
+  narrative: zod.string(),
+});

@@ -10,6 +10,7 @@ import { JessicaPhone } from "@/pages/jessica-phone";
 import { SmartHomePanel } from "@/pages/smart-home";
 import { IntercomView } from "@/pages/intercom";
 import { VaultGate } from "@/pages/vault-gate";
+import { DoctorReport } from "@/pages/doctor-report";
 import { VaultProvider, useVault } from "@/lib/vault-context";
 import { Home, Phone, Mic, MessageSquare, ShieldAlert, Lock } from "lucide-react";
 
@@ -81,6 +82,7 @@ function AppContent() {
         <Route path="/smarthome" component={SmartHomePanel} />
         <Route path="/intercom" component={IntercomView} />
         <Route path="/admin" component={AdminView} />
+        <Route path="/admin/report" component={DoctorReport} />
         <Route path="/scripts" component={JessicaView} />
         <Route component={NotFound} />
       </Switch>

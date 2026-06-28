@@ -608,6 +608,71 @@ export interface AssessmentSettings {
   engagementIntervalHours?: number;
 }
 
+export interface FlaggedEvent {
+  date: string;
+  category: string;
+  rawResponse: string;
+  parsedValue?: string | null;
+  parsedIntensity?: string | null;
+  sessionId: number;
+}
+
+export interface CategoryBreakdown {
+  status: string;
+  sessionCount: number;
+  flaggedCount: number;
+}
+
+export interface ReportSymptomLog {
+  loggedAt: string;
+  ptsdTrigger: boolean;
+  hallucinationIntensity: number;
+  motivationLevel: number;
+  behaviorNotes?: string | null;
+  loggedBy: string;
+}
+
+export type WeeklyReportCategoryStatus = { [key: string]: string };
+
+export type WeeklyReportCategoryBreakdown = {
+  [key: string]: CategoryBreakdown;
+};
+
+export interface WeeklyReport {
+  weekStart: string;
+  weekEnd: string;
+  sessionCount: number;
+  categoryStatus: WeeklyReportCategoryStatus;
+  categoryBreakdown: WeeklyReportCategoryBreakdown;
+  flaggedEvents: FlaggedEvent[];
+  symptomLogs: ReportSymptomLog[];
+  foodPreferences: string[];
+  voiceActiveDays: number;
+  narrative: string;
+}
+
+export interface MonthlyTrendPoint {
+  date: string;
+  category: string;
+  averageValue?: number | null;
+  flagged: boolean;
+}
+
+export type MonthlyReportCategoryStatus = { [key: string]: string };
+
+export interface MonthlyReport {
+  monthStart: string;
+  monthEnd: string;
+  sessionCount: number;
+  medicationAdherenceRate?: number | null;
+  flaggedDays: number;
+  voiceActiveDays: number;
+  voiceActiveRate: number;
+  categoryStatus: MonthlyReportCategoryStatus;
+  trendData: MonthlyTrendPoint[];
+  narrative: string;
+}
+
 export type GetSymptomLogsParams = {
   limit?: number;
 };

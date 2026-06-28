@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   Activity,
@@ -18,6 +19,7 @@ import {
   RefreshCw,
   Flame,
   CheckCircle,
+  FileText,
 } from "lucide-react";
 
 import {
@@ -56,6 +58,7 @@ type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "healt
 
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [, navigate] = useLocation();
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
@@ -78,6 +81,9 @@ export function AdminView() {
           <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
           <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
           <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
+          <div className="pt-2 border-t border-border/30 mt-2">
+            <NavButton active={false} onClick={() => navigate("/admin/report")} icon={<FileText size={18} />} label="Doctor Report" />
+          </div>
         </nav>
 
         <div className="p-4 border-t border-border/30">

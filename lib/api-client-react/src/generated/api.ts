@@ -48,6 +48,7 @@ import type {
   Meal,
   MealCraving,
   MealWithIngredients,
+  MonthlyReport,
   ScheduleTask,
   SheetsSyncInput,
   SheetsSyncResult,
@@ -63,6 +64,7 @@ import type {
   UpdateSmartHomeDeviceInput,
   UpdateVoiceScriptInput,
   VoiceScript,
+  WeeklyReport,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -4378,3 +4380,153 @@ export const useUpdateCraving = <
 > => {
   return useMutation(getUpdateCravingMutationOptions(options));
 };
+
+/**
+ * @summary Get aggregated weekly health report for doctor review
+ */
+export const getGetWeeklyReportUrl = () => {
+  return `/api/health-assessment/report/weekly`;
+};
+
+export const getWeeklyReport = async (
+  options?: RequestInit,
+): Promise<WeeklyReport> => {
+  return customFetch<WeeklyReport>(getGetWeeklyReportUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWeeklyReportQueryKey = () => {
+  return [`/api/health-assessment/report/weekly`] as const;
+};
+
+export const getGetWeeklyReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWeeklyReport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWeeklyReport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWeeklyReportQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getWeeklyReport>>> = ({
+    signal,
+  }) => getWeeklyReport({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWeeklyReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWeeklyReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWeeklyReport>>
+>;
+export type GetWeeklyReportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get aggregated weekly health report for doctor review
+ */
+
+export function useGetWeeklyReport<
+  TData = Awaited<ReturnType<typeof getWeeklyReport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWeeklyReport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWeeklyReportQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get aggregated monthly health report for doctor review
+ */
+export const getGetMonthlyReportUrl = () => {
+  return `/api/health-assessment/report/monthly`;
+};
+
+export const getMonthlyReport = async (
+  options?: RequestInit,
+): Promise<MonthlyReport> => {
+  return customFetch<MonthlyReport>(getGetMonthlyReportUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMonthlyReportQueryKey = () => {
+  return [`/api/health-assessment/report/monthly`] as const;
+};
+
+export const getGetMonthlyReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMonthlyReport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMonthlyReportQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMonthlyReport>>
+  > = ({ signal }) => getMonthlyReport({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMonthlyReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMonthlyReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMonthlyReport>>
+>;
+export type GetMonthlyReportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get aggregated monthly health report for doctor review
+ */
+
+export function useGetMonthlyReport<
+  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMonthlyReport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMonthlyReportQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

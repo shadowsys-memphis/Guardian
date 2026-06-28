@@ -907,6 +907,32 @@ paths:
         "200":
           description: Updated
 
+  /health-assessment/report/weekly:
+    get:
+      operationId: getWeeklyReport
+      tags: [health-assessment]
+      summary: Get aggregated weekly health report for doctor review
+      responses:
+        "200":
+          description: Weekly health report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyReport"
+
+  /health-assessment/report/monthly:
+    get:
+      operationId: getMonthlyReport
+      tags: [health-assessment]
+      summary: Get aggregated monthly health report for doctor review
+      responses:
+        "200":
+          description: Monthly health report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyReport"
+
 components:
   schemas:
     HealthStatus:
@@ -1838,3 +1864,165 @@ components:
           type: integer
           description: "Hours of inactivity before Jessica initiates a check-in"
       required: []
+
+    FlaggedEvent:
+      type: object
+      properties:
+        date:
+          type: string
+        category:
+          type: string
+        rawResponse:
+          type: string
+        parsedValue:
+          type: string
+          nullable: true
+        parsedIntensity:
+          type: string
+          nullable: true
+        sessionId:
+          type: integer
+      required:
+        - date
+        - category
+        - rawResponse
+        - sessionId
+
+    CategoryBreakdown:
+      type: object
+      properties:
+        status:
+          type: string
+        sessionCount:
+          type: integer
+        flaggedCount:
+          type: integer
+      required:
+        - status
+        - sessionCount
+        - flaggedCount
+
+    ReportSymptomLog:
+      type: object
+      properties:
+        loggedAt:
+          type: string
+          format: date-time
+        ptsdTrigger:
+          type: boolean
+        hallucinationIntensity:
+          type: integer
+        motivationLevel:
+          type: integer
+        behaviorNotes:
+          type: string
+          nullable: true
+        loggedBy:
+          type: string
+      required:
+        - loggedAt
+        - ptsdTrigger
+        - hallucinationIntensity
+        - motivationLevel
+        - loggedBy
+
+    WeeklyReport:
+      type: object
+      properties:
+        weekStart:
+          type: string
+        weekEnd:
+          type: string
+        sessionCount:
+          type: integer
+        categoryStatus:
+          type: object
+          additionalProperties:
+            type: string
+        categoryBreakdown:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/CategoryBreakdown"
+        flaggedEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlaggedEvent"
+        symptomLogs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportSymptomLog"
+        foodPreferences:
+          type: array
+          items:
+            type: string
+        voiceActiveDays:
+          type: integer
+        narrative:
+          type: string
+      required:
+        - weekStart
+        - weekEnd
+        - sessionCount
+        - categoryStatus
+        - categoryBreakdown
+        - flaggedEvents
+        - symptomLogs
+        - foodPreferences
+        - voiceActiveDays
+        - narrative
+
+    MonthlyTrendPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        category:
+          type: string
+        averageValue:
+          type: number
+          nullable: true
+        flagged:
+          type: boolean
+      required:
+        - date
+        - category
+        - flagged
+
+    MonthlyReport:
+      type: object
+      properties:
+        monthStart:
+          type: string
+        monthEnd:
+          type: string
+        sessionCount:
+          type: integer
+        medicationAdherenceRate:
+          type: integer
+          nullable: true
+        flaggedDays:
+          type: integer
+        voiceActiveDays:
+          type: integer
+        voiceActiveRate:
+          type: integer
+        categoryStatus:
+          type: object
+          additionalProperties:
+            type: string
+        trendData:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyTrendPoint"
+        narrative:
+          type: string
+      required:
+        - monthStart
+        - monthEnd
+        - sessionCount
+        - flaggedDays
+        - voiceActiveDays
+        - voiceActiveRate
+        - categoryStatus
+        - trendData
+        - narrative

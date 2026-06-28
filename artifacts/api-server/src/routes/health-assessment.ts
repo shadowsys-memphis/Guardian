@@ -5,6 +5,8 @@ import {
   callSessionsTable,
   healthDataPointsTable,
   appSettingsTable,
+  symptomLogsTable,
+  mealCravingsTable,
 } from "@workspace/db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -412,6 +414,201 @@ export async function saveHealthDataPoint(data: {
   }).returning();
   return point;
 }
+
+const REPORT_CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
+
+function buildNarrative(
+  sessionCount: number,
+  categoryStatus: Record<string, string>,
+  flaggedCount: number,
+  voiceActiveDays: number,
+  period: "week" | "month"
+): string {
+  const periodWord = period === "week" ? "week" : "month";
+  const good = REPORT_CATS.filter((c) => categoryStatus[c] === "green");
+  const bad = REPORT_CATS.filter((c) => categoryStatus[c] === "red" || categoryStatus[c] === "yellow");
+  let narrative = `Pops had ${sessionCount} check-in call${sessionCount !== 1 ? "s" : ""} this ${periodWord}.`;
+  if (good.length > 0) narrative += ` ${good.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ")} ${good.length === 1 ? "was" : "were"} generally stable.`;
+  if (bad.length > 0) narrative += ` ${bad.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ")} ${bad.length === 1 ? "showed" : "showed"} areas of concern and may warrant attention.`;
+  if (flaggedCount > 0) narrative += ` There ${flaggedCount === 1 ? "was" : "were"} ${flaggedCount} flagged event${flaggedCount !== 1 ? "s" : ""} this ${periodWord}.`;
+  if (voiceActiveDays > 0) narrative += ` Voice activity was reported on ${voiceActiveDays} day${voiceActiveDays !== 1 ? "s" : ""}.`;
+  if (sessionCount === 0) narrative = `No check-in calls were recorded this ${periodWord}.`;
+  return narrative;
+}
+
+router.get("/health-assessment/report/weekly", async (req, res) => {
+  try {
+    const now = new Date();
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekStart = weekAgo.toISOString().split("T")[0];
+    const weekEnd = now.toISOString().split("T")[0];
+
+    const sessions = await db.select().from(callSessionsTable)
+      .where(and(gte(callSessionsTable.sessionDate, weekStart), lte(callSessionsTable.sessionDate, weekEnd)))
+      .orderBy(asc(callSessionsTable.sessionDate));
+    const sessionIds = sessions.map((s) => s.id);
+
+    const allPoints = sessionIds.length > 0
+      ? await db.select().from(healthDataPointsTable).where(inArray(healthDataPointsTable.sessionId, sessionIds))
+      : [];
+
+    const categoryStatus: Record<string, string> = {};
+    for (const cat of REPORT_CATS) {
+      categoryStatus[cat] = getStatusForCategory(allPoints, cat);
+    }
+
+    const flaggedEvents = allPoints
+      .filter((dp) => dp.flagged)
+      .map((dp) => {
+        const session = sessions.find((s) => s.id === dp.sessionId);
+        return {
+          date: session?.sessionDate ?? weekEnd,
+          category: dp.category,
+          rawResponse: dp.rawResponse,
+          parsedValue: dp.parsedValue ?? null,
+          parsedIntensity: dp.parsedIntensity ?? null,
+          sessionId: dp.sessionId,
+        };
+      });
+
+    const categoryBreakdown: Record<string, { status: string; sessionCount: number; flaggedCount: number }> = {};
+    for (const cat of REPORT_CATS) {
+      const pts = allPoints.filter((d) => d.category === cat);
+      categoryBreakdown[cat] = {
+        status: categoryStatus[cat],
+        sessionCount: new Set(pts.map((p) => p.sessionId)).size,
+        flaggedCount: pts.filter((p) => p.flagged).length,
+      };
+    }
+
+    const symptomLogs = await db.select().from(symptomLogsTable)
+      .where(gte(symptomLogsTable.loggedAt, weekAgo))
+      .orderBy(desc(symptomLogsTable.loggedAt));
+
+    const cravings = await db.select().from(mealCravingsTable)
+      .where(gte(mealCravingsTable.createdAt, weekAgo))
+      .orderBy(desc(mealCravingsTable.createdAt));
+    const foodPreferences = cravings.map((c) => c.mealName);
+
+    const voiceActiveDays = sessions.filter((s) => {
+      const pts = allPoints.filter((d) => d.sessionId === s.id && d.category === "voices");
+      return pts.some((p) => p.parsedValue === "yes");
+    }).length;
+
+    const narrative = buildNarrative(sessions.length, categoryStatus, flaggedEvents.length, voiceActiveDays, "week");
+
+    res.json({
+      weekStart,
+      weekEnd,
+      sessionCount: sessions.length,
+      categoryStatus,
+      categoryBreakdown,
+      flaggedEvents,
+      symptomLogs: symptomLogs.map((l) => ({
+        loggedAt: l.loggedAt.toISOString(),
+        ptsdTrigger: l.ptsdTrigger,
+        hallucinationIntensity: l.hallucinationIntensity,
+        motivationLevel: l.motivationLevel,
+        behaviorNotes: l.behaviorNotes ?? null,
+        loggedBy: l.loggedBy,
+      })),
+      foodPreferences,
+      voiceActiveDays,
+      narrative,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate weekly report");
+    res.status(500).json({ error: "Failed to generate weekly report" });
+  }
+});
+
+router.get("/health-assessment/report/monthly", async (req, res) => {
+  try {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const monthStart = thirtyDaysAgo.toISOString().split("T")[0];
+    const monthEnd = now.toISOString().split("T")[0];
+
+    const sessions = await db.select().from(callSessionsTable)
+      .where(gte(callSessionsTable.sessionDate, monthStart))
+      .orderBy(asc(callSessionsTable.sessionDate));
+    const sessionIds = sessions.map((s) => s.id);
+
+    const allPoints = sessionIds.length > 0
+      ? await db.select().from(healthDataPointsTable).where(inArray(healthDataPointsTable.sessionId, sessionIds))
+      : [];
+
+    // Medication adherence: sessions that had medication data with no "no" or flagged
+    const sessionsWithMed = sessions.filter((s) => {
+      const pts = allPoints.filter((d) => d.sessionId === s.id && d.category === "medication");
+      return pts.length > 0;
+    });
+    const adherentSessions = sessionsWithMed.filter((s) => {
+      const pts = allPoints.filter((d) => d.sessionId === s.id && d.category === "medication");
+      return !pts.some((p) => p.parsedValue === "no" || p.flagged);
+    });
+    const medicationAdherenceRate = sessionsWithMed.length > 0
+      ? Math.round((adherentSessions.length / sessionsWithMed.length) * 100)
+      : null;
+
+    const flaggedDays = new Set(
+      allPoints.filter((d) => d.flagged).map((d) => sessions.find((s) => s.id === d.sessionId)?.sessionDate).filter(Boolean)
+    ).size;
+
+    const voiceActiveDays = sessions.filter((s) => {
+      const pts = allPoints.filter((d) => d.sessionId === s.id && d.category === "voices");
+      return pts.some((p) => p.parsedValue === "yes");
+    }).length;
+
+    // Build per-category per-day trend data
+    const byDateCategory: Record<string, { date: string; category: string; values: number[]; flagged: boolean }> = {};
+    for (const session of sessions) {
+      const pts = allPoints.filter((p) => p.sessionId === session.id);
+      for (const pt of pts) {
+        const key = `${session.sessionDate}::${pt.category}`;
+        if (!byDateCategory[key]) {
+          byDateCategory[key] = { date: session.sessionDate, category: pt.category, values: [], flagged: false };
+        }
+        if (pt.flagged) byDateCategory[key].flagged = true;
+        const rawVal = pt.parsedValue === "yes" ? 1 : pt.parsedValue === "no" ? 0 : parseFloat(pt.parsedValue ?? "");
+        if (!isNaN(rawVal)) byDateCategory[key].values.push(rawVal);
+      }
+    }
+    const trendData = Object.values(byDateCategory).map((d) => ({
+      date: d.date,
+      category: d.category,
+      averageValue: d.values.length > 0 ? parseFloat((d.values.reduce((a, b) => a + b, 0) / d.values.length).toFixed(3)) : null,
+      flagged: d.flagged,
+    })).sort((a, b) => a.date.localeCompare(b.date));
+
+    const categoryStatus: Record<string, string> = {};
+    for (const cat of REPORT_CATS) {
+      categoryStatus[cat] = getStatusForCategory(allPoints, cat);
+    }
+
+    const voiceActiveRate = sessions.length > 0 ? Math.round((voiceActiveDays / sessions.length) * 100) : 0;
+
+    const narrative = buildNarrative(sessions.length, categoryStatus, flaggedDays, voiceActiveDays, "month");
+
+    res.json({
+      monthStart,
+      monthEnd,
+      sessionCount: sessions.length,
+      medicationAdherenceRate,
+      flaggedDays,
+      voiceActiveDays,
+      voiceActiveRate,
+      categoryStatus,
+      trendData,
+      narrative,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate monthly report");
+    res.status(500).json({ error: "Failed to generate monthly report" });
+  }
+});
 
 export async function getActiveQuestionsForCycleDay(cycleDay: number | null): Promise<{ id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[]> {
   await ensureSeeded();
