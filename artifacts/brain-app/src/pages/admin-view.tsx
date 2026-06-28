@@ -11,7 +11,6 @@ import {
   HeartPulse,
   BrainCircuit,
   Mic,
-  Cpu,
   AlertTriangle,
   Clock,
   ShoppingCart,
@@ -27,7 +26,6 @@ import {
   useGetSymptomLogs, useCreateSymptomLog,
   useGetVoiceScripts, useUpdateVoiceScript,
   useGetHaldolCycle, useUpdateHaldolCycle,
-  useGetGovernorPillars, useGetGovernorNotes, useCreateGovernorNote,
   useListHealthQuestions, useCreateHealthQuestion, useUpdateHealthQuestion, useDeleteHealthQuestion,
   useGetTodaySummary, getGetTodaySummaryQueryKey, useListCallSessions, useGetSessionDataPoints, getGetSessionDataPointsQueryKey, useGetAssessmentTrends, useGetAssessmentAnomalies,
   useGetAssessmentSettings, useUpdateAssessmentSettings,
@@ -37,8 +35,6 @@ import {
   type UpdateAppStateInput,
   type VoiceScript,
   type ScheduleTask,
-  type GovernorPillar,
-  type GovernorNote,
   type HealthQuestion,
   type CallSession,
   type HealthDataPoint,
@@ -56,7 +52,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "governor" | "health" | "shopper";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper";
 
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -82,9 +78,6 @@ export function AdminView() {
           <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
           <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
           <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
-          <div className="border-t border-border/30 my-2 pt-2">
-            <NavButton active={activeTab === "governor"} onClick={() => setActiveTab("governor")} icon={<Cpu size={18} />} label="Governor" />
-          </div>
         </nav>
 
         <div className="p-4 border-t border-border/30">
@@ -101,7 +94,6 @@ export function AdminView() {
           {activeTab === "haldol" && <HaldolTab />}
           {activeTab === "health" && <HealthIntelligenceTab />}
           {activeTab === "shopper" && <ShopperTab />}
-          {activeTab === "governor" && <GovernorTab />}
         </div>
       </main>
     </div>
@@ -1217,164 +1209,6 @@ function HaldolTab() {
             </CardContent>
           </Card>
         </div>
-      )}
-    </div>
-  );
-}
-
-const PILLAR_COLORS: Record<string, string> = {
-  productivity: "border-yellow-500/40 bg-yellow-500/5",
-  passion: "border-blue-500/40 bg-blue-500/5",
-  curiosity: "border-green-500/40 bg-green-500/5",
-};
-
-const PILLAR_ACCENT: Record<string, string> = {
-  productivity: "text-yellow-400",
-  passion: "text-blue-400",
-  curiosity: "text-green-400",
-};
-
-function GovernorTab() {
-  const { data: pillars } = useGetGovernorPillars();
-  const { data: notes, refetch: refetchNotes } = useGetGovernorNotes();
-  const createNote = useCreateGovernorNote();
-  const { toast } = useToast();
-  const [noteText, setNoteText] = useState("");
-  const [notePillar, setNotePillar] = useState("");
-
-  const handleSubmitNote = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!noteText.trim()) return;
-    createNote.mutate({
-      data: { noteText: noteText.trim(), pillarKey: notePillar || undefined },
-    }, {
-      onSuccess: () => {
-        toast({ title: "Synthesis note logged" });
-        setNoteText("");
-        setNotePillar("");
-        refetchNotes();
-      },
-    });
-  };
-
-  return (
-    <div className="space-y-8">
-      <header className="border-b border-border/50 pb-4">
-        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Sovereign Staff Governor</h2>
-        <p className="text-muted-foreground">Raymo's three-pillar productivity engine — separate from Pops' care system.</p>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {pillars?.map((pillar) => (
-          <Card key={pillar.pillarKey} className={`border-2 ${PILLAR_COLORS[pillar.pillarKey] ?? "border-border"}`}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between mb-1">
-                <Badge variant="outline" className={`text-xs uppercase font-bold ${PILLAR_ACCENT[pillar.pillarKey]}`}>
-                  {pillar.pillarKey}
-                </Badge>
-                <span className="text-xs text-muted-foreground font-bold">
-                  {pillar.focusDurationMins} min
-                </span>
-              </div>
-              <CardTitle className={`text-2xl font-display tracking-widest ${PILLAR_ACCENT[pillar.pillarKey]}`}>
-                {pillar.name}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground leading-relaxed">{pillar.description}</p>
-              {pillar.metrics.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest mb-2">Metrics</p>
-                  <ul className="space-y-1">
-                    {pillar.metrics.map((m, i) => (
-                      <li key={i} className="text-xs text-foreground/70 flex items-start gap-2">
-                        <span className="text-primary mt-0.5">›</span>
-                        {m}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Log Synthesis Note</CardTitle>
-          <CardDescription>
-            Record a daily insight, trajectory observation, or Goldilocks action across your pillars.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmitNote} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-bold uppercase text-muted-foreground">Pillar (Optional)</label>
-              <select
-                value={notePillar}
-                onChange={(e) => setNotePillar(e.target.value)}
-                className="flex h-10 w-full rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <option value="">General / All Pillars</option>
-                {pillars?.map((p) => (
-                  <option key={p.pillarKey} value={p.pillarKey}>
-                    {p.name} ({p.pillarKey})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-bold uppercase text-muted-foreground">Synthesis Note</label>
-              <textarea
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                className="flex min-h-[120px] w-full rounded-sm border border-border bg-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                placeholder="Trajectory analysis, lagging pillar, Goldilocks action, logic bridge..."
-                required
-              />
-            </div>
-            <Button type="submit" disabled={createNote.isPending || !noteText.trim()}>
-              Save Synthesis Note
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      {notes && notes.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-2xl font-display text-primary tracking-widest uppercase border-b border-border/50 pb-3">
-            Recent Notes
-          </h3>
-          {notes.map((note) => {
-            const pillar = pillars?.find((p) => p.pillarKey === note.pillarKey);
-            return (
-              <Card key={note.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    {pillar ? (
-                      <Badge className={`text-xs uppercase font-bold ${PILLAR_ACCENT[pillar.pillarKey]}`} variant="outline">
-                        {pillar.name}
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-xs uppercase font-bold">General</Badge>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {format(new Date(note.createdAt), "EEE MMM dd, HH:mm")}
-                    </span>
-                  </div>
-                  <p className="text-sm text-foreground/90 leading-relaxed">{note.noteText}</p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {notes?.length === 0 && (
-        <p className="text-muted-foreground italic text-center py-8">
-          No synthesis notes yet. Log your first one above.
-        </p>
       )}
     </div>
   );

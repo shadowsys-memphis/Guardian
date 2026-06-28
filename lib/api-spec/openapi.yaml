@@ -19,8 +19,6 @@ tags:
     description: Live app state management
   - name: haldol
     description: Haldol cycle tracking
-  - name: governor
-    description: Raymo's Sovereign Staff Governor - personal productivity pillars
   - name: gemini
     description: Gemini AI chat and image operations
   - name: smarthome
@@ -316,59 +314,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HaldolCycle"
-
-  /governor/pillars:
-    get:
-      operationId: getGovernorPillars
-      tags: [governor]
-      summary: Get all Governor productivity pillars
-      responses:
-        "200":
-          description: Governor pillars
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/GovernorPillar"
-
-  /governor/notes:
-    get:
-      operationId: getGovernorNotes
-      tags: [governor]
-      summary: Get synthesis notes (most recent first)
-      parameters:
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 20
-      responses:
-        "200":
-          description: Governor notes
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/GovernorNote"
-    post:
-      operationId: createGovernorNote
-      tags: [governor]
-      summary: Log a synthesis note for a pillar
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateGovernorNoteInput"
-      responses:
-        "201":
-          description: Created note
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GovernorNote"
 
   /gemini/conversations:
     get:
@@ -1269,59 +1214,6 @@ components:
         notes:
           type: string
 
-    GovernorPillar:
-      type: object
-      properties:
-        id:
-          type: integer
-        pillarKey:
-          type: string
-          description: "productivity | passion | curiosity"
-        name:
-          type: string
-        description:
-          type: string
-        focusDurationMins:
-          type: integer
-        metrics:
-          type: array
-          items:
-            type: string
-      required:
-        - id
-        - pillarKey
-        - name
-        - description
-        - focusDurationMins
-        - metrics
-
-    GovernorNote:
-      type: object
-      properties:
-        id:
-          type: integer
-        pillarKey:
-          type: string
-          nullable: true
-        noteText:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-      required:
-        - id
-        - noteText
-        - createdAt
-
-    CreateGovernorNoteInput:
-      type: object
-      properties:
-        pillarKey:
-          type: string
-        noteText:
-          type: string
-      required:
-        - noteText
 
     GeminiConversation:
       type: object

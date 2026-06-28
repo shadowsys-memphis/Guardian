@@ -275,28 +275,6 @@ export interface UpdateHaldolCycleInput {
   notes?: string;
 }
 
-export interface GovernorPillar {
-  id: number;
-  /** productivity | passion | curiosity */
-  pillarKey: string;
-  name: string;
-  description: string;
-  focusDurationMins: number;
-  metrics: string[];
-}
-
-export interface GovernorNote {
-  id: number;
-  pillarKey?: string | null;
-  noteText: string;
-  createdAt: string;
-}
-
-export interface CreateGovernorNoteInput {
-  pillarKey?: string;
-  noteText: string;
-}
-
 export interface GeminiConversation {
   id: number;
   title: string;
@@ -631,10 +609,6 @@ export interface AssessmentSettings {
 }
 
 export type GetSymptomLogsParams = {
-  limit?: number;
-};
-
-export type GetGovernorNotesParams = {
   limit?: number;
 };
 

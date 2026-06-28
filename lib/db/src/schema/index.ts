@@ -53,23 +53,6 @@ export const haldolCycleTable = pgTable("haldol_cycle", {
   notes: text("notes"),
 });
 
-export const governorPillarsTable = pgTable("governor_pillars", {
-  id: serial("id").primaryKey(),
-  pillarKey: text("pillar_key").notNull().unique(),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
-  focusDurationMins: integer("focus_duration_mins").notNull().default(60),
-  metrics: text("metrics"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const governorNotesTable = pgTable("governor_notes", {
-  id: serial("id").primaryKey(),
-  pillarKey: text("pillar_key"),
-  noteText: text("note_text").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
 export * from "./conversations";
 export * from "./messages";
 
@@ -100,25 +83,16 @@ export const insertScheduleTaskSchema = createInsertSchema(scheduleTasksTable).o
 export const insertSymptomLogSchema = createInsertSchema(symptomLogsTable).omit({ id: true });
 export const insertVoiceScriptSchema = createInsertSchema(voiceScriptsTable).omit({ id: true });
 export const insertHaldolCycleSchema = createInsertSchema(haldolCycleTable).omit({ id: true });
-export const insertGovernorPillarSchema = createInsertSchema(governorPillarsTable).omit({ id: true });
-export const insertGovernorNoteSchema = createInsertSchema(governorNotesTable).omit({ id: true });
-
 export type AppState = typeof appStateTable.$inferSelect;
 export type ScheduleTask = typeof scheduleTasksTable.$inferSelect;
 export type SymptomLog = typeof symptomLogsTable.$inferSelect;
 export type VoiceScript = typeof voiceScriptsTable.$inferSelect;
 export type HaldolCycle = typeof haldolCycleTable.$inferSelect;
-export type GovernorPillar = typeof governorPillarsTable.$inferSelect;
-export type GovernorNote = typeof governorNotesTable.$inferSelect;
-
 export type InsertAppState = z.infer<typeof insertAppStateSchema>;
 export type InsertScheduleTask = z.infer<typeof insertScheduleTaskSchema>;
 export type InsertSymptomLog = z.infer<typeof insertSymptomLogSchema>;
 export type InsertVoiceScript = z.infer<typeof insertVoiceScriptSchema>;
 export type InsertHaldolCycle = z.infer<typeof insertHaldolCycleSchema>;
-export type InsertGovernorPillar = z.infer<typeof insertGovernorPillarSchema>;
-export type InsertGovernorNote = z.infer<typeof insertGovernorNoteSchema>;
-
 export const insertSmartHomeDeviceSchema = createInsertSchema(smartHomeDevicesTable).omit({ id: true });
 export const insertIntercomMessageSchema = createInsertSchema(intercomeMessagesTable).omit({ id: true });
 

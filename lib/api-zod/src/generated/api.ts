@@ -413,46 +413,6 @@ export const UpdateHaldolCycleResponse = zod.object({
 });
 
 /**
- * @summary Get all Governor productivity pillars
- */
-export const GetGovernorPillarsResponseItem = zod.object({
-  id: zod.number(),
-  pillarKey: zod.string().describe("productivity | passion | curiosity"),
-  name: zod.string(),
-  description: zod.string(),
-  focusDurationMins: zod.number(),
-  metrics: zod.array(zod.string()),
-});
-export const GetGovernorPillarsResponse = zod.array(
-  GetGovernorPillarsResponseItem,
-);
-
-/**
- * @summary Get synthesis notes (most recent first)
- */
-export const getGovernorNotesQueryLimitDefault = 20;
-
-export const GetGovernorNotesQueryParams = zod.object({
-  limit: zod.coerce.number().default(getGovernorNotesQueryLimitDefault),
-});
-
-export const GetGovernorNotesResponseItem = zod.object({
-  id: zod.number(),
-  pillarKey: zod.string().nullish(),
-  noteText: zod.string(),
-  createdAt: zod.date(),
-});
-export const GetGovernorNotesResponse = zod.array(GetGovernorNotesResponseItem);
-
-/**
- * @summary Log a synthesis note for a pillar
- */
-export const CreateGovernorNoteBody = zod.object({
-  pillarKey: zod.string().optional(),
-  noteText: zod.string(),
-});
-
-/**
  * @summary List all conversations
  */
 export const ListGeminiConversationsResponseItem = zod.object({
