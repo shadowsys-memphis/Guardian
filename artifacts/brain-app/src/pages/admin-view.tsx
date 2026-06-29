@@ -553,6 +553,8 @@ function HealthQuestionsSection() {
   );
 }
 
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 function AiBrainSection() {
   const { data: aiStatus, refetch } = useGetAiModel({ query: { queryKey: getGetAiModelQueryKey() } });
   const setAiModel = useSetAiModel();
@@ -560,6 +562,18 @@ function AiBrainSection() {
 
   const activeModel = (aiStatus as any)?.activeModel ?? "gemini";
   const models: Array<{ id: string; label: string; provider: string; lmStudioModelId: string | null }> = (aiStatus as any)?.models ?? [];
+
+  const [lmUrl, setLmUrl] = useState("http://localhost:1234");
+  const [urlSaving, setUrlSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ connected: boolean; error?: string; modelCount?: number } | null>(null);
+
+  useEffect(() => {
+    fetch(`${BASE_URL}/api/ai-model/lm-studio-url`)
+      .then((r) => r.json())
+      .then((d: any) => { if (d?.url) setLmUrl(d.url); })
+      .catch(() => {});
+  }, []);
 
   const handleSelect = (modelId: string) => {
     setAiModel.mutate({ data: { activeModel: modelId } }, {
@@ -569,6 +583,41 @@ function AiBrainSection() {
       },
       onError: () => toast({ title: "Failed to update model", variant: "destructive" }),
     });
+  };
+
+  const handleSaveUrl = async () => {
+    setUrlSaving(true);
+    setTestResult(null);
+    try {
+      const r = await fetch(`${BASE_URL}/api/ai-model/lm-studio-url`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: lmUrl.trim() }),
+      });
+      if (r.ok) {
+        toast({ title: "LM Studio URL saved" });
+      } else {
+        toast({ title: "Failed to save URL", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Failed to save URL", variant: "destructive" });
+    } finally {
+      setUrlSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await fetch(`${BASE_URL}/api/ai-model/test-connection`);
+      const d = await r.json() as { connected: boolean; error?: string; modelCount?: number };
+      setTestResult(d);
+    } catch {
+      setTestResult({ connected: false, error: "Could not reach the API server" });
+    } finally {
+      setTesting(false);
+    }
   };
 
   return (
@@ -603,7 +652,7 @@ function AiBrainSection() {
                   <span className="text-lg">{isLm ? "🖥️" : "✨"}</span>
                   <div>
                     <p className="font-display text-sm uppercase tracking-widest font-bold">{model.label}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{isLm ? `Local · LM Studio` : "Cloud · Google"}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{isLm ? "Local · LM Studio" : "Cloud · Google"}</p>
                   </div>
                 </div>
                 {isActive && (
@@ -614,11 +663,55 @@ function AiBrainSection() {
               </button>
             );
           })}
-          <div className="pt-2 p-3 bg-secondary/20 border border-border/40 rounded-sm">
-            <p className="text-xs text-muted-foreground/70 font-display uppercase tracking-widest mb-1">LM Studio URL</p>
-            <p className="text-xs text-muted-foreground font-mono">LM_STUDIO_URL env var (default: http://localhost:1234)</p>
-            <p className="text-xs text-muted-foreground/50 mt-1">Use a tunnel (e.g. ngrok) to expose LM Studio when working remotely.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BrainCircuit size={18} className="text-muted-foreground" />
+            LM Studio URL
+          </CardTitle>
+          <CardDescription>
+            Paste your LM Studio address here. Use a tunnel (ngrok, Cloudflare Tunnel) to reach it from the deployed app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={lmUrl}
+              onChange={(e) => { setLmUrl(e.target.value); setTestResult(null); }}
+              placeholder="http://localhost:1234"
+              className="flex-1 bg-secondary border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <Button size="sm" onClick={handleSaveUrl} disabled={urlSaving}>
+              {urlSaving ? "Saving…" : "Save"}
+            </Button>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTestConnection}
+            disabled={testing}
+            className="w-full"
+          >
+            {testing ? "Testing…" : "Test Connection"}
+          </Button>
+          {testResult && (
+            <div className={`p-3 rounded-sm border text-xs font-display uppercase tracking-widest ${
+              testResult.connected
+                ? "border-green-500/30 bg-green-500/10 text-green-400"
+                : "border-destructive/30 bg-destructive/10 text-destructive"
+            }`}>
+              {testResult.connected
+                ? `Connected — ${testResult.modelCount ?? 0} model${testResult.modelCount === 1 ? "" : "s"} loaded`
+                : `Not reachable — ${testResult.error ?? "unknown error"}`}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground/50">
+            Falls back to <span className="font-mono">LM_STUDIO_URL</span> env var, then <span className="font-mono">http://localhost:1234</span>.
+          </p>
         </CardContent>
       </Card>
     </div>

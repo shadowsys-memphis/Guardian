@@ -85,12 +85,9 @@ export type InsertSymptomLog = z.infer<typeof insertSymptomLogSchema>;
 export type InsertVoiceScript = z.infer<typeof insertVoiceScriptSchema>;
 export type InsertHaldolCycle = z.infer<typeof insertHaldolCycleSchema>;
 export const insertSmartHomeDeviceSchema = createInsertSchema(smartHomeDevicesTable).omit({ id: true });
-export const insertIntercomMessageSchema = createInsertSchema(intercomeMessagesTable).omit({ id: true });
 
 export type SmartHomeDevice = typeof smartHomeDevicesTable.$inferSelect;
-export type IntercomMessage = typeof intercomeMessagesTable.$inferSelect;
 export type InsertSmartHomeDevice = z.infer<typeof insertSmartHomeDeviceSchema>;
-export type InsertIntercomMessage = z.infer<typeof insertIntercomMessageSchema>;
 
 export const healthQuestionsTable = pgTable("health_questions", {
   id: serial("id").primaryKey(),

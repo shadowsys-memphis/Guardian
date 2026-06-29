@@ -36,11 +36,19 @@ async function getActiveModel(): Promise<typeof AI_MODELS[number]> {
   }
 }
 
+async function getLmStudioBaseUrl(): Promise<string> {
+  try {
+    const rows = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "lm_studio_url"));
+    if (rows[0]?.value) return rows[0].value;
+  } catch { /* fall through */ }
+  return process.env.LM_STUDIO_URL ?? "http://localhost:1234";
+}
+
 async function callLmStudio(
   openaiMessages: Array<{ role: string; content: string }>,
   lmStudioModelId: string
 ): Promise<string> {
-  const baseUrl = process.env.LM_STUDIO_URL ?? "http://localhost:1234";
+  const baseUrl = await getLmStudioBaseUrl();
   let response: Response;
   try {
     response = await fetch(`${baseUrl}/v1/chat/completions`, {

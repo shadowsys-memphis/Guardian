@@ -647,6 +647,59 @@ router.put("/ai-model", async (req, res) => {
   }
 });
 
+router.get("/ai-model/lm-studio-url", async (req, res) => {
+  try {
+    const rows = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "lm_studio_url"));
+    const url = rows[0]?.value ?? process.env.LM_STUDIO_URL ?? "http://localhost:1234";
+    res.json({ url });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get LM Studio URL");
+    res.status(500).json({ error: "Failed to get LM Studio URL" });
+  }
+});
+
+router.put("/ai-model/lm-studio-url", async (req, res) => {
+  try {
+    const { url } = z.object({ url: z.string() }).parse(req.body);
+    const existing = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "lm_studio_url"));
+    if (existing.length > 0) {
+      await db.update(appSettingsTable).set({ value: url, updatedAt: new Date() }).where(eq(appSettingsTable.key, "lm_studio_url"));
+    } else {
+      await db.insert(appSettingsTable).values({ key: "lm_studio_url", value: url });
+    }
+    res.json({ url });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save LM Studio URL");
+    res.status(400).json({ error: "Failed to save LM Studio URL" });
+  }
+});
+
+router.get("/ai-model/test-connection", async (req, res) => {
+  try {
+    const rows = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "lm_studio_url"));
+    const baseUrl = rows[0]?.value ?? process.env.LM_STUDIO_URL ?? "http://localhost:1234";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`${baseUrl}/v1/models`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (response.ok) {
+        const data = await response.json() as { data?: unknown[] };
+        res.json({ connected: true, url: baseUrl, modelCount: data?.data?.length ?? 0 });
+      } else {
+        res.json({ connected: false, url: baseUrl, error: `HTTP ${response.status}` });
+      }
+    } catch (fetchErr: unknown) {
+      clearTimeout(timeout);
+      const isAbort = fetchErr instanceof Error && fetchErr.name === "AbortError";
+      res.json({ connected: false, url: baseUrl, error: isAbort ? "Connection timed out" : "LM Studio not running — check that it's open" });
+    }
+  } catch (err) {
+    req.log.error({ err }, "Failed to test LM Studio connection");
+    res.status(500).json({ error: "Failed to test connection" });
+  }
+});
+
 export async function getActiveQuestionsForCycleDay(cycleDay: number | null): Promise<{ id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[]> {
   await ensureSeeded();
   const questions = await db.select().from(healthQuestionsTable).where(eq(healthQuestionsTable.active, true)).orderBy(desc(healthQuestionsTable.priority));
