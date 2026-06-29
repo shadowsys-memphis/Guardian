@@ -49,6 +49,17 @@ export function JessicaPhone() {
   const { data: aiModelStatus } = useGetAiModel({ query: { refetchInterval: 10000 } });
   const activeModelLabel = (aiModelStatus as any)?.models?.find((m: any) => m.id === (aiModelStatus as any)?.activeModel)?.label ?? "Gemini 2.5 Flash";
   const activeModelId = (aiModelStatus as any)?.activeModel ?? "gemini";
+  const isLocalModel = activeModelId !== "gemini";
+  const [lmStatus, setLmStatus] = useState<"unchecked" | "checking" | "connected" | "unreachable">("unchecked");
+
+  useEffect(() => {
+    if (!isLocalModel) { setLmStatus("unchecked"); return; }
+    setLmStatus("checking");
+    fetch(`${BASE_URL}/api/ai-model/test-connection`)
+      .then((r) => r.json())
+      .then((d: any) => setLmStatus(d?.connected ? "connected" : "unreachable"))
+      .catch(() => setLmStatus("unreachable"));
+  }, [isLocalModel]);
 
   useEffect(() => {
     synth.current = window.speechSynthesis;
@@ -255,10 +266,36 @@ export function JessicaPhone() {
                 Tap to Call Jessica
               </p>
               <div className="flex justify-center">
-                <span className={`px-3 py-1 rounded-sm border text-xs font-display uppercase tracking-widest ${activeModelId === "gemini" ? "border-primary/30 text-primary/60 bg-primary/5" : "border-amber-500/30 text-amber-400/70 bg-amber-500/5"}`}>
+                <button
+                  onClick={() => {
+                    if (!isLocalModel) return;
+                    setLmStatus("checking");
+                    fetch(`${BASE_URL}/api/ai-model/test-connection`)
+                      .then((r) => r.json())
+                      .then((d: any) => setLmStatus(d?.connected ? "connected" : "unreachable"))
+                      .catch(() => setLmStatus("unreachable"));
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1 rounded-sm border text-xs font-display uppercase tracking-widest ${activeModelId === "gemini" ? "border-primary/30 text-primary/60 bg-primary/5 cursor-default" : "border-amber-500/30 text-amber-400/70 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"}`}
+                  title={isLocalModel ? "Click to re-check LM Studio connection" : undefined}
+                >
+                  {isLocalModel && (
+                    <span
+                      className={`h-2 w-2 rounded-full shrink-0 ${
+                        lmStatus === "checking" ? "bg-muted-foreground animate-pulse" :
+                        lmStatus === "connected" ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.8)]" :
+                        lmStatus === "unreachable" ? "bg-destructive" :
+                        "bg-muted-foreground/40"
+                      }`}
+                    />
+                  )}
                   {activeModelLabel}
-                </span>
+                </button>
               </div>
+              {isLocalModel && lmStatus === "unreachable" && (
+                <p className="text-xs text-destructive/70 font-display uppercase tracking-widest">
+                  LM Studio not reachable — check it's open
+                </p>
+              )}
             </div>
           )}
           {quietWindowMessage && (

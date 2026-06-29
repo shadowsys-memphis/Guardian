@@ -674,6 +674,22 @@ export interface SetAiModelInput {
   activeModel: string;
 }
 
+export interface LmStudioUrlResponse {
+  url: string;
+}
+
+export interface SetLmStudioUrlInput {
+  url: string;
+}
+
+export interface LmStudioConnectionResult {
+  connected: boolean;
+  url?: string;
+  modelCount?: number;
+  modelIds?: string[];
+  error?: string;
+}
+
 export type MonthlyReportCategoryStatus = { [key: string]: string };
 
 export interface MonthlyReport {
@@ -691,6 +707,13 @@ export interface MonthlyReport {
 
 export type GetSymptomLogsParams = {
   limit?: number;
+};
+
+export type TestLmStudioConnectionParams = {
+  /**
+   * URL to test (overrides saved setting — use to test before saving)
+   */
+  url?: string;
 };
 
 export type GetIntercomMessagesParams = {

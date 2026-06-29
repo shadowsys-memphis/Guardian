@@ -676,23 +676,27 @@ router.put("/ai-model/lm-studio-url", async (req, res) => {
 
 router.get("/ai-model/test-connection", async (req, res) => {
   try {
-    const rows = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "lm_studio_url"));
-    const baseUrl = rows[0]?.value ?? process.env.LM_STUDIO_URL ?? "http://localhost:1234";
+    let baseUrl = typeof req.query.url === "string" && req.query.url ? req.query.url : null;
+    if (!baseUrl) {
+      const rows = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "lm_studio_url"));
+      baseUrl = rows[0]?.value ?? process.env.LM_STUDIO_URL ?? "http://localhost:1234";
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
       const response = await fetch(`${baseUrl}/v1/models`, { signal: controller.signal });
       clearTimeout(timeout);
       if (response.ok) {
-        const data = await response.json() as { data?: unknown[] };
-        res.json({ connected: true, url: baseUrl, modelCount: data?.data?.length ?? 0 });
+        const data = await response.json() as { data?: Array<{ id: string }> };
+        const modelIds = (data?.data ?? []).map((m) => m.id);
+        res.json({ connected: true, url: baseUrl, modelCount: modelIds.length, modelIds });
       } else {
-        res.json({ connected: false, url: baseUrl, error: `HTTP ${response.status}` });
+        res.json({ connected: false, url: baseUrl, error: `HTTP ${response.status}`, modelIds: [] });
       }
     } catch (fetchErr: unknown) {
       clearTimeout(timeout);
       const isAbort = fetchErr instanceof Error && fetchErr.name === "AbortError";
-      res.json({ connected: false, url: baseUrl, error: isAbort ? "Connection timed out" : "LM Studio not running — check that it's open" });
+      res.json({ connected: false, url: baseUrl, error: isAbort ? "Connection timed out" : "LM Studio not running — check that it's open", modelIds: [] });
     }
   } catch (err) {
     req.log.error({ err }, "Failed to test LM Studio connection");

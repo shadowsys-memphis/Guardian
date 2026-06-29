@@ -46,17 +46,21 @@ import type {
   HealthStatus,
   IntercomMessage,
   ListCallSessionsParams,
+  LmStudioConnectionResult,
+  LmStudioUrlResponse,
   Meal,
   MealCraving,
   MealWithIngredients,
   MonthlyReport,
   ScheduleTask,
   SetAiModelInput,
+  SetLmStudioUrlInput,
   SheetsSyncInput,
   SheetsSyncResult,
   SmartHomeDevice,
   StartCallSessionInput,
   SymptomLog,
+  TestLmStudioConnectionParams,
   TrendDataPoint,
   UpdateAppStateInput,
   UpdateCravingInput,
@@ -2148,6 +2152,273 @@ export const useSetAiModel = <
 > => {
   return useMutation(getSetAiModelMutationOptions(options));
 };
+
+/**
+ * @summary Get the configured LM Studio base URL
+ */
+export const getGetLmStudioUrlUrl = () => {
+  return `/api/ai-model/lm-studio-url`;
+};
+
+export const getLmStudioUrl = async (
+  options?: RequestInit,
+): Promise<LmStudioUrlResponse> => {
+  return customFetch<LmStudioUrlResponse>(getGetLmStudioUrlUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLmStudioUrlQueryKey = () => {
+  return [`/api/ai-model/lm-studio-url`] as const;
+};
+
+export const getGetLmStudioUrlQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLmStudioUrl>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLmStudioUrl>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLmStudioUrlQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLmStudioUrl>>> = ({
+    signal,
+  }) => getLmStudioUrl({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLmStudioUrl>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLmStudioUrlQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLmStudioUrl>>
+>;
+export type GetLmStudioUrlQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the configured LM Studio base URL
+ */
+
+export function useGetLmStudioUrl<
+  TData = Awaited<ReturnType<typeof getLmStudioUrl>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLmStudioUrl>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLmStudioUrlQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Save the LM Studio base URL to app settings
+ */
+export const getSetLmStudioUrlUrl = () => {
+  return `/api/ai-model/lm-studio-url`;
+};
+
+export const setLmStudioUrl = async (
+  setLmStudioUrlInput: SetLmStudioUrlInput,
+  options?: RequestInit,
+): Promise<LmStudioUrlResponse> => {
+  return customFetch<LmStudioUrlResponse>(getSetLmStudioUrlUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setLmStudioUrlInput),
+  });
+};
+
+export const getSetLmStudioUrlMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setLmStudioUrl>>,
+    TError,
+    { data: BodyType<SetLmStudioUrlInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setLmStudioUrl>>,
+  TError,
+  { data: BodyType<SetLmStudioUrlInput> },
+  TContext
+> => {
+  const mutationKey = ["setLmStudioUrl"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setLmStudioUrl>>,
+    { data: BodyType<SetLmStudioUrlInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setLmStudioUrl(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetLmStudioUrlMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setLmStudioUrl>>
+>;
+export type SetLmStudioUrlMutationBody = BodyType<SetLmStudioUrlInput>;
+export type SetLmStudioUrlMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Save the LM Studio base URL to app settings
+ */
+export const useSetLmStudioUrl = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setLmStudioUrl>>,
+    TError,
+    { data: BodyType<SetLmStudioUrlInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setLmStudioUrl>>,
+  TError,
+  { data: BodyType<SetLmStudioUrlInput> },
+  TContext
+> => {
+  return useMutation(getSetLmStudioUrlMutationOptions(options));
+};
+
+/**
+ * @summary Test connectivity to the LM Studio server
+ */
+export const getTestLmStudioConnectionUrl = (
+  params?: TestLmStudioConnectionParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/ai-model/test-connection?${stringifiedParams}`
+    : `/api/ai-model/test-connection`;
+};
+
+export const testLmStudioConnection = async (
+  params?: TestLmStudioConnectionParams,
+  options?: RequestInit,
+): Promise<LmStudioConnectionResult> => {
+  return customFetch<LmStudioConnectionResult>(
+    getTestLmStudioConnectionUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getTestLmStudioConnectionQueryKey = (
+  params?: TestLmStudioConnectionParams,
+) => {
+  return [
+    `/api/ai-model/test-connection`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getTestLmStudioConnectionQueryOptions = <
+  TData = Awaited<ReturnType<typeof testLmStudioConnection>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: TestLmStudioConnectionParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof testLmStudioConnection>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getTestLmStudioConnectionQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof testLmStudioConnection>>
+  > = ({ signal }) =>
+    testLmStudioConnection(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof testLmStudioConnection>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type TestLmStudioConnectionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof testLmStudioConnection>>
+>;
+export type TestLmStudioConnectionQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Test connectivity to the LM Studio server
+ */
+
+export function useTestLmStudioConnection<
+  TData = Awaited<ReturnType<typeof testLmStudioConnection>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: TestLmStudioConnectionParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof testLmStudioConnection>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getTestLmStudioConnectionQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get all smart home devices and their state

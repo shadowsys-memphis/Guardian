@@ -524,6 +524,44 @@ export const SetAiModelResponse = zod.object({
 });
 
 /**
+ * @summary Get the configured LM Studio base URL
+ */
+export const GetLmStudioUrlResponse = zod.object({
+  url: zod.string(),
+});
+
+/**
+ * @summary Save the LM Studio base URL to app settings
+ */
+export const SetLmStudioUrlBody = zod.object({
+  url: zod.string(),
+});
+
+export const SetLmStudioUrlResponse = zod.object({
+  url: zod.string(),
+});
+
+/**
+ * @summary Test connectivity to the LM Studio server
+ */
+export const TestLmStudioConnectionQueryParams = zod.object({
+  url: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "URL to test (overrides saved setting — use to test before saving)",
+    ),
+});
+
+export const TestLmStudioConnectionResponse = zod.object({
+  connected: zod.boolean(),
+  url: zod.string().optional(),
+  modelCount: zod.number().optional(),
+  modelIds: zod.array(zod.string()).optional(),
+  error: zod.string().optional(),
+});
+
+/**
  * @summary Get all smart home devices and their state
  */
 export const GetSmartHomeDevicesResponseItem = zod.object({

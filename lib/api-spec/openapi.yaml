@@ -467,6 +467,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/GeminiError"
 
+  /ai-model/lm-studio-url:
+    get:
+      operationId: getLmStudioUrl
+      tags: [health-assessment]
+      summary: Get the configured LM Studio base URL
+      responses:
+        "200":
+          description: Current LM Studio URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LmStudioUrlResponse"
+    put:
+      operationId: setLmStudioUrl
+      tags: [health-assessment]
+      summary: Save the LM Studio base URL to app settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetLmStudioUrlInput"
+      responses:
+        "200":
+          description: Saved URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LmStudioUrlResponse"
+
+  /ai-model/test-connection:
+    get:
+      operationId: testLmStudioConnection
+      tags: [health-assessment]
+      summary: Test connectivity to the LM Studio server
+      parameters:
+        - name: url
+          in: query
+          required: false
+          schema:
+            type: string
+          description: URL to test (overrides saved setting — use to test before saving)
+      responses:
+        "200":
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LmStudioConnectionResult"
+
   /smarthome/devices:
     get:
       operationId: getSmartHomeDevices
@@ -2061,6 +2111,40 @@ components:
           type: string
       required:
         - activeModel
+
+    LmStudioUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+      required:
+        - url
+
+    SetLmStudioUrlInput:
+      type: object
+      properties:
+        url:
+          type: string
+      required:
+        - url
+
+    LmStudioConnectionResult:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        url:
+          type: string
+        modelCount:
+          type: integer
+        modelIds:
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+      required:
+        - connected
 
     MonthlyReport:
       type: object

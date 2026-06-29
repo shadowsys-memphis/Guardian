@@ -32,6 +32,8 @@ import {
   useGetTodaySummary, getGetTodaySummaryQueryKey, useListCallSessions, useGetSessionDataPoints, getGetSessionDataPointsQueryKey, useGetAssessmentTrends, useGetAssessmentAnomalies,
   useGetAssessmentSettings, useUpdateAssessmentSettings,
   useGetAiModel, useSetAiModel, getGetAiModelQueryKey,
+  useGetLmStudioUrl, useSetLmStudioUrl, testLmStudioConnection,
+  type LmStudioConnectionResult,
   useListMeals, useCreateMeal, useDeleteMeal, useSyncFromSheets,
   useGetCart, useAddMealToCart, useRemoveMealFromCart, useApproveCart, useDismissCart,
   useListCravings, useCreateCraving, useUpdateCraving,
@@ -563,17 +565,16 @@ function AiBrainSection() {
   const activeModel = (aiStatus as any)?.activeModel ?? "gemini";
   const models: Array<{ id: string; label: string; provider: string; lmStudioModelId: string | null }> = (aiStatus as any)?.models ?? [];
 
+  const { data: lmUrlData } = useGetLmStudioUrl();
+  const saveLmUrl = useSetLmStudioUrl();
+
   const [lmUrl, setLmUrl] = useState("http://localhost:1234");
-  const [urlSaving, setUrlSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ connected: boolean; error?: string; modelCount?: number } | null>(null);
+  const [testResult, setTestResult] = useState<LmStudioConnectionResult | null>(null);
 
   useEffect(() => {
-    fetch(`${BASE_URL}/api/ai-model/lm-studio-url`)
-      .then((r) => r.json())
-      .then((d: any) => { if (d?.url) setLmUrl(d.url); })
-      .catch(() => {});
-  }, []);
+    if ((lmUrlData as any)?.url) setLmUrl((lmUrlData as any).url);
+  }, [lmUrlData]);
 
   const handleSelect = (modelId: string) => {
     setAiModel.mutate({ data: { activeModel: modelId } }, {
@@ -585,33 +586,19 @@ function AiBrainSection() {
     });
   };
 
-  const handleSaveUrl = async () => {
-    setUrlSaving(true);
+  const handleSaveUrl = () => {
     setTestResult(null);
-    try {
-      const r = await fetch(`${BASE_URL}/api/ai-model/lm-studio-url`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: lmUrl.trim() }),
-      });
-      if (r.ok) {
-        toast({ title: "LM Studio URL saved" });
-      } else {
-        toast({ title: "Failed to save URL", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Failed to save URL", variant: "destructive" });
-    } finally {
-      setUrlSaving(false);
-    }
+    saveLmUrl.mutate({ data: { url: lmUrl.trim() } }, {
+      onSuccess: () => toast({ title: "LM Studio URL saved" }),
+      onError: () => toast({ title: "Failed to save URL", variant: "destructive" }),
+    });
   };
 
   const handleTestConnection = async () => {
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await fetch(`${BASE_URL}/api/ai-model/test-connection`);
-      const d = await r.json() as { connected: boolean; error?: string; modelCount?: number };
+      const d = await testLmStudioConnection({ url: lmUrl.trim() });
       setTestResult(d);
     } catch {
       setTestResult({ connected: false, error: "Could not reach the API server" });
@@ -685,8 +672,8 @@ function AiBrainSection() {
               placeholder="http://localhost:1234"
               className="flex-1 bg-secondary border border-border rounded-sm px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary"
             />
-            <Button size="sm" onClick={handleSaveUrl} disabled={urlSaving}>
-              {urlSaving ? "Saving…" : "Save"}
+            <Button size="sm" onClick={handleSaveUrl} disabled={saveLmUrl.isPending}>
+              {saveLmUrl.isPending ? "Saving…" : "Save"}
             </Button>
           </div>
           <Button
@@ -699,14 +686,44 @@ function AiBrainSection() {
             {testing ? "Testing…" : "Test Connection"}
           </Button>
           {testResult && (
-            <div className={`p-3 rounded-sm border text-xs font-display uppercase tracking-widest ${
+            <div className={`p-3 rounded-sm border text-xs font-display space-y-2 ${
               testResult.connected
                 ? "border-green-500/30 bg-green-500/10 text-green-400"
                 : "border-destructive/30 bg-destructive/10 text-destructive"
             }`}>
-              {testResult.connected
-                ? `Connected — ${testResult.modelCount ?? 0} model${testResult.modelCount === 1 ? "" : "s"} loaded`
-                : `Not reachable — ${testResult.error ?? "unknown error"}`}
+              <p className="uppercase tracking-widest">
+                {testResult.connected
+                  ? `Connected — ${testResult.modelCount ?? 0} model${testResult.modelCount === 1 ? "" : "s"} loaded`
+                  : `Not reachable — ${testResult.error ?? "unknown error"}`}
+              </p>
+              {testResult.connected && testResult.modelIds && testResult.modelIds.length > 0 && (
+                <ul className="space-y-1 pt-1 border-t border-green-500/20">
+                  {testResult.modelIds.map((id) => {
+                    const knownModel = models.find((m) => m.lmStudioModelId && id.toLowerCase().includes(m.lmStudioModelId.toLowerCase()));
+                    return (
+                      <li key={id} className={`flex items-center gap-2 ${knownModel ? "text-green-300" : "text-green-600/60"}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${knownModel ? "bg-green-400" : "bg-green-700/50"}`} />
+                        <span className="font-mono normal-case tracking-normal truncate">{id}</span>
+                        {knownModel && <span className="ml-auto shrink-0 opacity-60">{knownModel.label}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {testResult.connected && (testResult.modelIds ?? []).length === 0 && (
+                <p className="uppercase tracking-widest text-amber-400 border-t border-green-500/20 pt-1">
+                  No models loaded — open a model in LM Studio
+                </p>
+              )}
+              {testResult.connected && activeModel !== "gemini" && (testResult.modelIds ?? []).length > 0 && (() => {
+                const activeInfo = models.find((m) => m.id === activeModel);
+                const isLoaded = activeInfo?.lmStudioModelId && testResult.modelIds!.some((id) => id.toLowerCase().includes(activeInfo.lmStudioModelId!.toLowerCase()));
+                return !isLoaded ? (
+                  <p className="uppercase tracking-widest text-amber-400 border-t border-green-500/20 pt-1">
+                    ⚠ Active model ({activeInfo?.label ?? activeModel}) not found in loaded list
+                  </p>
+                ) : null;
+              })()}
             </div>
           )}
           <p className="text-xs text-muted-foreground/50">
