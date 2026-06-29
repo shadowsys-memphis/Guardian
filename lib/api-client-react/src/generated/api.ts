@@ -27,6 +27,8 @@ import type {
   AssessmentSummary,
   AssistantChatInput,
   AssistantChatResult,
+  CalendarEventInput,
+  CalendarEventResult,
   CallSession,
   CartWithMeals,
   CreateCareLogInput,
@@ -38,6 +40,8 @@ import type {
   CreateScheduleTaskInput,
   CreateSymptomLogInput,
   CreateVoiceScriptInput,
+  DriveExportInput,
+  DriveExportResult,
   GeminiConversation,
   GeminiConversationInput,
   GeminiConversationWithMessages,
@@ -5637,4 +5641,176 @@ export const useChatWithAssistant = <
   TContext
 > => {
   return useMutation(getChatWithAssistantMutationOptions(options));
+};
+
+/**
+ * @summary Create a Google Calendar event using an OAuth access token
+ */
+export const getCreateCalendarEventUrl = () => {
+  return `/api/calendar/events`;
+};
+
+export const createCalendarEvent = async (
+  calendarEventInput: CalendarEventInput,
+  options?: RequestInit,
+): Promise<CalendarEventResult> => {
+  return customFetch<CalendarEventResult>(getCreateCalendarEventUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(calendarEventInput),
+  });
+};
+
+export const getCreateCalendarEventMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCalendarEvent>>,
+    TError,
+    { data: BodyType<CalendarEventInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCalendarEvent>>,
+  TError,
+  { data: BodyType<CalendarEventInput> },
+  TContext
+> => {
+  const mutationKey = ["createCalendarEvent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCalendarEvent>>,
+    { data: BodyType<CalendarEventInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCalendarEvent(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCalendarEventMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCalendarEvent>>
+>;
+export type CreateCalendarEventMutationBody = BodyType<CalendarEventInput>;
+export type CreateCalendarEventMutationError = ErrorType<void>;
+
+/**
+ * @summary Create a Google Calendar event using an OAuth access token
+ */
+export const useCreateCalendarEvent = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCalendarEvent>>,
+    TError,
+    { data: BodyType<CalendarEventInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCalendarEvent>>,
+  TError,
+  { data: BodyType<CalendarEventInput> },
+  TContext
+> => {
+  return useMutation(getCreateCalendarEventMutationOptions(options));
+};
+
+/**
+ * @summary Export a text file to Google Drive using an OAuth access token
+ */
+export const getExportToDriveUrl = () => {
+  return `/api/drive/export`;
+};
+
+export const exportToDrive = async (
+  driveExportInput: DriveExportInput,
+  options?: RequestInit,
+): Promise<DriveExportResult> => {
+  return customFetch<DriveExportResult>(getExportToDriveUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(driveExportInput),
+  });
+};
+
+export const getExportToDriveMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exportToDrive>>,
+    TError,
+    { data: BodyType<DriveExportInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof exportToDrive>>,
+  TError,
+  { data: BodyType<DriveExportInput> },
+  TContext
+> => {
+  const mutationKey = ["exportToDrive"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof exportToDrive>>,
+    { data: BodyType<DriveExportInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return exportToDrive(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ExportToDriveMutationResult = NonNullable<
+  Awaited<ReturnType<typeof exportToDrive>>
+>;
+export type ExportToDriveMutationBody = BodyType<DriveExportInput>;
+export type ExportToDriveMutationError = ErrorType<void>;
+
+/**
+ * @summary Export a text file to Google Drive using an OAuth access token
+ */
+export const useExportToDrive = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exportToDrive>>,
+    TError,
+    { data: BodyType<DriveExportInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof exportToDrive>>,
+  TError,
+  { data: BodyType<DriveExportInput> },
+  TContext
+> => {
+  return useMutation(getExportToDriveMutationOptions(options));
 };

@@ -1295,3 +1295,53 @@ export const ChatWithAssistantBody = zod.object({
 export const ChatWithAssistantResponse = zod.object({
   reply: zod.string(),
 });
+
+/**
+ * @summary Create a Google Calendar event using an OAuth access token
+ */
+export const CreateCalendarEventHeader = zod.object({
+  "x-google-access-token": zod
+    .string()
+    .optional()
+    .describe("Google OAuth2 access token with calendar.events scope"),
+});
+
+export const CreateCalendarEventBody = zod.object({
+  summary: zod.string(),
+  description: zod.string().optional(),
+  startTime: zod.string().describe("ISO 8601 datetime string"),
+  endTime: zod
+    .string()
+    .optional()
+    .describe("ISO 8601 datetime string (optional — defaults to +30min)"),
+  allDay: zod.boolean().optional(),
+});
+
+export const CreateCalendarEventResponse = zod.object({
+  success: zod.boolean(),
+  eventLink: zod.string().nullish(),
+  eventId: zod.string().nullish(),
+});
+
+/**
+ * @summary Export a text file to Google Drive using an OAuth access token
+ */
+export const ExportToDriveHeader = zod.object({
+  "x-google-access-token": zod
+    .string()
+    .optional()
+    .describe("Google OAuth2 access token with drive.file scope"),
+});
+
+export const ExportToDriveBody = zod.object({
+  filename: zod.string(),
+  content: zod.string(),
+  mimeType: zod.string().optional(),
+});
+
+export const ExportToDriveResponse = zod.object({
+  success: zod.boolean(),
+  link: zod.string().nullish(),
+  fileId: zod.string().nullish(),
+  filename: zod.string().optional(),
+});

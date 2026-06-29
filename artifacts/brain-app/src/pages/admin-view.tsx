@@ -29,6 +29,8 @@ import {
   ChevronUp,
   ClipboardList,
   Send,
+  Cloud,
+  CalendarPlus,
 } from "lucide-react";
 
 import {
@@ -72,6 +74,26 @@ import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
 type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation";
+
+const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function getGoogleToken(): string | null {
+  return localStorage.getItem("brain_google_token");
+}
+
+function promptGoogleToken(toast: (opts: any) => void): string | null {
+  const existing = getGoogleToken();
+  const token = window.prompt(
+    "Paste your Google OAuth2 access token (Calendar + Drive scope):\n\nGet one at: https://developers.google.com/oauthplayground\nScopes: calendar.events, drive.file\n\nExisting token will be overwritten.",
+    existing ?? ""
+  );
+  if (token && token.trim()) {
+    localStorage.setItem("brain_google_token", token.trim());
+    toast({ title: "Google token saved", description: "Your token is stored in browser storage for this session." });
+    return token.trim();
+  }
+  return existing;
+}
 
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -1429,6 +1451,57 @@ function ShopperTab() {
   const { data: meals, refetch: refetchMeals } = useListMeals();
   const { data: cart, refetch: refetchCart } = useGetCart();
   const { data: cravings, refetch: refetchCravings } = useListCravings();
+  const [mealDriveExporting, setMealDriveExporting] = useState(false);
+
+  const handleExportMealPlan = async () => {
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+    const mealsInCart = (cart?.meals ?? []) as any[];
+    if (mealsInCart.length === 0) {
+      toast({ title: "No meals in cart", description: "Add meals to this week's cart before exporting.", variant: "destructive" });
+      return;
+    }
+    const lines: string[] = [
+      `br(AI)n Weekly Meal Plan — Week of ${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}`,
+      `Generated: ${new Date().toLocaleString()}`,
+      `Budget: $${((cart?.totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $${((cart?.budgetCents ?? 15000) / 100).toFixed(2)}`,
+      `Status: ${(cart?.status ?? "pending").toUpperCase()}`,
+      "",
+      "== MEALS ==",
+      ...mealsInCart.map((m: any, i: number) => [
+        `${i + 1}. ${m.name} — $${(m.estimatedCostCents / 100).toFixed(2)}`,
+        ...((m.ingredients ?? []) as any[]).map((ing: any) => `   • ${ing.name}: ${ing.quantity} ${ing.unit}`),
+      ].join("\n")),
+      "",
+      "== SHOPPING LIST ==",
+      ...((cart as any)?.items ?? []).map((item: any) =>
+        `• ${item.ingredientName}: ${item.totalQuantity} ${item.unit} — $${(item.estimatedCostCents / 100).toFixed(2)}`
+      ),
+    ];
+    const content = lines.join("\n");
+    const filename = `meal-plan-${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}.txt`;
+    setMealDriveExporting(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/drive/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-google-access-token": token },
+        body: JSON.stringify({ filename, content, mimeType: "text/plain" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Drive export failed.");
+      toast({ title: "Meal Plan exported!", description: data.link ? `Saved as "${data.filename}"` : "File saved to Google Drive." });
+    } catch (err: any) {
+      const msg: string = err?.message ?? "Drive export failed.";
+      if (msg.includes("denied") || msg.includes("access")) {
+        toast({ title: "Google access denied", description: "Re-grant Drive permissions in your Google Account.", variant: "destructive" });
+      } else {
+        toast({ title: "Drive export failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setMealDriveExporting(false);
+    }
+  };
 
   const addMealToCart = useAddMealToCart({ mutation: { onSuccess: () => refetchCart() } });
   const removeMealFromCart = useRemoveMealFromCart({ mutation: { onSuccess: () => refetchCart() } });
@@ -1453,9 +1526,14 @@ function ShopperTab() {
 
   return (
     <div className="space-y-6">
-      <header className="mb-6 border-b border-border/50 pb-4">
-        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Shopper</h2>
-        <p className="text-sm text-muted-foreground mt-1">Weekly meal planning &amp; grocery cart for Pops</p>
+      <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
+        <div>
+          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Shopper</h2>
+          <p className="text-sm text-muted-foreground mt-1">Weekly meal planning &amp; grocery cart for Pops</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={handleExportMealPlan} disabled={mealDriveExporting} className="gap-2 shrink-0">
+          <Cloud size={14} /> Export Meal Plan to Drive
+        </Button>
       </header>
 
       {/* Budget Bar */}
@@ -1777,6 +1855,8 @@ function RotationTab() {
   const updateTask = useUpdateRotationTask();
   const deleteTask = useDeleteRotationTask();
   const generateSummary = useGenerateClinicalSummary();
+  const [calSyncing, setCalSyncing] = useState<number | null>(null);
+  const [driveExporting, setDriveExporting] = useState(false);
 
   const taskList = tasks as RotationTask[];
   const logList = logs as HistoricalCareLog[];
@@ -1823,6 +1903,68 @@ function RotationTab() {
         setNewTask({ title: "", period: "morning", timeSlot: "9:00 AM", category: "Physical Rotation", isHourly: false });
       },
     });
+  };
+
+  const handleSyncCal = async (t: RotationTask) => {
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+    setCalSyncing(t.id);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const [timePart, ampm] = t.timeSlot.split(" ");
+      const [h, m] = timePart.split(":").map(Number);
+      const hour24 = ampm === "PM" && h !== 12 ? h + 12 : ampm === "AM" && h === 12 ? 0 : h;
+      const startIso = new Date(`${today}T${String(hour24).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}:00`).toISOString();
+      const res = await fetch(`${WORKSPACE_BASE}/api/calendar/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-google-access-token": token },
+        body: JSON.stringify({
+          summary: `[Pops] ${t.title}`,
+          description: `Category: ${t.category}\nPeriod: ${t.period}\nTime: ${t.timeSlot}${t.loggedNote ? `\nNote: ${t.loggedNote}` : ""}`,
+          startTime: startIso,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Calendar sync failed.");
+      toast({ title: "Synced to Calendar!", description: data.eventLink ? "Event created" : "Event added to Google Calendar." });
+    } catch (err: any) {
+      const msg: string = err?.message ?? "Calendar sync failed.";
+      if (msg.includes("denied") || msg.includes("access")) {
+        toast({ title: "Google access denied", description: "Re-grant Calendar permissions in your Google Account.", variant: "destructive" });
+      } else {
+        toast({ title: "Calendar sync failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setCalSyncing(null);
+    }
+  };
+
+  const handleExportSummaryToDrive = async () => {
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+    setDriveExporting(true);
+    try {
+      const filename = `clinical-summary-${new Date().toISOString().split("T")[0]}.txt`;
+      const res = await fetch(`${WORKSPACE_BASE}/api/drive/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-google-access-token": token },
+        body: JSON.stringify({ filename, content: summaryMarkdown, mimeType: "text/plain" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Drive export failed.");
+      toast({ title: "Exported to Drive!", description: data.link ? `Saved as "${data.filename}"` : "File saved to Google Drive." });
+    } catch (err: any) {
+      const msg: string = err?.message ?? "Drive export failed.";
+      if (msg.includes("denied") || msg.includes("access")) {
+        toast({ title: "Google access denied", description: "Re-grant Drive permissions in your Google Account.", variant: "destructive" });
+      } else {
+        toast({ title: "Drive export failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setDriveExporting(false);
+    }
   };
 
   const handleGenerateSummary = () => {
@@ -1960,10 +2102,20 @@ function RotationTab() {
                   </div>
                 </div>
 
-                <button onClick={() => { if (confirm(`Delete "${t.title}"?`)) deleteTask.mutate({ id: t.id }, { onSuccess: () => refetchTasks() }); }}
-                  className="shrink-0 p-1.5 rounded-sm border border-destructive/20 text-destructive/40 hover:border-destructive/50 hover:text-destructive transition-colors mt-0.5">
-                  <Trash2 size={11} />
-                </button>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button
+                    onClick={() => handleSyncCal(t)}
+                    disabled={calSyncing === t.id}
+                    title="Sync to Google Calendar"
+                    className="p-1.5 rounded-sm border border-primary/20 text-primary/40 hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-40"
+                  >
+                    <CalendarPlus size={11} />
+                  </button>
+                  <button onClick={() => { if (confirm(`Delete "${t.title}"?`)) deleteTask.mutate({ id: t.id }, { onSuccess: () => refetchTasks() }); }}
+                    className="p-1.5 rounded-sm border border-destructive/20 text-destructive/40 hover:border-destructive/50 hover:text-destructive transition-colors">
+                    <Trash2 size={11} />
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -2044,12 +2196,15 @@ function RotationTab() {
       {/* Clinical Summary Modal */}
       <Modal isOpen={showSummary} onClose={() => setShowSummary(false)} title="Clinical Summary">
         <div className="space-y-3">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button size="sm" variant="outline" className="gap-2" onClick={handleCopy}>
               <Copy size={12} /> Copy
             </Button>
             <Button size="sm" variant="outline" className="gap-2" onClick={handleDownload}>
-              <Download size={12} /> Download .md
+              <Download size={12} /> Download .txt
+            </Button>
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleExportSummaryToDrive} disabled={driveExporting}>
+              <Cloud size={12} /> Export to Drive
             </Button>
           </div>
           <div className="max-h-[60vh] overflow-y-auto rounded-sm border border-border bg-secondary/10 p-4">

@@ -11,6 +11,7 @@ import healthAssessmentRouter from "./health-assessment";
 import shopperRouter from "./shopper";
 import rotationRouter from "./rotation";
 import adminRouter from "./admin";
+import workspaceRouter from "./workspace";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(healthAssessmentRouter);
 router.use(shopperRouter);
 router.use(rotationRouter);
 router.use(adminRouter);
+router.use(workspaceRouter);
 
 export default router;

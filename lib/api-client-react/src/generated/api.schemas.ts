@@ -780,6 +780,35 @@ export interface AssistantChatResult {
   reply: string;
 }
 
+export interface CalendarEventInput {
+  summary: string;
+  description?: string;
+  /** ISO 8601 datetime string */
+  startTime: string;
+  /** ISO 8601 datetime string (optional — defaults to +30min) */
+  endTime?: string;
+  allDay?: boolean;
+}
+
+export interface CalendarEventResult {
+  success: boolean;
+  eventLink?: string | null;
+  eventId?: string | null;
+}
+
+export interface DriveExportInput {
+  filename: string;
+  content: string;
+  mimeType?: string;
+}
+
+export interface DriveExportResult {
+  success: boolean;
+  link?: string | null;
+  fileId?: string | null;
+  filename?: string;
+}
+
 export type GetSymptomLogsParams = {
   limit?: number;
 };

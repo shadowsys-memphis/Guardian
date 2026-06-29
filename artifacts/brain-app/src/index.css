@@ -139,3 +139,13 @@
   50% { opacity: 1; }
   100% { opacity: 0.95; }
 }
+
+@keyframes waveform {
+  0%, 100% { transform: scaleY(0.4); opacity: 0.6; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+.animate-waveform {
+  animation: waveform 0.8s ease-in-out infinite;
+  transform-origin: bottom;
+}
