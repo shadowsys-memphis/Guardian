@@ -196,3 +196,31 @@ export type InsertHealthQuestion = z.infer<typeof insertHealthQuestionSchema>;
 export type InsertCallSession = z.infer<typeof insertCallSessionSchema>;
 export type InsertHealthDataPoint = z.infer<typeof insertHealthDataPointSchema>;
 export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
+
+export const rotationTasksTable = pgTable("rotation_tasks", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  period: text("period").notNull().default("morning"),
+  timeSlot: text("time_slot").notNull().default("8:00 AM"),
+  isHourly: boolean("is_hourly").notNull().default(false),
+  category: text("category").notNull().default("Physical Rotation"),
+  status: text("status").notNull().default("pending"),
+  medResponse: text("med_response"),
+  loggedNote: text("logged_note"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const historicalCareLogsTable = pgTable("historical_care_logs", {
+  id: serial("id").primaryKey(),
+  dateLabel: text("date_label").notNull(),
+  wantsRespondedRate: integer("wants_responded_rate").notNull().default(0),
+  medAdherence: integer("med_adherence").notNull().default(0),
+  soreRotationComplete: integer("sore_rotation_complete").notNull().default(0),
+  generalNotes: text("general_notes"),
+  efficacyScore: integer("efficacy_score").notNull().default(5),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type RotationTask = typeof rotationTasksTable.$inferSelect;
+export type HistoricalCareLog = typeof historicalCareLogsTable.$inferSelect;

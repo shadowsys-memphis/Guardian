@@ -29,6 +29,10 @@ tags:
     description: Jessica health assessment sessions, questions, and data points
   - name: shopper
     description: Weekly meal planning, grocery cart building, and Pops craving suggestions
+  - name: rotation
+    description: Caregiver rotation task tracking and clinical care logging
+  - name: admin
+    description: Admin AI assistant and clinical summary generation
 paths:
   /healthz:
     get:
@@ -1018,6 +1022,146 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MonthlyReport"
+
+  /rotation/tasks:
+    get:
+      operationId: listRotationTasks
+      tags: [rotation]
+      summary: List all rotation tasks ordered by creation time
+      responses:
+        "200":
+          description: Array of rotation tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RotationTask"
+    post:
+      operationId: createRotationTask
+      tags: [rotation]
+      summary: Create a new rotation task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRotationTaskInput"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RotationTask"
+
+  /rotation/tasks/{id}:
+    patch:
+      operationId: updateRotationTask
+      tags: [rotation]
+      summary: Update task status, med response, or logged note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRotationTaskInput"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RotationTask"
+    delete:
+      operationId: deleteRotationTask
+      tags: [rotation]
+      summary: Delete a rotation task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /rotation/logs:
+    get:
+      operationId: listCareLogs
+      tags: [rotation]
+      summary: List historical care efficacy logs (last 30)
+      responses:
+        "200":
+          description: Array of care logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HistoricalCareLog"
+    post:
+      operationId: createCareLog
+      tags: [rotation]
+      summary: Create a historical care log entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCareLogInput"
+      responses:
+        "201":
+          description: Created log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoricalCareLog"
+
+  /admin/summary:
+    post:
+      operationId: generateClinicalSummary
+      tags: [admin]
+      summary: Generate a Gemini-powered clinical summary from rotation task data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSummaryInput"
+      responses:
+        "200":
+          description: Clinical summary markdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSummaryResult"
+
+  /assistant:
+    post:
+      operationId: chatWithAssistant
+      tags: [admin]
+      summary: Chat with the br(AI)n System AI assistant (uses Gemini)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantChatInput"
+      responses:
+        "200":
+          description: Assistant reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantChatResult"
 
 components:
   schemas:
@@ -2184,3 +2328,186 @@ components:
         - categoryStatus
         - trendData
         - narrative
+
+    RotationTask:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        period:
+          type: string
+        timeSlot:
+          type: string
+        isHourly:
+          type: boolean
+        category:
+          type: string
+        status:
+          type: string
+        medResponse:
+          type: string
+          nullable: true
+        loggedNote:
+          type: string
+          nullable: true
+        completedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - title
+        - period
+        - timeSlot
+        - isHourly
+        - category
+        - status
+        - createdAt
+
+    CreateRotationTaskInput:
+      type: object
+      properties:
+        title:
+          type: string
+        period:
+          type: string
+        timeSlot:
+          type: string
+        isHourly:
+          type: boolean
+        category:
+          type: string
+      required:
+        - title
+        - period
+        - timeSlot
+
+    UpdateRotationTaskInput:
+      type: object
+      properties:
+        status:
+          type: string
+        medResponse:
+          type: string
+          nullable: true
+        loggedNote:
+          type: string
+          nullable: true
+
+    HistoricalCareLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        dateLabel:
+          type: string
+        wantsRespondedRate:
+          type: integer
+        medAdherence:
+          type: integer
+        soreRotationComplete:
+          type: integer
+        generalNotes:
+          type: string
+          nullable: true
+        efficacyScore:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - dateLabel
+        - wantsRespondedRate
+        - medAdherence
+        - soreRotationComplete
+        - efficacyScore
+        - createdAt
+
+    CreateCareLogInput:
+      type: object
+      properties:
+        dateLabel:
+          type: string
+        wantsRespondedRate:
+          type: integer
+        medAdherence:
+          type: integer
+        soreRotationComplete:
+          type: integer
+        generalNotes:
+          type: string
+        efficacyScore:
+          type: integer
+      required:
+        - dateLabel
+        - wantsRespondedRate
+        - medAdherence
+        - soreRotationComplete
+        - efficacyScore
+
+    AdminSummaryInput:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/RotationTask"
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoricalCareLog"
+        patientName:
+          type: string
+        cycleDay:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+      required:
+        - tasks
+        - logs
+
+    AdminSummaryResult:
+      type: object
+      properties:
+        markdown:
+          type: string
+        generatedAt:
+          type: string
+      required:
+        - markdown
+        - generatedAt
+
+    AssistantMessage:
+      type: object
+      properties:
+        role:
+          type: string
+        content:
+          type: string
+      required:
+        - role
+        - content
+
+    AssistantChatInput:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssistantMessage"
+        context:
+          type: string
+      required:
+        - messages
+
+    AssistantChatResult:
+      type: object
+      properties:
+        reply:
+          type: string
+      required:
+        - reply

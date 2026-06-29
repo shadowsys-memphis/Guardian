@@ -705,6 +705,81 @@ export interface MonthlyReport {
   narrative: string;
 }
 
+export interface RotationTask {
+  id: number;
+  title: string;
+  period: string;
+  timeSlot: string;
+  isHourly: boolean;
+  category: string;
+  status: string;
+  medResponse?: string | null;
+  loggedNote?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+export interface CreateRotationTaskInput {
+  title: string;
+  period: string;
+  timeSlot: string;
+  isHourly?: boolean;
+  category?: string;
+}
+
+export interface UpdateRotationTaskInput {
+  status?: string;
+  medResponse?: string | null;
+  loggedNote?: string | null;
+}
+
+export interface HistoricalCareLog {
+  id: number;
+  dateLabel: string;
+  wantsRespondedRate: number;
+  medAdherence: number;
+  soreRotationComplete: number;
+  generalNotes?: string | null;
+  efficacyScore: number;
+  createdAt: string;
+}
+
+export interface CreateCareLogInput {
+  dateLabel: string;
+  wantsRespondedRate: number;
+  medAdherence: number;
+  soreRotationComplete: number;
+  generalNotes?: string;
+  efficacyScore: number;
+}
+
+export interface AdminSummaryInput {
+  tasks: RotationTask[];
+  logs: HistoricalCareLog[];
+  patientName?: string;
+  cycleDay?: number | null;
+  notes?: string;
+}
+
+export interface AdminSummaryResult {
+  markdown: string;
+  generatedAt: string;
+}
+
+export interface AssistantMessage {
+  role: string;
+  content: string;
+}
+
+export interface AssistantChatInput {
+  messages: AssistantMessage[];
+  context?: string;
+}
+
+export interface AssistantChatResult {
+  reply: string;
+}
+
 export type GetSymptomLogsParams = {
   limit?: number;
 };

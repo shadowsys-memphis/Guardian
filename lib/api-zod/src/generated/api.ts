@@ -1145,3 +1145,153 @@ export const GetMonthlyReportResponse = zod.object({
   ),
   narrative: zod.string(),
 });
+
+/**
+ * @summary List all rotation tasks ordered by creation time
+ */
+export const ListRotationTasksResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  period: zod.string(),
+  timeSlot: zod.string(),
+  isHourly: zod.boolean(),
+  category: zod.string(),
+  status: zod.string(),
+  medResponse: zod.string().nullish(),
+  loggedNote: zod.string().nullish(),
+  completedAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListRotationTasksResponse = zod.array(
+  ListRotationTasksResponseItem,
+);
+
+/**
+ * @summary Create a new rotation task
+ */
+export const CreateRotationTaskBody = zod.object({
+  title: zod.string(),
+  period: zod.string(),
+  timeSlot: zod.string(),
+  isHourly: zod.boolean().optional(),
+  category: zod.string().optional(),
+});
+
+/**
+ * @summary Update task status, med response, or logged note
+ */
+export const UpdateRotationTaskParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateRotationTaskBody = zod.object({
+  status: zod.string().optional(),
+  medResponse: zod.string().nullish(),
+  loggedNote: zod.string().nullish(),
+});
+
+export const UpdateRotationTaskResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  period: zod.string(),
+  timeSlot: zod.string(),
+  isHourly: zod.boolean(),
+  category: zod.string(),
+  status: zod.string(),
+  medResponse: zod.string().nullish(),
+  loggedNote: zod.string().nullish(),
+  completedAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a rotation task
+ */
+export const DeleteRotationTaskParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List historical care efficacy logs (last 30)
+ */
+export const ListCareLogsResponseItem = zod.object({
+  id: zod.number(),
+  dateLabel: zod.string(),
+  wantsRespondedRate: zod.number(),
+  medAdherence: zod.number(),
+  soreRotationComplete: zod.number(),
+  generalNotes: zod.string().nullish(),
+  efficacyScore: zod.number(),
+  createdAt: zod.string(),
+});
+export const ListCareLogsResponse = zod.array(ListCareLogsResponseItem);
+
+/**
+ * @summary Create a historical care log entry
+ */
+export const CreateCareLogBody = zod.object({
+  dateLabel: zod.string(),
+  wantsRespondedRate: zod.number(),
+  medAdherence: zod.number(),
+  soreRotationComplete: zod.number(),
+  generalNotes: zod.string().optional(),
+  efficacyScore: zod.number(),
+});
+
+/**
+ * @summary Generate a Gemini-powered clinical summary from rotation task data
+ */
+export const GenerateClinicalSummaryBody = zod.object({
+  tasks: zod.array(
+    zod.object({
+      id: zod.number(),
+      title: zod.string(),
+      period: zod.string(),
+      timeSlot: zod.string(),
+      isHourly: zod.boolean(),
+      category: zod.string(),
+      status: zod.string(),
+      medResponse: zod.string().nullish(),
+      loggedNote: zod.string().nullish(),
+      completedAt: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  logs: zod.array(
+    zod.object({
+      id: zod.number(),
+      dateLabel: zod.string(),
+      wantsRespondedRate: zod.number(),
+      medAdherence: zod.number(),
+      soreRotationComplete: zod.number(),
+      generalNotes: zod.string().nullish(),
+      efficacyScore: zod.number(),
+      createdAt: zod.string(),
+    }),
+  ),
+  patientName: zod.string().optional(),
+  cycleDay: zod.number().nullish(),
+  notes: zod.string().optional(),
+});
+
+export const GenerateClinicalSummaryResponse = zod.object({
+  markdown: zod.string(),
+  generatedAt: zod.string(),
+});
+
+/**
+ * @summary Chat with the br(AI)n System AI assistant (uses Gemini)
+ */
+export const ChatWithAssistantBody = zod.object({
+  messages: zod.array(
+    zod.object({
+      role: zod.string(),
+      content: zod.string(),
+    }),
+  ),
+  context: zod.string().optional(),
+});
+
+export const ChatWithAssistantResponse = zod.object({
+  reply: zod.string(),
+});

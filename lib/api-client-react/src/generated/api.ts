@@ -18,17 +18,23 @@ import type {
 
 import type {
   AddMealToCartInput,
+  AdminSummaryInput,
+  AdminSummaryResult,
   AiModelStatus,
   AppState,
   AssessmentAnomalies,
   AssessmentSettings,
   AssessmentSummary,
+  AssistantChatInput,
+  AssistantChatResult,
   CallSession,
   CartWithMeals,
+  CreateCareLogInput,
   CreateCravingInput,
   CreateHealthQuestionInput,
   CreateIntercomMessageInput,
   CreateMealInput,
+  CreateRotationTaskInput,
   CreateScheduleTaskInput,
   CreateSymptomLogInput,
   CreateVoiceScriptInput,
@@ -44,6 +50,7 @@ import type {
   HealthDataPoint,
   HealthQuestion,
   HealthStatus,
+  HistoricalCareLog,
   IntercomMessage,
   ListCallSessionsParams,
   LmStudioConnectionResult,
@@ -52,6 +59,7 @@ import type {
   MealCraving,
   MealWithIngredients,
   MonthlyReport,
+  RotationTask,
   ScheduleTask,
   SetAiModelInput,
   SetLmStudioUrlInput,
@@ -66,6 +74,7 @@ import type {
   UpdateCravingInput,
   UpdateHaldolCycleInput,
   UpdateHealthQuestionInput,
+  UpdateRotationTaskInput,
   UpdateScheduleTaskInput,
   UpdateSmartHomeDeviceInput,
   UpdateVoiceScriptInput,
@@ -4964,3 +4973,668 @@ export function useGetMonthlyReport<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List all rotation tasks ordered by creation time
+ */
+export const getListRotationTasksUrl = () => {
+  return `/api/rotation/tasks`;
+};
+
+export const listRotationTasks = async (
+  options?: RequestInit,
+): Promise<RotationTask[]> => {
+  return customFetch<RotationTask[]>(getListRotationTasksUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListRotationTasksQueryKey = () => {
+  return [`/api/rotation/tasks`] as const;
+};
+
+export const getListRotationTasksQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRotationTasks>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listRotationTasks>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListRotationTasksQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRotationTasks>>
+  > = ({ signal }) => listRotationTasks({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRotationTasks>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListRotationTasksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRotationTasks>>
+>;
+export type ListRotationTasksQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all rotation tasks ordered by creation time
+ */
+
+export function useListRotationTasks<
+  TData = Awaited<ReturnType<typeof listRotationTasks>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listRotationTasks>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListRotationTasksQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new rotation task
+ */
+export const getCreateRotationTaskUrl = () => {
+  return `/api/rotation/tasks`;
+};
+
+export const createRotationTask = async (
+  createRotationTaskInput: CreateRotationTaskInput,
+  options?: RequestInit,
+): Promise<RotationTask> => {
+  return customFetch<RotationTask>(getCreateRotationTaskUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createRotationTaskInput),
+  });
+};
+
+export const getCreateRotationTaskMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRotationTask>>,
+    TError,
+    { data: BodyType<CreateRotationTaskInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createRotationTask>>,
+  TError,
+  { data: BodyType<CreateRotationTaskInput> },
+  TContext
+> => {
+  const mutationKey = ["createRotationTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createRotationTask>>,
+    { data: BodyType<CreateRotationTaskInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createRotationTask(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateRotationTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createRotationTask>>
+>;
+export type CreateRotationTaskMutationBody = BodyType<CreateRotationTaskInput>;
+export type CreateRotationTaskMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new rotation task
+ */
+export const useCreateRotationTask = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRotationTask>>,
+    TError,
+    { data: BodyType<CreateRotationTaskInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createRotationTask>>,
+  TError,
+  { data: BodyType<CreateRotationTaskInput> },
+  TContext
+> => {
+  return useMutation(getCreateRotationTaskMutationOptions(options));
+};
+
+/**
+ * @summary Update task status, med response, or logged note
+ */
+export const getUpdateRotationTaskUrl = (id: number) => {
+  return `/api/rotation/tasks/${id}`;
+};
+
+export const updateRotationTask = async (
+  id: number,
+  updateRotationTaskInput: UpdateRotationTaskInput,
+  options?: RequestInit,
+): Promise<RotationTask> => {
+  return customFetch<RotationTask>(getUpdateRotationTaskUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateRotationTaskInput),
+  });
+};
+
+export const getUpdateRotationTaskMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRotationTask>>,
+    TError,
+    { id: number; data: BodyType<UpdateRotationTaskInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateRotationTask>>,
+  TError,
+  { id: number; data: BodyType<UpdateRotationTaskInput> },
+  TContext
+> => {
+  const mutationKey = ["updateRotationTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateRotationTask>>,
+    { id: number; data: BodyType<UpdateRotationTaskInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateRotationTask(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateRotationTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateRotationTask>>
+>;
+export type UpdateRotationTaskMutationBody = BodyType<UpdateRotationTaskInput>;
+export type UpdateRotationTaskMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update task status, med response, or logged note
+ */
+export const useUpdateRotationTask = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRotationTask>>,
+    TError,
+    { id: number; data: BodyType<UpdateRotationTaskInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateRotationTask>>,
+  TError,
+  { id: number; data: BodyType<UpdateRotationTaskInput> },
+  TContext
+> => {
+  return useMutation(getUpdateRotationTaskMutationOptions(options));
+};
+
+/**
+ * @summary Delete a rotation task
+ */
+export const getDeleteRotationTaskUrl = (id: number) => {
+  return `/api/rotation/tasks/${id}`;
+};
+
+export const deleteRotationTask = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteRotationTaskUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteRotationTaskMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRotationTask>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteRotationTask>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteRotationTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteRotationTask>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteRotationTask(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteRotationTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteRotationTask>>
+>;
+
+export type DeleteRotationTaskMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a rotation task
+ */
+export const useDeleteRotationTask = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRotationTask>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteRotationTask>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteRotationTaskMutationOptions(options));
+};
+
+/**
+ * @summary List historical care efficacy logs (last 30)
+ */
+export const getListCareLogsUrl = () => {
+  return `/api/rotation/logs`;
+};
+
+export const listCareLogs = async (
+  options?: RequestInit,
+): Promise<HistoricalCareLog[]> => {
+  return customFetch<HistoricalCareLog[]>(getListCareLogsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCareLogsQueryKey = () => {
+  return [`/api/rotation/logs`] as const;
+};
+
+export const getListCareLogsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCareLogs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listCareLogs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListCareLogsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listCareLogs>>> = ({
+    signal,
+  }) => listCareLogs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCareLogs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCareLogsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCareLogs>>
+>;
+export type ListCareLogsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List historical care efficacy logs (last 30)
+ */
+
+export function useListCareLogs<
+  TData = Awaited<ReturnType<typeof listCareLogs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listCareLogs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCareLogsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a historical care log entry
+ */
+export const getCreateCareLogUrl = () => {
+  return `/api/rotation/logs`;
+};
+
+export const createCareLog = async (
+  createCareLogInput: CreateCareLogInput,
+  options?: RequestInit,
+): Promise<HistoricalCareLog> => {
+  return customFetch<HistoricalCareLog>(getCreateCareLogUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createCareLogInput),
+  });
+};
+
+export const getCreateCareLogMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCareLog>>,
+    TError,
+    { data: BodyType<CreateCareLogInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCareLog>>,
+  TError,
+  { data: BodyType<CreateCareLogInput> },
+  TContext
+> => {
+  const mutationKey = ["createCareLog"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCareLog>>,
+    { data: BodyType<CreateCareLogInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCareLog(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCareLogMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCareLog>>
+>;
+export type CreateCareLogMutationBody = BodyType<CreateCareLogInput>;
+export type CreateCareLogMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a historical care log entry
+ */
+export const useCreateCareLog = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCareLog>>,
+    TError,
+    { data: BodyType<CreateCareLogInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCareLog>>,
+  TError,
+  { data: BodyType<CreateCareLogInput> },
+  TContext
+> => {
+  return useMutation(getCreateCareLogMutationOptions(options));
+};
+
+/**
+ * @summary Generate a Gemini-powered clinical summary from rotation task data
+ */
+export const getGenerateClinicalSummaryUrl = () => {
+  return `/api/admin/summary`;
+};
+
+export const generateClinicalSummary = async (
+  adminSummaryInput: AdminSummaryInput,
+  options?: RequestInit,
+): Promise<AdminSummaryResult> => {
+  return customFetch<AdminSummaryResult>(getGenerateClinicalSummaryUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminSummaryInput),
+  });
+};
+
+export const getGenerateClinicalSummaryMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateClinicalSummary>>,
+    TError,
+    { data: BodyType<AdminSummaryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateClinicalSummary>>,
+  TError,
+  { data: BodyType<AdminSummaryInput> },
+  TContext
+> => {
+  const mutationKey = ["generateClinicalSummary"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateClinicalSummary>>,
+    { data: BodyType<AdminSummaryInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateClinicalSummary(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateClinicalSummaryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateClinicalSummary>>
+>;
+export type GenerateClinicalSummaryMutationBody = BodyType<AdminSummaryInput>;
+export type GenerateClinicalSummaryMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate a Gemini-powered clinical summary from rotation task data
+ */
+export const useGenerateClinicalSummary = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateClinicalSummary>>,
+    TError,
+    { data: BodyType<AdminSummaryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateClinicalSummary>>,
+  TError,
+  { data: BodyType<AdminSummaryInput> },
+  TContext
+> => {
+  return useMutation(getGenerateClinicalSummaryMutationOptions(options));
+};
+
+/**
+ * @summary Chat with the br(AI)n System AI assistant (uses Gemini)
+ */
+export const getChatWithAssistantUrl = () => {
+  return `/api/assistant`;
+};
+
+export const chatWithAssistant = async (
+  assistantChatInput: AssistantChatInput,
+  options?: RequestInit,
+): Promise<AssistantChatResult> => {
+  return customFetch<AssistantChatResult>(getChatWithAssistantUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(assistantChatInput),
+  });
+};
+
+export const getChatWithAssistantMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof chatWithAssistant>>,
+    TError,
+    { data: BodyType<AssistantChatInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof chatWithAssistant>>,
+  TError,
+  { data: BodyType<AssistantChatInput> },
+  TContext
+> => {
+  const mutationKey = ["chatWithAssistant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof chatWithAssistant>>,
+    { data: BodyType<AssistantChatInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return chatWithAssistant(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ChatWithAssistantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof chatWithAssistant>>
+>;
+export type ChatWithAssistantMutationBody = BodyType<AssistantChatInput>;
+export type ChatWithAssistantMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Chat with the br(AI)n System AI assistant (uses Gemini)
+ */
+export const useChatWithAssistant = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof chatWithAssistant>>,
+    TError,
+    { data: BodyType<AssistantChatInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof chatWithAssistant>>,
+  TError,
+  { data: BodyType<AssistantChatInput> },
+  TContext
+> => {
+  return useMutation(getChatWithAssistantMutationOptions(options));
+};

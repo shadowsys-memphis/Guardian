@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
@@ -20,6 +20,15 @@ import {
   Flame,
   CheckCircle,
   FileText,
+  RotateCcw,
+  MessageSquare,
+  Download,
+  Copy,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  Send,
 } from "lucide-react";
 
 import {
@@ -37,6 +46,9 @@ import {
   useListMeals, useCreateMeal, useDeleteMeal, useSyncFromSheets,
   useGetCart, useAddMealToCart, useRemoveMealFromCart, useApproveCart, useDismissCart,
   useListCravings, useCreateCraving, useUpdateCraving,
+  useListRotationTasks, useCreateRotationTask, useUpdateRotationTask, useDeleteRotationTask, getListRotationTasksQueryKey,
+  useListCareLogs, useCreateCareLog, getListCareLogsQueryKey,
+  useGenerateClinicalSummary, useChatWithAssistant,
   type UpdateAppStateInput,
   type VoiceScript,
   type ScheduleTask,
@@ -47,6 +59,8 @@ import {
   type MealWithIngredients,
   type CartWithMeals,
   type MealCraving,
+  type RotationTask,
+  type HistoricalCareLog,
 } from "@workspace/api-client-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,7 +71,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation";
 
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -84,6 +98,7 @@ export function AdminView() {
           <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
           <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
           <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
+          <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
           <div className="pt-2 border-t border-border/30 mt-2">
             <NavButton active={false} onClick={() => navigate("/admin/report")} icon={<FileText size={18} />} label="Doctor Report" />
           </div>
@@ -103,6 +118,7 @@ export function AdminView() {
           {activeTab === "haldol" && <HaldolTab />}
           {activeTab === "health" && <HealthIntelligenceTab />}
           {activeTab === "shopper" && <ShopperTab />}
+          {activeTab === "rotation" && <RotationTab />}
         </div>
       </main>
     </div>
@@ -1723,6 +1739,419 @@ function ShopperTab() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+const ROTATION_CATEGORY_EMOJI: Record<string, string> = {
+  "Medication": "💊",
+  "Food Intake": "🍽️",
+  "Physical Rotation": "🔄",
+  "Biometric Read": "📊",
+  "Cognitive": "🧠",
+};
+
+const MED_RESPONSES = [
+  { key: "stable", label: "Stable", emoji: "🟢", color: "border-success/40 text-success" },
+  { key: "drowsy", label: "Drowsy", emoji: "🟡", color: "border-yellow-500/40 text-yellow-400" },
+  { key: "fatigued", label: "Fatigued", emoji: "🟠", color: "border-orange-500/40 text-orange-400" },
+  { key: "agitated", label: "Agitated", emoji: "🔴", color: "border-destructive/40 text-destructive" },
+] as const;
+
+function RotationTab() {
+  const { toast } = useToast();
+  const [period, setPeriod] = useState<"all" | "morning" | "afternoon" | "night">("all");
+  const [hourlyOnly, setHourlyOnly] = useState(false);
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTask, setNewTask] = useState({ title: "", period: "morning" as "morning" | "afternoon" | "night", timeSlot: "9:00 AM", category: "Physical Rotation", isHourly: false });
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryMarkdown, setSummaryMarkdown] = useState("");
+  const [summaryDate, setSummaryDate] = useState("");
+  const [inlineNotes, setInlineNotes] = useState<Record<number, string>>({});
+
+  const { data: tasks = [], refetch: refetchTasks } = useListRotationTasks({ query: { queryKey: getListRotationTasksQueryKey() } });
+  const { data: logs = [] } = useListCareLogs({ query: { queryKey: getListCareLogsQueryKey() } });
+  const { data: haldolData } = useGetHaldolCycle();
+
+  const createTask = useCreateRotationTask();
+  const updateTask = useUpdateRotationTask();
+  const deleteTask = useDeleteRotationTask();
+  const generateSummary = useGenerateClinicalSummary();
+
+  const taskList = tasks as RotationTask[];
+  const logList = logs as HistoricalCareLog[];
+
+  const cycleDay = (() => {
+    const lastDate = (haldolData as any)?.lastInjectionDate;
+    if (!lastDate) return null;
+    const diff = Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000);
+    return Math.max(1, Math.min(14, (diff % 14) + 1));
+  })();
+
+  const filtered = taskList.filter((t) => {
+    if (period !== "all" && t.period !== period) return false;
+    if (hourlyOnly && !t.isHourly) return false;
+    return true;
+  });
+
+  const total = taskList.length;
+  const done = taskList.filter((t) => t.status === "done").length;
+  const hourlyTotal = taskList.filter((t) => t.isHourly).length;
+  const hourlyDone = taskList.filter((t) => t.isHourly && t.status === "done").length;
+  const completePct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const hourlyPct = hourlyTotal > 0 ? Math.round((hourlyDone / hourlyTotal) * 100) : 0;
+
+  const handleToggleTask = (t: RotationTask) => {
+    updateTask.mutate({ id: t.id, data: { status: t.status === "done" ? "pending" : "done" } }, { onSuccess: () => refetchTasks() });
+  };
+
+  const handleMedResponse = (t: RotationTask, response: string) => {
+    updateTask.mutate({ id: t.id, data: { medResponse: t.medResponse === response ? null : response } }, { onSuccess: () => refetchTasks() });
+  };
+
+  const handleSaveNote = (t: RotationTask) => {
+    const note = inlineNotes[t.id] !== undefined ? inlineNotes[t.id] : (t.loggedNote ?? "");
+    updateTask.mutate({ id: t.id, data: { loggedNote: note.trim() || null } }, { onSuccess: () => refetchTasks() });
+  };
+
+  const handleAddTask = () => {
+    if (!newTask.title.trim()) return;
+    createTask.mutate({ data: { title: newTask.title.trim(), period: newTask.period, timeSlot: newTask.timeSlot, isHourly: newTask.isHourly, category: newTask.category } }, {
+      onSuccess: () => {
+        refetchTasks();
+        setShowAddTask(false);
+        setNewTask({ title: "", period: "morning", timeSlot: "9:00 AM", category: "Physical Rotation", isHourly: false });
+      },
+    });
+  };
+
+  const handleGenerateSummary = () => {
+    generateSummary.mutate({ data: { tasks: taskList, logs: logList, patientName: "Pops", cycleDay } }, {
+      onSuccess: (res: any) => {
+        setSummaryMarkdown((res as any).markdown ?? "");
+        setSummaryDate((res as any).generatedAt ?? "");
+        setShowSummary(true);
+      },
+      onError: () => toast({ title: "Summary generation failed", variant: "destructive" }),
+    });
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(summaryMarkdown);
+    toast({ title: "Copied to clipboard" });
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([summaryMarkdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `clinical-summary-${new Date().toISOString().split("T")[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <header className="border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
+        <div>
+          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Rotation</h2>
+          <p className="text-muted-foreground text-sm">Caregiver task tracking, med response logging &amp; clinical summaries.</p>
+          {cycleDay !== null && <p className="text-xs text-primary/70 mt-0.5">Haldol Cycle Day <span className="font-bold">{cycleDay}</span>/14</p>}
+        </div>
+        <Button onClick={handleGenerateSummary} disabled={generateSummary.isPending} size="sm" className="gap-2">
+          {generateSummary.isPending ? <RefreshCw size={14} className="animate-spin" /> : <ClipboardList size={14} />}
+          Clinical Summary
+        </Button>
+      </header>
+
+      {/* Stats Bar */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-widest font-display mb-2">Overall Completion</p>
+          <div className="flex items-end gap-2 mb-2">
+            <span className="text-3xl font-display font-bold text-primary">{completePct}%</span>
+            <span className="text-xs text-muted-foreground mb-1">{done}/{total} tasks</span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-secondary/50">
+            <div className="h-2 rounded-full bg-primary transition-all duration-500" style={{ width: `${completePct}%` }} />
+          </div>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-widest font-display mb-2">Rotation Compliance</p>
+          <div className="flex items-end gap-2 mb-2">
+            <span className="text-3xl font-display font-bold text-orange-400">{hourlyPct}%</span>
+            <span className="text-xs text-muted-foreground mb-1">{hourlyDone}/{hourlyTotal} repositions</span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-secondary/50">
+            <div className="h-2 rounded-full bg-orange-400 transition-all duration-500" style={{ width: `${hourlyPct}%` }} />
+          </div>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1 flex-wrap">
+          {(["all", "morning", "afternoon", "night"] as const).map((p) => (
+            <button key={p} onClick={() => setPeriod(p)}
+              className={`px-3 py-1.5 text-xs font-display uppercase tracking-widest rounded-sm border transition-colors ${period === p ? "bg-primary/10 border-primary/40 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
+              {p}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+          <input type="checkbox" checked={hourlyOnly} onChange={(e) => setHourlyOnly(e.target.checked)} className="accent-primary" />
+          Hourly rotations only
+        </label>
+      </div>
+
+      {/* Task List */}
+      <div className="space-y-2">
+        {filtered.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground/60 text-sm border border-dashed border-border/30 rounded-sm">
+            No tasks match this filter.
+          </div>
+        )}
+        {filtered.map((t) => {
+          const emoji = ROTATION_CATEGORY_EMOJI[t.category] ?? "⚙️";
+          const isDone = t.status === "done";
+          return (
+            <div key={t.id} className={`rounded-sm border transition-all ${isDone ? "border-success/25 bg-success/5 opacity-75" : "border-border bg-card"}`}>
+              <div className="flex items-start gap-3 p-3">
+                <button onClick={() => handleToggleTask(t)}
+                  className={`mt-0.5 shrink-0 w-6 h-6 rounded-sm border flex items-center justify-center transition-colors ${isDone ? "bg-success/20 border-success/40 text-success" : "border-border hover:border-primary/40 hover:bg-primary/5"}`}>
+                  {isDone && <Check size={11} />}
+                </button>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-sm font-semibold ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                      {emoji} {t.title}
+                    </span>
+                    <span className="text-xs text-muted-foreground/60">{t.timeSlot}</span>
+                    {t.isHourly && <Badge variant="outline" className="text-xs text-orange-400 border-orange-500/30 py-0">↺ 2hr</Badge>}
+                    <Badge variant="outline" className="text-xs text-muted-foreground/50 border-border/20 capitalize py-0">{t.period}</Badge>
+                    <Badge variant="outline" className="text-xs text-muted-foreground/50 border-border/20 py-0">{t.category}</Badge>
+                  </div>
+
+                  {t.category === "Medication" && (
+                    <div className="flex gap-1 mt-2 flex-wrap">
+                      {MED_RESPONSES.map((r) => (
+                        <button key={r.key} onClick={() => handleMedResponse(t, r.key)}
+                          className={`px-2 py-0.5 text-xs rounded-sm border transition-colors ${t.medResponse === r.key ? `${r.color} font-bold` : "border-border text-muted-foreground hover:border-border/60"}`}>
+                          {r.emoji} {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-1 mt-2">
+                    <Input
+                      value={inlineNotes[t.id] !== undefined ? inlineNotes[t.id] : (t.loggedNote ?? "")}
+                      onChange={(e) => setInlineNotes((n) => ({ ...n, [t.id]: e.target.value }))}
+                      placeholder="Clinical note..."
+                      className="h-7 text-xs flex-1"
+                      onKeyDown={(e) => { if (e.key === "Enter") handleSaveNote(t); }}
+                    />
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => handleSaveNote(t)} title="Save note">
+                      <Check size={11} />
+                    </Button>
+                  </div>
+                </div>
+
+                <button onClick={() => { if (confirm(`Delete "${t.title}"?`)) deleteTask.mutate({ id: t.id }, { onSuccess: () => refetchTasks() }); }}
+                  className="shrink-0 p-1.5 rounded-sm border border-destructive/20 text-destructive/40 hover:border-destructive/50 hover:text-destructive transition-colors mt-0.5">
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add custom task */}
+      {showAddTask ? (
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-display uppercase tracking-widest">Add Custom Task</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-3">
+            <Input value={newTask.title} onChange={(e) => setNewTask({ ...newTask, title: e.target.value })} placeholder="Task title..." className="text-sm" />
+            <div className="grid grid-cols-2 gap-2">
+              <select value={newTask.period} onChange={(e) => setNewTask({ ...newTask, period: e.target.value as any })}
+                className="h-9 rounded-sm border border-border bg-background px-2 text-sm text-foreground">
+                <option value="morning">Morning</option>
+                <option value="afternoon">Afternoon</option>
+                <option value="night">Night</option>
+              </select>
+              <Input value={newTask.timeSlot} onChange={(e) => setNewTask({ ...newTask, timeSlot: e.target.value })} placeholder="e.g. 9:00 AM" className="text-sm" />
+              <select value={newTask.category} onChange={(e) => setNewTask({ ...newTask, category: e.target.value })}
+                className="h-9 rounded-sm border border-border bg-background px-2 text-sm text-foreground col-span-2">
+                <option>Medication</option>
+                <option>Food Intake</option>
+                <option>Physical Rotation</option>
+                <option>Biometric Read</option>
+                <option>Cognitive</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={newTask.isHourly} onChange={(e) => setNewTask({ ...newTask, isHourly: e.target.checked })} className="accent-primary" />
+              Bi-hourly rotation task
+            </label>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleAddTask} disabled={createTask.isPending || !newTask.title.trim()}>Add Task</Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowAddTask(false)}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Button variant="outline" size="sm" onClick={() => setShowAddTask(true)} className="gap-2 w-full justify-center border-dashed">
+          <Plus size={14} /> Add Custom Task
+        </Button>
+      )}
+
+      {/* Historical Efficacy */}
+      <div>
+        <h3 className="text-sm font-display uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+          <Activity size={14} /> Historical Efficacy
+        </h3>
+        {logList.length === 0 ? (
+          <p className="text-xs text-muted-foreground/50 text-center py-4 border border-dashed border-border/30 rounded-sm">No historical logs yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {logList.slice(0, 7).map((l) => (
+              <div key={l.id} className="rounded-sm border border-border bg-card p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-display uppercase tracking-widest text-muted-foreground">{l.dateLabel}</span>
+                  <span className={`text-xl font-bold font-display ${l.efficacyScore >= 8 ? "text-success" : l.efficacyScore >= 5 ? "text-yellow-400" : "text-destructive"}`}>{l.efficacyScore}/10</span>
+                </div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between text-muted-foreground"><span>Wants responded</span><span className="text-foreground">{l.wantsRespondedRate}%</span></div>
+                  <div className="flex justify-between text-muted-foreground"><span>Med adherence</span><span className={l.medAdherence === 100 ? "text-success font-semibold" : "text-yellow-400"}>{l.medAdherence}%</span></div>
+                  <div className="flex justify-between text-muted-foreground"><span>Rotation complete</span><span className="text-foreground">{l.soreRotationComplete}%</span></div>
+                </div>
+                {l.generalNotes && <p className="text-xs text-muted-foreground/60 mt-2 italic leading-relaxed">{l.generalNotes}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* System AI Panel */}
+      <SystemAIPanel tasks={taskList} logs={logList} />
+
+      {/* Clinical Summary Modal */}
+      <Modal isOpen={showSummary} onClose={() => setShowSummary(false)} title="Clinical Summary">
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleCopy}>
+              <Copy size={12} /> Copy
+            </Button>
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleDownload}>
+              <Download size={12} /> Download .md
+            </Button>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto rounded-sm border border-border bg-secondary/10 p-4">
+            <pre className="text-xs font-mono whitespace-pre-wrap text-foreground leading-relaxed">{summaryMarkdown || "Generating…"}</pre>
+          </div>
+          {summaryDate && <p className="text-xs text-muted-foreground/40">Generated: {new Date(summaryDate).toLocaleString()}</p>}
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: HistoricalCareLog[] }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const chatAssistant = useChatWithAssistant();
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  const buildContext = () => {
+    const doneCount = tasks.filter((t) => t.status === "done").length;
+    const total = tasks.length;
+    const meds = tasks.filter((t) => t.category === "Medication" && t.status === "done").length;
+    const rotations = tasks.filter((t) => t.isHourly && t.status === "done").length;
+    const totalRotations = tasks.filter((t) => t.isHourly).length;
+    const recentLogs = logs.slice(0, 3).map((l) => `${l.dateLabel}: ${l.efficacyScore}/10`).join(", ");
+    return `Shift: ${doneCount}/${total} tasks done, ${meds} meds completed, ${rotations}/${totalRotations} repositions done. Recent efficacy: ${recentLogs || "none"}.`;
+  };
+
+  const handleSend = () => {
+    const text = input.trim();
+    if (!text) return;
+    const userMsg = { role: "user" as const, content: text };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    setInput("");
+
+    chatAssistant.mutate({ data: { messages: nextMessages, context: buildContext() } }, {
+      onSuccess: (res: any) => {
+        setMessages((prev) => [...prev, { role: "assistant" as const, content: (res as any).reply ?? "…" }]);
+      },
+      onError: () => {
+        toast({ title: "AI response failed", variant: "destructive" });
+        setMessages((prev) => [...prev, { role: "assistant" as const, content: "I couldn't connect. Please try again." }]);
+      },
+    });
+  };
+
+  return (
+    <div className="rounded-sm border border-border/50 bg-card overflow-hidden">
+      <button onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-4 hover:bg-secondary/20 transition-colors text-left">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-primary" />
+          <span className="text-sm font-display uppercase tracking-widest">System AI</span>
+          <span className="text-xs text-muted-foreground/60">— br(AI)n care assistant</span>
+        </div>
+        {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-border/30">
+          <div ref={scrollRef} className="h-64 overflow-y-auto p-4 space-y-3 bg-secondary/10">
+            {messages.length === 0 && (
+              <p className="text-xs text-muted-foreground/60 text-center py-4">Ask about care patterns, Haldol cycles, or current rotation status.</p>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] px-3 py-2 rounded-sm text-xs leading-relaxed ${m.role === "user" ? "bg-primary/15 text-foreground border border-primary/20" : "bg-secondary/40 text-foreground border border-border/30"}`}>
+                  {m.role === "assistant" && <span className="font-display text-primary/70 text-xs uppercase tracking-widest block mb-1">System AI</span>}
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {chatAssistant.isPending && (
+              <div className="flex justify-start">
+                <div className="px-3 py-2 rounded-sm bg-secondary/40 border border-border/30 text-xs text-muted-foreground">
+                  <RefreshCw size={10} className="inline animate-spin mr-1" /> Thinking…
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 p-3 border-t border-border/30">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              placeholder="Ask the br(AI)n assistant..."
+              className="text-xs flex-1"
+              disabled={chatAssistant.isPending}
+            />
+            <Button size="sm" onClick={handleSend} disabled={chatAssistant.isPending || !input.trim()} className="shrink-0">
+              <Send size={13} />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
