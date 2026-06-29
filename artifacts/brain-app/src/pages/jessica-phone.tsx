@@ -236,7 +236,7 @@ export function JessicaPhone() {
       const response = await fetch(`${BASE_URL}/api/gemini/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userContent }),
+        body: JSON.stringify({ content: userContent, speak: speakerOn && !isMuted }),
       });
 
       const reader = response.body!.getReader();
