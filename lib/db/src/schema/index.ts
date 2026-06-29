@@ -69,15 +69,6 @@ export const smartHomeDevicesTable = pgTable("smart_home_devices", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const intercomeMessagesTable = pgTable("intercom_messages", {
-  id: serial("id").primaryKey(),
-  sender: text("sender").notNull(),
-  ciphertext: text("ciphertext").notNull(),
-  iv: text("iv").notNull(),
-  salt: text("salt").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
 export const insertAppStateSchema = createInsertSchema(appStateTable).omit({ id: true });
 export const insertScheduleTaskSchema = createInsertSchema(scheduleTasksTable).omit({ id: true });
 export const insertSymptomLogSchema = createInsertSchema(symptomLogsTable).omit({ id: true });

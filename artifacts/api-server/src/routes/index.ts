@@ -7,7 +7,6 @@ import scriptsRouter from "./scripts";
 import haldolRouter from "./haldol";
 import geminiRouter from "./gemini";
 import smarthomeRouter from "./smarthome";
-import intercomRouter from "./intercom";
 import healthAssessmentRouter from "./health-assessment";
 import shopperRouter from "./shopper";
 
@@ -21,7 +20,6 @@ router.use(scriptsRouter);
 router.use(haldolRouter);
 router.use(geminiRouter);
 router.use(smarthomeRouter);
-router.use(intercomRouter);
 router.use(healthAssessmentRouter);
 router.use(shopperRouter);
 
