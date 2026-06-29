@@ -6,3 +6,9 @@ id = "0683OXnhKD7fzkJe-7aIr"
 uri = "file://brain-source.zip"
 type = "unspecified"
 title = "br(AI)n — source only (no node_modules, no generated, no lock files)"
+
+[[outputs]]
+id = "NhfM_Z0AZnndBjhUmQBkk"
+uri = "file://.local/HANDOFF.md"
+type = "text"
+title = "br(AI)n Task Handoff Package"
