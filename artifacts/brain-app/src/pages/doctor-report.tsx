@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { Printer, FileText, TrendingUp, AlertTriangle, CheckCircle2, XCircle, MinusCircle, Activity, ChevronLeft } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
@@ -283,6 +284,7 @@ function StatCard({ label, value, unit, color }: { label: string; value: any; un
 
 export function DoctorReport() {
   const [tab, setTab] = useState<"weekly" | "monthly">("weekly");
+  const [, navigate] = useLocation();
 
   const handlePrint = () => {
     window.print();
@@ -310,6 +312,15 @@ export function DoctorReport() {
       <div className="min-h-screen bg-gray-50 print:bg-white">
         <div className="print:hidden bg-white border-b border-border px-6 py-4 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/admin")}
+              className="flex items-center gap-1.5 text-xs font-display uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors border border-border/50 rounded-sm px-2.5 py-1.5 hover:bg-secondary/50"
+              title="Back to Admin"
+            >
+              <ChevronLeft size={14} />
+              Admin
+            </button>
+            <span className="text-border/60 text-sm">|</span>
             <FileText size={20} className="text-primary" />
             <div>
               <h1 className="text-lg font-display font-bold text-primary tracking-widest uppercase leading-none">Doctor Report</h1>
