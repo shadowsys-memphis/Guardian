@@ -12,3 +12,9 @@ id = "NhfM_Z0AZnndBjhUmQBkk"
 uri = "file://.local/HANDOFF.md"
 type = "text"
 title = "br(AI)n Task Handoff Package"
+
+[[outputs]]
+id = "MJ3NL0AIF8p4jAp8l-qZq"
+uri = "file://HANDOFF.md"
+type = "text"
+title = "br(AI)n Task Handoff Package"
