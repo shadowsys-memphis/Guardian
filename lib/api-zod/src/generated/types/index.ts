@@ -7,6 +7,8 @@
  */
 
 export * from "./addMealToCartInput";
+export * from "./aiModelInfo";
+export * from "./aiModelStatus";
 export * from "./appState";
 export * from "./appStateComputedQuarter";
 export * from "./appStateCurrentQuarter";
@@ -61,6 +63,7 @@ export * from "./monthlyTrendPoint";
 export * from "./reportSymptomLog";
 export * from "./scheduleTask";
 export * from "./scheduleTaskQuarter";
+export * from "./setAiModelInput";
 export * from "./sheetsSyncInput";
 export * from "./sheetsSyncResult";
 export * from "./smartHomeDevice";

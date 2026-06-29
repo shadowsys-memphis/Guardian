@@ -431,6 +431,42 @@ paths:
           content:
             text/event-stream: {}
 
+  /ai-model:
+    get:
+      operationId: getAiModel
+      tags: [health-assessment]
+      summary: Get active AI model and available models
+      responses:
+        "200":
+          description: Active model and model list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiModelStatus"
+    put:
+      operationId: setAiModel
+      tags: [health-assessment]
+      summary: Set the active AI model for Jessica conversations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetAiModelInput"
+      responses:
+        "200":
+          description: Updated model status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiModelStatus"
+        "400":
+          description: Invalid model ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+
   /smarthome/devices:
     get:
       operationId: getSmartHomeDevices
@@ -1987,6 +2023,44 @@ components:
         - date
         - category
         - flagged
+
+    AiModelInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        provider:
+          type: string
+        lmStudioModelId:
+          type: string
+          nullable: true
+      required:
+        - id
+        - label
+        - provider
+
+    AiModelStatus:
+      type: object
+      properties:
+        activeModel:
+          type: string
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiModelInfo"
+      required:
+        - activeModel
+        - models
+
+    SetAiModelInput:
+      type: object
+      properties:
+        activeModel:
+          type: string
+      required:
+        - activeModel
 
     MonthlyReport:
       type: object

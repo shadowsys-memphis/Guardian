@@ -1,1 +1,2 @@
 - [Brain App Architecture](brain-app-arch.md) — E2EE vault gate wraps all routes; new features: Jessica AI phone, smart home, intercom, all built on /api routes.
+- [LM Studio AI model switching](lm-studio-integration.md) — active_ai_model in app_settings; GET/PUT /api/ai-model; vault+intercom files were missing and must exist for brain-app to start.

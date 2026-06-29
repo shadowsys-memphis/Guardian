@@ -610,6 +610,43 @@ router.get("/health-assessment/report/monthly", async (req, res) => {
   }
 });
 
+export const AI_MODELS = [
+  { id: "gemini", label: "Gemini 2.5 Flash", provider: "gemini", lmStudioModelId: null },
+  { id: "qwen35-9b", label: "Qwen3.5 9B (4bit MLX)", provider: "lmstudio", lmStudioModelId: "qwen3.5-9b" },
+  { id: "gemma4-12b", label: "Gemma 4 12B (Q6_K)", provider: "lmstudio", lmStudioModelId: "gemma-4-12b" },
+  { id: "gemma4-e4b", label: "Gemma 4 E4B (4bit MLX)", provider: "lmstudio", lmStudioModelId: "gemma-4-e4b" },
+] as const;
+
+router.get("/ai-model", async (req, res) => {
+  try {
+    const rows = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "active_ai_model"));
+    const activeModel = rows[0]?.value ?? "gemini";
+    res.json({ activeModel, models: AI_MODELS });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get AI model");
+    res.status(500).json({ error: "Failed to get AI model" });
+  }
+});
+
+router.put("/ai-model", async (req, res) => {
+  try {
+    const { activeModel } = z.object({ activeModel: z.string() }).parse(req.body);
+    if (!AI_MODELS.find((m) => m.id === activeModel)) {
+      return res.status(400).json({ error: `Invalid model. Valid options: ${AI_MODELS.map((m) => m.id).join(", ")}` });
+    }
+    const existing = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "active_ai_model"));
+    if (existing.length > 0) {
+      await db.update(appSettingsTable).set({ value: activeModel, updatedAt: new Date() }).where(eq(appSettingsTable.key, "active_ai_model"));
+    } else {
+      await db.insert(appSettingsTable).values({ key: "active_ai_model", value: activeModel });
+    }
+    res.json({ activeModel, models: AI_MODELS });
+  } catch (err) {
+    req.log.error({ err }, "Failed to set AI model");
+    res.status(400).json({ error: "Failed to set AI model" });
+  }
+});
+
 export async function getActiveQuestionsForCycleDay(cycleDay: number | null): Promise<{ id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[]> {
   await ensureSeeded();
   const questions = await db.select().from(healthQuestionsTable).where(eq(healthQuestionsTable.active, true)).orderBy(desc(healthQuestionsTable.priority));

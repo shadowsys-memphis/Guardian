@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, ChevronLeft, Send, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { useGetAiModel } from "@workspace/api-client-react";
 
 interface Message {
   id: string;
@@ -45,6 +46,9 @@ export function JessicaPhone() {
   const [quietWindowMessage, setQuietWindowMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const synth = useRef<SpeechSynthesis | null>(null);
+  const { data: aiModelStatus } = useGetAiModel({ query: { refetchInterval: 10000 } });
+  const activeModelLabel = (aiModelStatus as any)?.models?.find((m: any) => m.id === (aiModelStatus as any)?.activeModel)?.label ?? "Gemini 2.5 Flash";
+  const activeModelId = (aiModelStatus as any)?.activeModel ?? "gemini";
 
   useEffect(() => {
     synth.current = window.speechSynthesis;
@@ -246,9 +250,16 @@ export function JessicaPhone() {
           )}
 
           {callState === "idle" && !quietWindowMessage && (
-            <p className="text-muted-foreground/50 text-sm uppercase tracking-widest font-display">
-              Tap to Call Jessica
-            </p>
+            <div className="space-y-2">
+              <p className="text-muted-foreground/50 text-sm uppercase tracking-widest font-display">
+                Tap to Call Jessica
+              </p>
+              <div className="flex justify-center">
+                <span className={`px-3 py-1 rounded-sm border text-xs font-display uppercase tracking-widest ${activeModelId === "gemini" ? "border-primary/30 text-primary/60 bg-primary/5" : "border-amber-500/30 text-amber-400/70 bg-amber-500/5"}`}>
+                  {activeModelLabel}
+                </span>
+              </div>
+            </div>
           )}
           {quietWindowMessage && (
             <div className="max-w-sm mx-auto px-6 py-3 bg-secondary/60 border border-border rounded-sm text-center">
@@ -284,7 +295,9 @@ export function JessicaPhone() {
           <div className="h-3 w-3 rounded-full bg-success animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.8)]" />
           <div>
             <p className="text-xl font-display font-bold text-primary tracking-widest uppercase">JESSICA ACTIVE</p>
-            <p className="text-xs text-muted-foreground uppercase tracking-widest">Gemini AI · br(AI)n Coordinator</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-widest">
+            {activeModelLabel} · br(AI)n Coordinator
+          </p>
           </div>
           {healthDataCount > 0 && (
             <div className="flex items-center gap-1.5 px-3 py-1 bg-success/10 border border-success/30 rounded-sm">

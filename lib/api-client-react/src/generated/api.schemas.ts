@@ -658,6 +658,22 @@ export interface MonthlyTrendPoint {
   flagged: boolean;
 }
 
+export interface AiModelInfo {
+  id: string;
+  label: string;
+  provider: string;
+  lmStudioModelId?: string | null;
+}
+
+export interface AiModelStatus {
+  activeModel: string;
+  models: AiModelInfo[];
+}
+
+export interface SetAiModelInput {
+  activeModel: string;
+}
+
 export type MonthlyReportCategoryStatus = { [key: string]: string };
 
 export interface MonthlyReport {

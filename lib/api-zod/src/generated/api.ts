@@ -490,6 +490,40 @@ export const SendGeminiMessageBody = zod.object({
 });
 
 /**
+ * @summary Get active AI model and available models
+ */
+export const GetAiModelResponse = zod.object({
+  activeModel: zod.string(),
+  models: zod.array(
+    zod.object({
+      id: zod.string(),
+      label: zod.string(),
+      provider: zod.string(),
+      lmStudioModelId: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Set the active AI model for Jessica conversations
+ */
+export const SetAiModelBody = zod.object({
+  activeModel: zod.string(),
+});
+
+export const SetAiModelResponse = zod.object({
+  activeModel: zod.string(),
+  models: zod.array(
+    zod.object({
+      id: zod.string(),
+      label: zod.string(),
+      provider: zod.string(),
+      lmStudioModelId: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
  * @summary Get all smart home devices and their state
  */
 export const GetSmartHomeDevicesResponseItem = zod.object({

@@ -7,6 +7,7 @@ import {
   haldolCycleTable,
   healthDataPointsTable,
   mealCravingsTable,
+  appSettingsTable,
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, asc, desc } from "drizzle-orm";
@@ -15,6 +16,55 @@ import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQu
 import { ensureMealsSeeded } from "./shopper";
 
 const router: IRouter = Router();
+
+export const AI_MODELS = [
+  { id: "gemini", label: "Gemini 2.5 Flash", provider: "gemini", lmStudioModelId: null },
+  { id: "qwen35-9b", label: "Qwen3.5 9B (4bit MLX)", provider: "lmstudio", lmStudioModelId: "qwen3.5-9b" },
+  { id: "gemma4-12b", label: "Gemma 4 12B (Q6_K)", provider: "lmstudio", lmStudioModelId: "gemma-4-12b" },
+  { id: "gemma4-e4b", label: "Gemma 4 E4B (4bit MLX)", provider: "lmstudio", lmStudioModelId: "gemma-4-e4b" },
+] as const;
+
+export type AiModelId = typeof AI_MODELS[number]["id"];
+
+async function getActiveModel(): Promise<typeof AI_MODELS[number]> {
+  try {
+    const rows = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "active_ai_model"));
+    const modelId = rows[0]?.value ?? "gemini";
+    return AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
+  } catch {
+    return AI_MODELS[0];
+  }
+}
+
+async function callLmStudio(
+  openaiMessages: Array<{ role: string; content: string }>,
+  lmStudioModelId: string
+): Promise<string> {
+  const baseUrl = process.env.LM_STUDIO_URL ?? "http://localhost:1234";
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: lmStudioModelId,
+        messages: openaiMessages,
+        temperature: 0.7,
+        max_tokens: 2048,
+        stream: false,
+      }),
+    });
+  } catch {
+    throw new Error("LM Studio not running — check that it's open and the model is loaded");
+  }
+  if (!response.ok) {
+    throw new Error(`LM Studio not running — check that it's open and the model is loaded (HTTP ${response.status})`);
+  }
+  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const content = data.choices?.[0]?.message?.content ?? "";
+  if (!content) throw new Error("LM Studio returned an empty response — is the model fully loaded?");
+  return content;
+}
 
 function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean): string {
   const toneProfile = isZombiePhase
@@ -147,6 +197,57 @@ async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; isZombi
   }
 }
 
+async function savePostProcessing(
+  req: any,
+  conversationId: number,
+  fullResponse: string,
+  questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[],
+  cravingMeal: string | null
+) {
+  const cleanContent = stripSystemTags(fullResponse);
+  const healthDataTags = parseHealthDataTags(fullResponse);
+
+  if (cravingMeal) {
+    await db.insert(mealCravingsTable).values({ mealName: cravingMeal, source: "jessica", status: "pending" })
+      .catch((e: unknown) => req.log.warn({ e }, "Failed to save craving"));
+  }
+
+  await db.insert(messagesTable).values({
+    conversationId,
+    role: "assistant",
+    content: cleanContent,
+  });
+
+  const sessionRows = await db.select().from(callSessionsTable)
+    .where(eq(callSessionsTable.conversationId, conversationId))
+    .orderBy(desc(callSessionsTable.id))
+    .limit(1);
+
+  if (sessionRows[0] && !sessionRows[0].endedAt) {
+    for (const tag of healthDataTags) {
+      const resolvedQuestionId = tag.questionId ?? (questions.find((q) => q.category === tag.category)?.id ?? null);
+      await saveHealthDataPoint({
+        sessionId: sessionRows[0].id,
+        questionId: resolvedQuestionId,
+        category: tag.category,
+        rawResponse: tag.rawResponse,
+        parsedValue: tag.parsedValue,
+        parsedIntensity: tag.parsedIntensity,
+      }).catch((e: unknown) => req.log.warn({ e }, "Failed to save health data point"));
+    }
+    const startedAt = sessionRows[0].startedAt ? new Date(sessionRows[0].startedAt) : null;
+    if (startedAt && (Date.now() - startedAt.getTime()) > 30 * 60 * 1000) {
+      const dataPoints = await db.select().from(healthDataPointsTable).where(eq(healthDataPointsTable.sessionId, sessionRows[0].id));
+      const categories = [...new Set(dataPoints.map((d) => d.category))];
+      const flagged = dataPoints.some((d) => d.flagged);
+      const summary = `Auto-closed after 30 minutes. Covered: ${categories.join(", ") || "none"}. ${dataPoints.length} data point(s).${flagged ? " ⚠️ Flagged." : ""}`;
+      await db.update(callSessionsTable).set({ endedAt: new Date(), summary, flagged }).where(eq(callSessionsTable.id, sessionRows[0].id));
+    }
+  }
+
+  return { cleanContent, healthDataTags };
+}
+
 router.get("/gemini/conversations", async (req, res) => {
   try {
     const convos = await db
@@ -260,98 +361,92 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
     const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase);
 
+    const activeModel = await getActiveModel();
+
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
     res.write(`data: ${JSON.stringify({ userMessageId: userMsg.id })}\n\n`);
 
-    const chatMessages = [
-      { role: "user" as const, parts: [{ text: systemPrompt }] },
-      { role: "model" as const, parts: [{ text: "Understood. I am Jessica, ready to help Pops and Raymo." }] },
-      ...history.map((m) => ({
-        role: (m.role === "assistant" ? "model" : "user") as "user" | "model",
-        parts: [{ text: m.content }],
-      })),
-    ];
+    if (activeModel.provider === "lmstudio" && activeModel.lmStudioModelId) {
+      // LM Studio path — non-streaming
+      const openaiMessages: Array<{ role: string; content: string }> = [
+        { role: "system", content: systemPrompt },
+        ...history.map((m) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        })),
+      ];
 
-    let fullResponse = "";
-    let prevSafeLength = 0;
+      let fullResponse: string;
+      try {
+        fullResponse = await callLmStudio(openaiMessages, activeModel.lmStudioModelId);
+      } catch (lmErr: unknown) {
+        const errMsg = lmErr instanceof Error ? lmErr.message : "LM Studio not running — check that it's open and the model is loaded";
+        res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+        res.end();
+        return;
+      }
 
-    const stream = await ai.models.generateContentStream({
-      model: "gemini-2.5-flash",
-      contents: chatMessages,
-      config: { maxOutputTokens: 8192 },
-    });
+      const visibleContent = getStreamSafeVisible(fullResponse);
+      if (visibleContent) {
+        res.write(`data: ${JSON.stringify({ content: visibleContent })}\n\n`);
+      }
 
-    for await (const chunk of stream) {
-      const text = chunk.text;
-      if (text) {
-        fullResponse += text;
-        const currentSafe = getStreamSafeVisible(fullResponse);
-        const delta = currentSafe.slice(prevSafeLength);
-        if (delta) {
-          res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
-          prevSafeLength = currentSafe.length;
+      const deviceCommand = parseDeviceCommand(fullResponse);
+      const cravingMeal = parseCravingTag(fullResponse);
+      const { healthDataTags } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
+
+      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length })}\n\n`);
+      res.end();
+    } else {
+      // Gemini path — streaming (original behavior)
+      const chatMessages = [
+        { role: "user" as const, parts: [{ text: systemPrompt }] },
+        { role: "model" as const, parts: [{ text: "Understood. I am Jessica, ready to help Pops and Raymo." }] },
+        ...history.map((m) => ({
+          role: (m.role === "assistant" ? "model" : "user") as "user" | "model",
+          parts: [{ text: m.content }],
+        })),
+      ];
+
+      let fullResponse = "";
+      let prevSafeLength = 0;
+
+      const stream = await ai.models.generateContentStream({
+        model: "gemini-2.5-flash",
+        contents: chatMessages,
+        config: { maxOutputTokens: 8192 },
+      });
+
+      for await (const chunk of stream) {
+        const text = chunk.text;
+        if (text) {
+          fullResponse += text;
+          const currentSafe = getStreamSafeVisible(fullResponse);
+          const delta = currentSafe.slice(prevSafeLength);
+          if (delta) {
+            res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+            prevSafeLength = currentSafe.length;
+          }
         }
       }
-    }
 
-    // Flush any remaining safe text held back by unclosed-tag guard
-    const finalSafe = getStreamSafeVisible(fullResponse);
-    const finalDelta = finalSafe.slice(prevSafeLength);
-    if (finalDelta) {
-      res.write(`data: ${JSON.stringify({ content: finalDelta })}\n\n`);
-    }
-
-    const healthDataTags = parseHealthDataTags(fullResponse);
-    const deviceCommand = parseDeviceCommand(fullResponse);
-    const cravingMeal = parseCravingTag(fullResponse);
-    const cleanContent = stripSystemTags(fullResponse);
-
-    // Save craving if Pops named a meal
-    if (cravingMeal) {
-      await db.insert(mealCravingsTable).values({ mealName: cravingMeal, source: "jessica", status: "pending" })
-        .catch((e) => req.log.warn({ e }, "Failed to save craving"));
-    }
-
-    await db.insert(messagesTable).values({
-      conversationId,
-      role: "assistant",
-      content: cleanContent,
-    });
-
-    // Session lifecycle management: runs on every message (not gated on healthDataTags)
-    const sessionRows = await db.select().from(callSessionsTable)
-      .where(eq(callSessionsTable.conversationId, conversationId))
-      .orderBy(desc(callSessionsTable.id))
-      .limit(1);
-    if (sessionRows[0] && !sessionRows[0].endedAt) {
-      // Always save health data points first (so boundary-response data is never dropped)
-      for (const tag of healthDataTags) {
-        const resolvedQuestionId = tag.questionId ?? (questions.find((q) => q.category === tag.category)?.id ?? null);
-        await saveHealthDataPoint({
-          sessionId: sessionRows[0].id,
-          questionId: resolvedQuestionId,
-          category: tag.category,
-          rawResponse: tag.rawResponse,
-          parsedValue: tag.parsedValue,
-          parsedIntensity: tag.parsedIntensity,
-        }).catch((e) => req.log.warn({ e }, "Failed to save health data point"));
+      // Flush any remaining safe text held back by unclosed-tag guard
+      const finalSafe = getStreamSafeVisible(fullResponse);
+      const finalDelta = finalSafe.slice(prevSafeLength);
+      if (finalDelta) {
+        res.write(`data: ${JSON.stringify({ content: finalDelta })}\n\n`);
       }
-      // Then check timeout — auto-close if session > 30 minutes old regardless of tag presence
-      const startedAt = sessionRows[0].startedAt ? new Date(sessionRows[0].startedAt) : null;
-      if (startedAt && (Date.now() - startedAt.getTime()) > 30 * 60 * 1000) {
-        const dataPoints = await db.select().from(healthDataPointsTable).where(eq(healthDataPointsTable.sessionId, sessionRows[0].id));
-        const categories = [...new Set(dataPoints.map((d) => d.category))];
-        const flagged = dataPoints.some((d) => d.flagged);
-        const summary = `Auto-closed after 30 minutes. Covered: ${categories.join(", ") || "none"}. ${dataPoints.length} data point(s).${flagged ? " ⚠️ Flagged." : ""}`;
-        await db.update(callSessionsTable).set({ endedAt: new Date(), summary, flagged }).where(eq(callSessionsTable.id, sessionRows[0].id));
-      }
-    }
 
-    res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length })}\n\n`);
-    res.end();
+      const deviceCommand = parseDeviceCommand(fullResponse);
+      const cravingMeal = parseCravingTag(fullResponse);
+      const { healthDataTags } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
+
+      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length })}\n\n`);
+      res.end();
+    }
   } catch (err) {
     req.log.error({ err }, "Failed to stream message");
     res.write(`data: ${JSON.stringify({ error: "Stream failed" })}\n\n`);

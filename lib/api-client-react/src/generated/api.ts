@@ -18,6 +18,7 @@ import type {
 
 import type {
   AddMealToCartInput,
+  AiModelStatus,
   AppState,
   AssessmentAnomalies,
   AssessmentSettings,
@@ -50,6 +51,7 @@ import type {
   MealWithIngredients,
   MonthlyReport,
   ScheduleTask,
+  SetAiModelInput,
   SheetsSyncInput,
   SheetsSyncResult,
   SmartHomeDevice,
@@ -1984,6 +1986,167 @@ export const useSendGeminiMessage = <
   TContext
 > => {
   return useMutation(getSendGeminiMessageMutationOptions(options));
+};
+
+/**
+ * @summary Get active AI model and available models
+ */
+export const getGetAiModelUrl = () => {
+  return `/api/ai-model`;
+};
+
+export const getAiModel = async (
+  options?: RequestInit,
+): Promise<AiModelStatus> => {
+  return customFetch<AiModelStatus>(getGetAiModelUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAiModelQueryKey = () => {
+  return [`/api/ai-model`] as const;
+};
+
+export const getGetAiModelQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAiModel>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAiModel>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAiModelQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAiModel>>> = ({
+    signal,
+  }) => getAiModel({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAiModel>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAiModelQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAiModel>>
+>;
+export type GetAiModelQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get active AI model and available models
+ */
+
+export function useGetAiModel<
+  TData = Awaited<ReturnType<typeof getAiModel>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAiModel>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAiModelQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Set the active AI model for Jessica conversations
+ */
+export const getSetAiModelUrl = () => {
+  return `/api/ai-model`;
+};
+
+export const setAiModel = async (
+  setAiModelInput: SetAiModelInput,
+  options?: RequestInit,
+): Promise<AiModelStatus> => {
+  return customFetch<AiModelStatus>(getSetAiModelUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setAiModelInput),
+  });
+};
+
+export const getSetAiModelMutationOptions = <
+  TError = ErrorType<GeminiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setAiModel>>,
+    TError,
+    { data: BodyType<SetAiModelInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setAiModel>>,
+  TError,
+  { data: BodyType<SetAiModelInput> },
+  TContext
+> => {
+  const mutationKey = ["setAiModel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setAiModel>>,
+    { data: BodyType<SetAiModelInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setAiModel(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetAiModelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setAiModel>>
+>;
+export type SetAiModelMutationBody = BodyType<SetAiModelInput>;
+export type SetAiModelMutationError = ErrorType<GeminiError>;
+
+/**
+ * @summary Set the active AI model for Jessica conversations
+ */
+export const useSetAiModel = <
+  TError = ErrorType<GeminiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setAiModel>>,
+    TError,
+    { data: BodyType<SetAiModelInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setAiModel>>,
+  TError,
+  { data: BodyType<SetAiModelInput> },
+  TContext
+> => {
+  return useMutation(getSetAiModelMutationOptions(options));
 };
 
 /**

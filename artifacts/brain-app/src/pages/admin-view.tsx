@@ -31,6 +31,7 @@ import {
   useListHealthQuestions, useCreateHealthQuestion, useUpdateHealthQuestion, useDeleteHealthQuestion,
   useGetTodaySummary, getGetTodaySummaryQueryKey, useListCallSessions, useGetSessionDataPoints, getGetSessionDataPointsQueryKey, useGetAssessmentTrends, useGetAssessmentAnomalies,
   useGetAssessmentSettings, useUpdateAssessmentSettings,
+  useGetAiModel, useSetAiModel, getGetAiModelQueryKey,
   useListMeals, useCreateMeal, useDeleteMeal, useSyncFromSheets,
   useGetCart, useAddMealToCart, useRemoveMealFromCart, useApproveCart, useDismissCart,
   useListCravings, useCreateCraving, useUpdateCraving,
@@ -122,7 +123,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function HealthIntelligenceTab() {
-  const [activeSection, setActiveSection] = useState<"summary" | "sessions" | "questions" | "settings">("summary");
+  const [activeSection, setActiveSection] = useState<"summary" | "sessions" | "questions" | "settings" | "ai-brain">("summary");
   return (
     <div className="space-y-6">
       <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
@@ -130,11 +131,11 @@ function HealthIntelligenceTab() {
           <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Health Intelligence</h2>
           <p className="text-muted-foreground">Pops' health data extracted from Jessica's daily conversations.</p>
         </div>
-        <div className="flex gap-2">
-          {(["summary", "sessions", "questions", "settings"] as const).map((s) => (
+        <div className="flex gap-2 flex-wrap">
+          {(["summary", "sessions", "questions", "settings", "ai-brain"] as const).map((s) => (
             <button key={s} onClick={() => setActiveSection(s)}
               className={`px-3 py-1.5 text-xs font-display uppercase tracking-widest rounded-sm border transition-colors ${activeSection === s ? "bg-primary/10 border-primary/40 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
-              {s}
+              {s === "ai-brain" ? "AI Brain" : s}
             </button>
           ))}
         </div>
@@ -143,6 +144,7 @@ function HealthIntelligenceTab() {
       {activeSection === "sessions" && <HealthSessionsSection />}
       {activeSection === "questions" && <HealthQuestionsSection />}
       {activeSection === "settings" && <HealthSettingsSection />}
+      {activeSection === "ai-brain" && <AiBrainSection />}
     </div>
   );
 }
@@ -547,6 +549,78 @@ function HealthQuestionsSection() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function AiBrainSection() {
+  const { data: aiStatus, refetch } = useGetAiModel({ query: { queryKey: getGetAiModelQueryKey() } });
+  const setAiModel = useSetAiModel();
+  const { toast } = useToast();
+
+  const activeModel = (aiStatus as any)?.activeModel ?? "gemini";
+  const models: Array<{ id: string; label: string; provider: string; lmStudioModelId: string | null }> = (aiStatus as any)?.models ?? [];
+
+  const handleSelect = (modelId: string) => {
+    setAiModel.mutate({ data: { activeModel: modelId } }, {
+      onSuccess: () => {
+        toast({ title: "AI Brain updated", description: `Now using: ${models.find((m) => m.id === modelId)?.label ?? modelId}` });
+        refetch();
+      },
+      onError: () => toast({ title: "Failed to update model", variant: "destructive" }),
+    });
+  };
+
+  return (
+    <div className="space-y-6 max-w-lg">
+      <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">AI Brain</h3>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BrainCircuit size={18} className="text-primary" />
+            Active Model
+          </CardTitle>
+          <CardDescription>
+            Select which AI model powers Jessica's conversations. LM Studio models require the LM Studio app to be open and the model loaded.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {models.map((model) => {
+            const isActive = model.id === activeModel;
+            const isLm = model.provider === "lmstudio";
+            return (
+              <button
+                key={model.id}
+                onClick={() => handleSelect(model.id)}
+                disabled={setAiModel.isPending}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-sm border transition-all text-left ${
+                  isActive
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-secondary/30 text-foreground hover:border-primary/40 hover:bg-primary/5"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">{isLm ? "🖥️" : "✨"}</span>
+                  <div>
+                    <p className="font-display text-sm uppercase tracking-widest font-bold">{model.label}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{isLm ? `Local · LM Studio` : "Cloud · Google"}</p>
+                  </div>
+                </div>
+                {isActive && (
+                  <span className="px-2 py-0.5 text-xs font-display uppercase tracking-widest bg-primary/20 text-primary rounded-sm border border-primary/30">
+                    Active
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          <div className="pt-2 p-3 bg-secondary/20 border border-border/40 rounded-sm">
+            <p className="text-xs text-muted-foreground/70 font-display uppercase tracking-widest mb-1">LM Studio URL</p>
+            <p className="text-xs text-muted-foreground font-mono">LM_STUDIO_URL env var (default: http://localhost:1234)</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Use a tunnel (e.g. ngrok) to expose LM Studio when working remotely.</p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
