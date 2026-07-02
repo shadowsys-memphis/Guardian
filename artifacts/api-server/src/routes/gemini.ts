@@ -221,6 +221,19 @@ function parseHealthDataTags(text: string): Array<{ category: string; questionId
   return results;
 }
 
+function parseActionBlocksRaw(text: string): Array<{ type: string; [key: string]: unknown }> {
+  const results: Array<{ type: string; [key: string]: unknown }> = [];
+  const regex = /---ACTION---\s*([\s\S]*?)\s*---END_ACTION---/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed?.type) results.push(parsed);
+    } catch { /* skip malformed blocks */ }
+  }
+  return results;
+}
+
 function parseCravingTag(text: string): string | null {
   const match = text.match(/<craving>([\s\S]*?)<\/craving>/);
   if (!match) return null;
@@ -487,6 +500,7 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       const deviceCommand = parseDeviceCommand(fullResponse);
       const cravingMeal = parseCravingTag(fullResponse);
       const { healthDataTags } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
+      const parsedActions = parseActionBlocksRaw(fullResponse);
 
       // TTS synthesis — only when caller requested speech and content exists
       let audioBase64: string | null = null;
@@ -497,7 +511,7 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
         }
       }
 
-      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length, hasAudio: !!audioBase64 })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length, hasAudio: !!audioBase64, actions: parsedActions })}\n\n`);
       res.end();
     } else {
       // Gemini path — streaming (original behavior)
@@ -542,6 +556,7 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       const deviceCommand = parseDeviceCommand(fullResponse);
       const cravingMeal = parseCravingTag(fullResponse);
       const { healthDataTags } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
+      const parsedActions = parseActionBlocksRaw(fullResponse);
 
       // TTS synthesis — only when caller requested speech
       let audioBase64: string | null = null;
@@ -552,7 +567,7 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
         }
       }
 
-      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length, hasAudio: !!audioBase64 })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length, hasAudio: !!audioBase64, actions: parsedActions })}\n\n`);
       res.end();
     }
   } catch (err) {

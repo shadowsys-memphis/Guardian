@@ -2107,9 +2107,9 @@ function RotationTab() {
                     onClick={() => handleSyncCal(t)}
                     disabled={calSyncing === t.id}
                     title="Sync to Google Calendar"
-                    className="p-1.5 rounded-sm border border-primary/20 text-primary/40 hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1 px-2 py-1 rounded-sm border border-primary/20 text-primary/40 hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-40 text-[10px] font-mono uppercase tracking-wide"
                   >
-                    <CalendarPlus size={11} />
+                    <CalendarPlus size={10} /> SYNC CAL
                   </button>
                   <button onClick={() => { if (confirm(`Delete "${t.title}"?`)) deleteTask.mutate({ id: t.id }, { onSuccess: () => refetchTasks() }); }}
                     className="p-1.5 rounded-sm border border-destructive/20 text-destructive/40 hover:border-destructive/50 hover:text-destructive transition-colors">

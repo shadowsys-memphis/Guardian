@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Send, Trash2, Zap, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
-import { useGetAiModel } from "@workspace/api-client-react";
+import { useGetAiModel, getGetAiModelQueryKey, useGetAppState, getGetAppStateQueryKey } from "@workspace/api-client-react";
 
 interface Message {
   id: string;
@@ -100,7 +100,9 @@ export function JessicaPhone() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const synth = useRef<SpeechSynthesis | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const { data: aiModelStatus } = useGetAiModel({ query: { refetchInterval: 10000 } });
+  const { data: aiModelStatus } = useGetAiModel({ query: { queryKey: getGetAiModelQueryKey(), refetchInterval: 10000 } });
+  const { data: appState } = useGetAppState({ query: { queryKey: getGetAppStateQueryKey() } });
+  const activeQuarter: string = (appState as any)?.overrideQuarter ?? (appState as any)?.currentQuarter ?? "Q1";
   const activeModelLabel = (aiModelStatus as any)?.models?.find((m: any) => m.id === (aiModelStatus as any)?.activeModel)?.label ?? "Gemini 2.5 Flash";
   const activeModelId = (aiModelStatus as any)?.activeModel ?? "gemini";
   const isLocalModel = activeModelId !== "gemini";
@@ -265,7 +267,10 @@ export function JessicaPhone() {
             }
             if (data.done) {
               const cmd = data.deviceCommand ?? parseDeviceCommand(fullContent);
-              const actions = parseActionBlocks(fullContent);
+              // Actions come from the backend done payload (parsed from raw response before stripping)
+              const actions: ParsedAction[] = Array.isArray(data.actions)
+                ? (data.actions as any[]).map((a: any) => ({ type: a.type ?? "UNKNOWN", payload: a, raw: JSON.stringify(a) }))
+                : parseActionBlocks(fullContent);
               if (cmd) {
                 setDeviceCommandResult(cmd);
                 executeDeviceCommand(cmd);
@@ -321,7 +326,7 @@ export function JessicaPhone() {
           await fetch(`${BASE_URL}/api/schedule`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: (action.payload as any).title ?? "Event", quarter: "Q1" }),
+            body: JSON.stringify({ title: (action.payload as any).title ?? "Event", quarter: (action.payload as any).quarter ?? activeQuarter }),
           });
         } else if (action.type === "TOGGLE_SMART_DEVICE") {
           const device = (action.payload as any).device;
@@ -337,7 +342,7 @@ export function JessicaPhone() {
           await fetch(`${BASE_URL}/api/schedule`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: (action.payload as any).title ?? "Task", quarter: "Q1" }),
+            body: JSON.stringify({ title: (action.payload as any).title ?? "Task", quarter: (action.payload as any).quarter ?? activeQuarter }),
           });
         }
       } catch {
