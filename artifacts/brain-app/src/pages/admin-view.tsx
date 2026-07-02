@@ -1941,6 +1941,7 @@ function InventoryTab() {
   const [intakeImageBase64, setIntakeImageBase64] = useState<string | null>(null);
   const [intakeMimeType, setIntakeMimeType] = useState("image/jpeg");
   const [intakeResult, setIntakeResult] = useState<any>(null);
+  const [editedIntakeItems, setEditedIntakeItems] = useState<any[]>([]);
   const [intakeLoading, setIntakeLoading] = useState(false);
   const [voiceNote, setVoiceNote] = useState("");
 
@@ -1997,6 +1998,7 @@ function InventoryTab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Intake failed");
       setIntakeResult(data);
+      setEditedIntakeItems((data.items_detected ?? []).map((item: any) => ({ ...item })));
     } catch (err: any) {
       toast({ title: "Intake failed", description: err.message, variant: "destructive" });
     } finally {
@@ -2007,7 +2009,7 @@ function InventoryTab() {
   const handleVoiceDictation = async () => {
     if (!voiceNote.trim()) return;
     try {
-      const res = await fetch(`${WORKSPACE_BASE}/api/assistant/chat`, {
+      const res = await fetch(`${WORKSPACE_BASE}/api/assistant`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [{ role: "user", content: voiceNote }],
@@ -2201,32 +2203,89 @@ function InventoryTab() {
                 <p className="text-xs text-muted-foreground italic">{intakeResult.summary}</p>
                 <span className="text-xs font-bold text-muted-foreground uppercase">{intakeResult.source_type}</span>
               </div>
-              <div className="space-y-1.5">
-                {(intakeResult.items_detected ?? []).map((item: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between gap-3 p-2 bg-secondary/20 rounded-sm border border-border/30">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold">{item.name}</span>
-                        <span className="text-xs text-muted-foreground">×{item.quantity}</span>
-                        {item.price_per_unit != null && <span className="text-xs text-primary">${Number(item.price_per_unit).toFixed(2)}</span>}
-                        {item.needs_restock && <span className="text-xs text-yellow-400 font-bold">needs restock</span>}
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Edit items before adding</p>
+                {editedIntakeItems.map((item: any, i: number) => (
+                  <div key={i} className="p-3 bg-secondary/20 rounded-sm border border-border/30 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="col-span-2">
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Name</label>
+                        <Input
+                          value={item.name}
+                          onChange={(e) => { const next = [...editedIntakeItems]; next[i] = { ...next[i], name: e.target.value }; setEditedIntakeItems(next); }}
+                          className="h-7 text-sm mt-0.5"
+                        />
                       </div>
-                      {item.category && <p className="text-xs text-muted-foreground capitalize">{item.category} · {item.replenishment_cycle}</p>}
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Qty</label>
+                        <Input
+                          value={item.quantity}
+                          onChange={(e) => { const next = [...editedIntakeItems]; next[i] = { ...next[i], quantity: e.target.value }; setEditedIntakeItems(next); }}
+                          className="h-7 text-sm mt-0.5"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Price</label>
+                        <Input
+                          type="number"
+                          value={item.price_per_unit ?? ""}
+                          onChange={(e) => { const next = [...editedIntakeItems]; next[i] = { ...next[i], price_per_unit: parseFloat(e.target.value) || null }; setEditedIntakeItems(next); }}
+                          className="h-7 text-sm mt-0.5"
+                          placeholder="$0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Category</label>
+                        <select
+                          value={item.category ?? "food"}
+                          onChange={(e) => { const next = [...editedIntakeItems]; next[i] = { ...next[i], category: e.target.value }; setEditedIntakeItems(next); }}
+                          className="flex h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground mt-0.5"
+                        >
+                          <option value="food">Food</option>
+                          <option value="paper">Paper</option>
+                          <option value="toiletry">Toiletry</option>
+                          <option value="cleaning">Cleaning</option>
+                          <option value="medical">Medical</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Cycle</label>
+                        <select
+                          value={item.replenishment_cycle ?? "monthly"}
+                          onChange={(e) => { const next = [...editedIntakeItems]; next[i] = { ...next[i], replenishment_cycle: e.target.value }; setEditedIntakeItems(next); }}
+                          className="flex h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground mt-0.5"
+                        >
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="quarterly">Quarterly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
+                      </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs shrink-0"
-                      onClick={() => createItem.mutate({ data: {
-                        itemName: item.name,
-                        category: (item.category as any) ?? "food",
-                        replenishmentCycle: (item.replenishment_cycle as any) ?? "monthly",
-                        notes: `Intake: qty ${item.quantity}${item.price_per_unit != null ? `, ~$${Number(item.price_per_unit).toFixed(2)}` : ""}`,
-                      }})}
-                      disabled={createItem.isPending}
-                    >
-                      <Plus size={10} className="mr-1" /> Add
-                    </Button>
+                    <div className="flex items-center justify-between">
+                      {item.needs_restock && <span className="text-xs text-yellow-400 font-bold">needs restock</span>}
+                      <div className="flex gap-2 ml-auto">
+                        <button
+                          onClick={() => setEditedIntakeItems(editedIntakeItems.filter((_, j) => j !== i))}
+                          className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          Remove
+                        </button>
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => createItem.mutate({ data: {
+                            itemName: item.name,
+                            category: item.category ?? "food",
+                            replenishmentCycle: item.replenishment_cycle ?? "monthly",
+                            notes: `Intake: qty ${item.quantity}${item.price_per_unit != null ? `, ~$${Number(item.price_per_unit).toFixed(2)}` : ""}`,
+                          }})}
+                          disabled={createItem.isPending || !item.name?.trim()}
+                        >
+                          <Plus size={10} className="mr-1" /> Add to Inventory
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
