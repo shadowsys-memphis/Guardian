@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Send, Trash2, Zap, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { useGetAiModel, getGetAiModelQueryKey, useGetAppState, getGetAppStateQueryKey } from "@workspace/api-client-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Message {
   id: string;
@@ -21,6 +22,7 @@ interface ParsedAction {
   type: string;
   payload: Record<string, unknown>;
   raw: string;
+  error?: string;
 }
 
 const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -107,6 +109,7 @@ export function JessicaPhone() {
   const activeModelId = (aiModelStatus as any)?.activeModel ?? "gemini";
   const isLocalModel = activeModelId !== "gemini";
   const [lmStatus, setLmStatus] = useState<"unchecked" | "checking" | "connected" | "unreachable">("unchecked");
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!isLocalModel) { setLmStatus("unchecked"); return; }
@@ -322,31 +325,46 @@ export function JessicaPhone() {
   const dispatchActions = async (actions: ParsedAction[]) => {
     for (const action of actions) {
       try {
-        if (action.type === "ADD_EVENT") {
-          await fetch(`${BASE_URL}/api/schedule`, {
+        if (action.type === "ADD_EVENT" || action.type === "ADD_TASK") {
+          const p = action.payload as any;
+          const now = new Date();
+          const timeLabel: string = p.timeLabel ?? format(now, "HHmm");
+          const order: number = typeof p.order === "number" ? p.order : now.getHours() * 100 + now.getMinutes();
+          const res = await fetch(`${BASE_URL}/api/schedule`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: (action.payload as any).title ?? "Event", quarter: (action.payload as any).quarter ?? activeQuarter }),
+            body: JSON.stringify({
+              title: p.title ?? (action.type === "ADD_EVENT" ? "Event" : "Task"),
+              quarter: p.quarter ?? activeQuarter,
+              timeLabel,
+              order,
+            }),
           });
+          if (!res.ok) {
+            const body = await res.text().catch(() => res.statusText);
+            throw new Error(`Schedule API ${res.status}: ${body}`);
+          }
         } else if (action.type === "TOGGLE_SMART_DEVICE") {
           const device = (action.payload as any).device;
           const isOn = (action.payload as any).state === "on";
           if (device) {
-            await fetch(`${BASE_URL}/api/smarthome/devices/${device}`, {
+            const res = await fetch(`${BASE_URL}/api/smarthome/devices/${device}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ isOn }),
             });
+            if (!res.ok) {
+              const body = await res.text().catch(() => res.statusText);
+              throw new Error(`SmartHome API ${res.status}: ${body}`);
+            }
           }
-        } else if (action.type === "ADD_TASK") {
-          await fetch(`${BASE_URL}/api/schedule`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: (action.payload as any).title ?? "Task", quarter: (action.payload as any).quarter ?? activeQuarter }),
-          });
         }
-      } catch {
-        // best-effort dispatch
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setActionStream((prev) =>
+          prev.map((a, idx) => (idx === prev.length - 1 ? { ...a, error: msg } : a))
+        );
+        toast({ title: "Action dispatch failed", description: `${action.type}: ${msg}`, variant: "destructive" });
       }
     }
   };
@@ -548,10 +566,12 @@ export function JessicaPhone() {
             {actionStream.map((action, i) => (
               <div
                 key={i}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-sm border text-xs font-display ${ACTION_TYPE_COLORS[action.type] ?? ACTION_TYPE_COLORS.COMMAND}`}
+                title={action.error ?? action.type}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-sm border text-xs font-display ${action.error ? "text-destructive border-destructive/40 line-through opacity-60" : (ACTION_TYPE_COLORS[action.type] ?? ACTION_TYPE_COLORS.COMMAND)}`}
               >
                 <ChevronRight size={10} />
                 {action.type}
+                {action.error && <span className="ml-1 text-[9px] opacity-70">✕</span>}
               </div>
             ))}
           </div>
