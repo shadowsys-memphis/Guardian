@@ -2,6 +2,20 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
+  getGoogleToken,
+  promptGoogleToken,
+  pushToCalendar,
+  makeMedEventDescription,
+  makeShoppingEventDescription,
+  makeUrgentItemDescription,
+  makeScheduleTaskDescription,
+  makeRotationTaskDescription,
+  todayAtTime,
+  quarterToHour,
+  extractCalendarTitle,
+  handleCalendarError,
+} from "@/lib/calendar";
+import {
   Activity,
   Calendar,
   ShieldAlert,
@@ -81,27 +95,9 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-function getGoogleToken(): string | null {
-  return localStorage.getItem("brain_google_token");
-}
-
-function promptGoogleToken(toast: (opts: any) => void): string | null {
-  const existing = getGoogleToken();
-  const token = window.prompt(
-    "Paste your Google OAuth2 access token (Calendar + Drive scope):\n\nGet one at: https://developers.google.com/oauthplayground\nScopes: calendar.events, drive.file\n\nExisting token will be overwritten.",
-    existing ?? ""
-  );
-  if (token && token.trim()) {
-    localStorage.setItem("brain_google_token", token.trim());
-    toast({ title: "Google token saved", description: "Your token is stored in browser storage for this session." });
-    return token.trim();
-  }
-  return existing;
-}
 
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -130,6 +126,7 @@ export function AdminView() {
           <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
           <NavButton active={activeTab === "inventory"} onClick={() => setActiveTab("inventory")} icon={<Package size={18} />} label="Inventory" />
           <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
+          <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
           <div className="pt-2 border-t border-border/30 mt-2">
             <NavButton active={false} onClick={() => navigate("/admin/report")} icon={<FileText size={18} />} label="Doctor Report" />
           </div>
@@ -151,6 +148,7 @@ export function AdminView() {
           {activeTab === "shopper" && <ShopperTab />}
           {activeTab === "inventory" && <InventoryTab />}
           {activeTab === "rotation" && <RotationTab />}
+          {activeTab === "calendar-sync" && <CalendarSyncTab />}
         </div>
       </main>
     </div>
@@ -1010,7 +1008,33 @@ function ScheduleTab() {
   const { toast } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<ScheduleTask | null>(null); 
+  const [editingTask, setEditingTask] = useState<ScheduleTask | null>(null);
+  const [calSyncingId, setCalSyncingId] = useState<number | null>(null);
+
+  const handlePushTaskToCalendar = async (task: ScheduleTask) => {
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+    setCalSyncingId(task.id);
+    const today = new Date().toISOString().split("T")[0];
+    const h = quarterToHour(task.quarter);
+    const startIso = `${today}T${String(h).padStart(2, "0")}:00:00`;
+    const result = await pushToCalendar(
+      token,
+      {
+        summary: `[Schedule] ${task.title}`,
+        description: makeScheduleTaskDescription(task),
+        startTime: startIso,
+      },
+      "appointment"
+    );
+    setCalSyncingId(null);
+    if (result.success) {
+      toast({ title: "Added to Calendar!", description: `${task.title} · 30-min alert set.` });
+    } else {
+      handleCalendarError(result.error ?? "Unknown error", toast);
+    }
+  }; 
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1091,6 +1115,16 @@ function ScheduleTab() {
                           <td className="px-6 py-4 font-display text-lg tracking-wider">{task.title}</td>
                           <td className="px-6 py-4">{task.order}</td>
                           <td className="px-6 py-4 text-right flex justify-end gap-2">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 text-primary/60 hover:text-primary hover:bg-primary/10 border-primary/20"
+                              title="Push to Calendar (30-min alert)"
+                              disabled={calSyncingId === task.id}
+                              onClick={() => handlePushTaskToCalendar(task)}
+                            >
+                              {calSyncingId === task.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                            </Button>
                             {!task.isCompleted && (
                               <Button size="icon" variant="outline" className="h-8 w-8 text-success hover:bg-success/20 hover:text-success border-success/30" onClick={() => completeTask.mutate({ id: task.id })}>
                                 <Check className="h-4 w-4" />
@@ -1363,6 +1397,32 @@ function HaldolTab() {
   const { data: haldol } = useGetHaldolCycle();
   const updateHaldol = useUpdateHaldolCycle();
   const { toast } = useToast();
+  const [calPushing, setCalPushing] = useState(false);
+
+  const handlePushInjectionToCalendar = async () => {
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+    if (!haldol?.nextInjectionDate) return;
+    setCalPushing(true);
+    const result = await pushToCalendar(token, {
+      summary: "💊 Pops — Haldol Decanoate Injection",
+      description: makeMedEventDescription({
+        cycleDay: haldol.cycleDay ?? null,
+        nextInjectionDate: haldol.nextInjectionDate,
+        isZombiePhase: haldol.isZombiePhase ?? false,
+        notes: haldol.notes,
+      }),
+      startTime: `${haldol.nextInjectionDate}T09:00:00`,
+      allDay: false,
+    });
+    setCalPushing(false);
+    if (result.success) {
+      toast({ title: "Injection added to Calendar!", description: `Event created for ${haldol.nextInjectionDate}. Alert set for 30 min before.` });
+    } else {
+      handleCalendarError(result.error ?? "Unknown error", toast);
+    }
+  };
 
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1416,6 +1476,16 @@ function HaldolTab() {
               <div className="pt-4 border-t border-border/50">
                 <p className="text-muted-foreground uppercase text-xs font-bold tracking-widest mb-1">Next Scheduled Injection</p>
                 <p className="text-3xl font-display text-foreground">{haldol.nextInjectionDate}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                  onClick={handlePushInjectionToCalendar}
+                  disabled={calPushing || !haldol.nextInjectionDate}
+                >
+                  <CalendarPlus size={14} />
+                  {calPushing ? "Pushing…" : "Push to Calendar"}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -1464,6 +1534,81 @@ function ShopperTab() {
   const [mealDriveExporting, setMealDriveExporting] = useState(false);
   const [remixInput, setRemixInput] = useState("");
   const [remixedPlan, setRemixedPlan] = useState("");
+  const [calPushingShop, setCalPushingShop] = useState(false);
+  const [urgentItems, setUrgentItems] = useState<Set<string>>(new Set());
+  const [urgentPushingKey, setUrgentPushingKey] = useState<string | null>(null);
+
+  const handleMarkUrgent = async (item: any) => {
+    const key = item.ingredientName as string;
+    const nowUrgent = !urgentItems.has(key);
+    setUrgentItems((prev) => {
+      const next = new Set(prev);
+      if (nowUrgent) next.add(key); else next.delete(key);
+      return next;
+    });
+    if (!nowUrgent) return;
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+    setUrgentPushingKey(key);
+    const today = new Date().toISOString().split("T")[0];
+    const result = await pushToCalendar(
+      token,
+      {
+        summary: `⚡ URGENT — Pick up: ${key}`,
+        description: makeUrgentItemDescription({
+          ingredientName: item.ingredientName,
+          totalQuantity: item.totalQuantity,
+          unit: item.unit,
+          estimatedCostCents: item.estimatedCostCents,
+        }),
+        startTime: today,
+        allDay: true,
+      },
+      "urgent"
+    );
+    setUrgentPushingKey(null);
+    if (result.success) {
+      toast({ title: `⚡ Urgent alert pushed!`, description: `"${key}" added to today's calendar.` });
+    } else {
+      handleCalendarError(result.error ?? "Unknown error", toast);
+    }
+  };
+
+  const handlePushShoppingToCalendar = async () => {
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+    const items = (cart?.items ?? []) as any[];
+    if (items.length === 0) {
+      toast({ title: "No items in cart", description: "Add meals first, then push the shopping reminder.", variant: "destructive" });
+      return;
+    }
+    const weekStart = cart?.weekStartDate ?? new Date().toISOString().split("T")[0];
+    setCalPushingShop(true);
+    const result = await pushToCalendar(token, {
+      summary: `🛒 Grocery Run — Week of ${weekStart}`,
+      description: makeShoppingEventDescription({
+        weekStartDate: weekStart,
+        items: items.map((it: any) => ({
+          ingredientName: it.ingredientName,
+          totalQuantity: it.totalQuantity,
+          unit: it.unit,
+          estimatedCostCents: it.estimatedCostCents,
+        })),
+        totalCostCents: cart?.totalEstimatedCostCents ?? 0,
+        budgetCents: cart?.budgetCents ?? 15000,
+      }),
+      startTime: weekStart,
+      allDay: true,
+    });
+    setCalPushingShop(false);
+    if (result.success) {
+      toast({ title: "Shopping Reminder pushed!", description: `All-day event added to your calendar for ${weekStart}.` });
+    } else {
+      handleCalendarError(result.error ?? "Unknown error", toast);
+    }
+  };
 
   const handleExportMealPlan = async () => {
     let token = getGoogleToken();
@@ -1563,9 +1708,14 @@ function ShopperTab() {
           <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Shopper</h2>
           <p className="text-sm text-muted-foreground mt-1">Weekly meal planning &amp; grocery cart for Pops</p>
         </div>
-        <Button size="sm" variant="outline" onClick={handleExportMealPlan} disabled={mealDriveExporting} className="gap-2 shrink-0">
-          <Cloud size={14} /> Export Meal Plan to Drive
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={handlePushShoppingToCalendar} disabled={calPushingShop} className="gap-2 shrink-0">
+            <CalendarPlus size={14} /> {calPushingShop ? "Pushing…" : "Push to Calendar"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleExportMealPlan} disabled={mealDriveExporting} className="gap-2 shrink-0">
+            <Cloud size={14} /> Export to Drive
+          </Button>
+        </div>
       </header>
 
       {/* Budget Rules */}
@@ -1708,13 +1858,34 @@ function ShopperTab() {
           {(cart?.items ?? []).length > 0 && (
             <div className="mt-4 pt-4 border-t border-border/30">
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Shopping List</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                {(cart?.items ?? []).map((item: any) => (
-                  <div key={item.id} className="flex justify-between text-xs">
-                    <span className="text-foreground/80">{item.ingredientName} <span className="text-muted-foreground">×{item.totalQuantity} {item.unit}</span></span>
-                    <span className="text-muted-foreground">{fmtDollars(item.estimatedCostCents)}</span>
-                  </div>
-                ))}
+              <div className="space-y-1.5">
+                {(cart?.items ?? []).map((item: any) => {
+                  const isUrgent = urgentItems.has(item.ingredientName);
+                  const isPushing = urgentPushingKey === item.ingredientName;
+                  return (
+                    <div key={item.id} className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-sm text-xs transition-colors ${isUrgent ? "bg-orange-500/10 border border-orange-500/30" : "hover:bg-secondary/30"}`}>
+                      <span className={`${isUrgent ? "text-orange-400 font-bold" : "text-foreground/80"}`}>
+                        {isUrgent && "⚡ "}{item.ingredientName} <span className="text-muted-foreground font-normal">×{item.totalQuantity} {item.unit}</span>
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-muted-foreground">{fmtDollars(item.estimatedCostCents)}</span>
+                        <button
+                          onClick={() => handleMarkUrgent(item)}
+                          disabled={isPushing}
+                          title={isUrgent ? "Marked urgent — click to un-mark" : "Mark urgent & push calendar alert"}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-sm border text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${
+                            isUrgent
+                              ? "bg-orange-500/20 border-orange-500/50 text-orange-400"
+                              : "border-border/40 text-muted-foreground/60 hover:border-orange-500/40 hover:text-orange-400"
+                          }`}
+                        >
+                          {isPushing ? <RefreshCw size={8} className="animate-spin" /> : <CalendarPlus size={8} />}
+                          {isPushing ? "…" : isUrgent ? "Urgent" : "Urgent"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -2388,33 +2559,16 @@ function RotationTab() {
     if (!token) token = promptGoogleToken(toast);
     if (!token) return;
     setCalSyncing(t.id);
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      const [timePart, ampm] = t.timeSlot.split(" ");
-      const [h, m] = timePart.split(":").map(Number);
-      const hour24 = ampm === "PM" && h !== 12 ? h + 12 : ampm === "AM" && h === 12 ? 0 : h;
-      const startIso = new Date(`${today}T${String(hour24).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}:00`).toISOString();
-      const res = await fetch(`${WORKSPACE_BASE}/api/calendar/events`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-google-access-token": token },
-        body: JSON.stringify({
-          summary: `[Pops] ${t.title}`,
-          description: `Category: ${t.category}\nPeriod: ${t.period}\nTime: ${t.timeSlot}${t.loggedNote ? `\nNote: ${t.loggedNote}` : ""}`,
-          startTime: startIso,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Calendar sync failed.");
-      toast({ title: "Synced to Calendar!", description: data.eventLink ? "Event created" : "Event added to Google Calendar." });
-    } catch (err: any) {
-      const msg: string = err?.message ?? "Calendar sync failed.";
-      if (msg.includes("denied") || msg.includes("access")) {
-        toast({ title: "Google access denied", description: "Re-grant Calendar permissions in your Google Account.", variant: "destructive" });
-      } else {
-        toast({ title: "Calendar sync failed", description: msg, variant: "destructive" });
-      }
-    } finally {
-      setCalSyncing(null);
+    const result = await pushToCalendar(token, {
+      summary: `[Pops] ${t.title}`,
+      description: makeRotationTaskDescription(t),
+      startTime: todayAtTime(t.timeSlot),
+    });
+    setCalSyncing(null);
+    if (result.success) {
+      toast({ title: "Synced to Calendar!", description: "Event added to Google Calendar." });
+    } else {
+      handleCalendarError(result.error ?? "Unknown error", toast);
     }
   };
 
@@ -2695,11 +2849,231 @@ function RotationTab() {
   );
 }
 
+function CalendarSyncTab() {
+  const { toast } = useToast();
+  const { data: haldol } = useGetHaldolCycle();
+  const { data: schedule } = useGetSchedule();
+  const { data: cart } = useGetCart();
+  const { data: tasks = [] } = useListRotationTasks({ query: { queryKey: getListRotationTasksQueryKey() } });
+
+  const [selected, setSelected] = useState({
+    medications: true,
+    shopping: true,
+    schedule: false,
+    rotation: false,
+  });
+  const [pushing, setPushing] = useState(false);
+  const [results, setResults] = useState<Array<{ label: string; ok: boolean; detail?: string }>>([]);
+
+  const taskList = tasks as RotationTask[];
+  const scheduleTasks = (schedule ?? []) as ScheduleTask[];
+
+  const handlePushAll = async () => {
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+
+    setPushing(true);
+    setResults([]);
+    const newResults: Array<{ label: string; ok: boolean; detail?: string }> = [];
+
+    if (selected.medications && haldol?.nextInjectionDate) {
+      const r = await pushToCalendar(token, {
+        summary: "💊 Pops — Haldol Decanoate Injection",
+        description: makeMedEventDescription({
+          cycleDay: haldol.cycleDay ?? null,
+          nextInjectionDate: haldol.nextInjectionDate,
+          isZombiePhase: haldol.isZombiePhase ?? false,
+          notes: haldol.notes,
+        }),
+        startTime: `${haldol.nextInjectionDate}T09:00:00`,
+        allDay: false,
+      });
+      newResults.push({ label: `Haldol injection (${haldol.nextInjectionDate})`, ok: r.success, detail: r.error });
+    }
+
+    if (selected.shopping) {
+      const items = (cart?.items ?? []) as any[];
+      if (items.length > 0) {
+        const weekStart = cart?.weekStartDate ?? new Date().toISOString().split("T")[0];
+        const r = await pushToCalendar(token, {
+          summary: `🛒 Grocery Run — Week of ${weekStart}`,
+          description: makeShoppingEventDescription({
+            weekStartDate: weekStart,
+            items: items.map((it: any) => ({
+              ingredientName: it.ingredientName,
+              totalQuantity: it.totalQuantity,
+              unit: it.unit,
+              estimatedCostCents: it.estimatedCostCents,
+            })),
+            totalCostCents: cart?.totalEstimatedCostCents ?? 0,
+            budgetCents: cart?.budgetCents ?? 15000,
+          }),
+          startTime: weekStart,
+          allDay: true,
+        });
+        newResults.push({ label: `Shopping reminder (${weekStart})`, ok: r.success, detail: r.error });
+      } else {
+        newResults.push({ label: "Shopping reminder", ok: false, detail: "No items in current cart." });
+      }
+    }
+
+    if (selected.schedule) {
+      const pending = scheduleTasks.filter((t) => !t.isCompleted);
+      for (const t of pending) {
+        const quarterHours: Record<string, number> = { Q1: 8, Q2: 13, Q3: 18, Q4: 22 };
+        const h = quarterHours[t.quarter] ?? 9;
+        const today = new Date().toISOString().split("T")[0];
+        const startIso = `${today}T${String(h).padStart(2, "0")}:00:00`;
+        const r = await pushToCalendar(token, {
+          summary: `[Schedule] ${t.title}`,
+          description: t.description ?? `Quarter: ${t.quarter} · Time: ${t.timeLabel}`,
+          startTime: startIso,
+        });
+        newResults.push({ label: `${t.quarter}: ${t.title}`, ok: r.success, detail: r.error });
+      }
+      if (pending.length === 0) {
+        newResults.push({ label: "Schedule tasks", ok: false, detail: "No pending schedule tasks." });
+      }
+    }
+
+    if (selected.rotation) {
+      const pending = taskList.filter((t) => t.status !== "done");
+      for (const t of pending) {
+        const r = await pushToCalendar(token, {
+          summary: `[Pops] ${t.title}`,
+          description: makeRotationTaskDescription(t),
+          startTime: todayAtTime(t.timeSlot),
+        });
+        newResults.push({ label: `${t.timeSlot} — ${t.title}`, ok: r.success, detail: r.error });
+      }
+      if (pending.length === 0) {
+        newResults.push({ label: "Rotation tasks", ok: false, detail: "No pending rotation tasks." });
+      }
+    }
+
+    setPushing(false);
+    setResults(newResults);
+
+    const okCount = newResults.filter((r) => r.ok).length;
+    const failCount = newResults.length - okCount;
+    if (okCount > 0 && failCount === 0) {
+      toast({ title: `${okCount} event${okCount === 1 ? "" : "s"} pushed to Calendar!` });
+    } else if (okCount > 0) {
+      toast({ title: `${okCount} pushed, ${failCount} failed`, description: "Check results below.", variant: "destructive" });
+    } else {
+      toast({ title: "All events failed", description: "Check your Google token.", variant: "destructive" });
+    }
+  };
+
+  const categoryCount = Object.values(selected).filter(Boolean).length;
+
+  return (
+    <div className="space-y-6">
+      <header className="border-b border-border/50 pb-4">
+        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Calendar Sync</h2>
+        <p className="text-muted-foreground text-sm mt-1">Push all pending events to Ray's iOS Calendar via Google Calendar.</p>
+      </header>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <CalendarPlus size={16} className="text-primary" /> Bulk Push Settings
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Select which categories to push. Events appear in Google Calendar within ~1 minute, then sync to iOS.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([
+              { key: "medications", label: "💊 Medications", desc: "Next Haldol injection date" },
+              { key: "shopping", label: "🛒 Shopping", desc: "Weekly grocery run (all-day reminder)" },
+              { key: "schedule", label: "📋 Appointments", desc: "Pending schedule tasks by quarter" },
+              { key: "rotation", label: "🔄 Rotation Tasks", desc: "Today's pending caregiver tasks" },
+            ] as const).map(({ key, label, desc }) => (
+              <button
+                key={key}
+                onClick={() => setSelected((s) => ({ ...s, [key]: !s[key] }))}
+                className={`flex items-start gap-3 p-4 rounded-sm border text-left transition-colors ${
+                  selected[key]
+                    ? "bg-primary/10 border-primary/40 text-foreground"
+                    : "bg-secondary/20 border-border/30 text-muted-foreground hover:border-border"
+                }`}
+              >
+                <div className={`mt-0.5 w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 ${selected[key] ? "bg-primary border-primary" : "border-border"}`}>
+                  {selected[key] && <Check size={10} className="text-background" />}
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">{label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-2 border-t border-border/30 flex items-center justify-between gap-4 flex-wrap">
+            <p className="text-xs text-muted-foreground">
+              {categoryCount === 0 ? "No categories selected" : `${categoryCount} categor${categoryCount === 1 ? "y" : "ies"} selected`}
+              {" · "}
+              <span className="text-primary/70">Token stored in browser • re-enter if expired</span>
+            </p>
+            <Button
+              onClick={handlePushAll}
+              disabled={pushing || categoryCount === 0}
+              className="gap-2"
+            >
+              {pushing ? <RefreshCw size={14} className="animate-spin" /> : <CalendarPlus size={14} />}
+              {pushing ? "Pushing…" : "Push All to Calendar"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {results.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-xs font-display uppercase tracking-widest text-muted-foreground">Push Results</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-1.5">
+            {results.map((r, i) => (
+              <div key={i} className={`flex items-start gap-2 text-xs p-2 rounded-sm ${r.ok ? "bg-success/10 border border-success/20 text-success" : "bg-destructive/10 border border-destructive/20 text-destructive"}`}>
+                <span className="shrink-0">{r.ok ? "✓" : "✗"}</span>
+                <span className="font-semibold">{r.label}</span>
+                {!r.ok && r.detail && <span className="text-destructive/70 ml-1">— {r.detail}</span>}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="border-border/30 bg-secondary/10">
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-xs font-display uppercase tracking-widest text-muted-foreground">How to get a Google Token</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 text-xs text-muted-foreground space-y-2">
+          <p>1. Go to <span className="font-mono text-primary">developers.google.com/oauthplayground</span></p>
+          <p>2. In Step 1, add scopes: <span className="font-mono text-primary/80">calendar.events</span> and <span className="font-mono text-primary/80">drive.file</span></p>
+          <p>3. Authorize APIs with your Google account</p>
+          <p>4. In Step 2, click "Exchange authorization code for tokens"</p>
+          <p>5. Copy the <span className="font-mono text-primary/80">access_token</span> value</p>
+          <p>6. Click "Push All to Calendar" and paste it when prompted</p>
+          <p className="text-muted-foreground/50 pt-1">Tokens expire after ~1 hour. You'll be prompted again automatically.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+const CAL_KEYWORDS = /\b(appointment|injection|scheduled|reminder|due|clinic|cardiology|doctor|visit|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|tomorrow|today at|at \d+(:\d+)?\s*(am|pm)|low (stock|inventory)|out of|urgent|reorder)\b/i;
+
 function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: HistoricalCareLog[] }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string; calSuggestion?: string }>>([]);
   const [input, setInput] = useState("");
+  const [calPushingIdx, setCalPushingIdx] = useState<number | null>(null);
+  const [quickCalForm, setQuickCalForm] = useState<{ idx: number; summary: string; date: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatAssistant = useChatWithAssistant();
 
@@ -2727,13 +3101,52 @@ function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: Historica
 
     chatAssistant.mutate({ data: { messages: nextMessages, context: buildContext() } }, {
       onSuccess: (res: any) => {
-        setMessages((prev) => [...prev, { role: "assistant" as const, content: (res as any).reply ?? "…" }]);
+        const reply: string = (res as any).reply ?? "…";
+        const isCalWorthy = CAL_KEYWORDS.test(reply) || CAL_KEYWORDS.test(text);
+        const msgIdx = nextMessages.length;
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant" as const, content: reply, calSuggestion: isCalWorthy ? reply : undefined },
+        ]);
+        if (isCalWorthy) {
+          const extractedTitle = extractCalendarTitle(`${text} ${reply}`);
+          setQuickCalForm({
+            idx: msgIdx,
+            summary: extractedTitle,
+            date: new Date().toISOString().split("T")[0],
+          });
+        }
       },
       onError: () => {
         toast({ title: "AI response failed", variant: "destructive" });
         setMessages((prev) => [...prev, { role: "assistant" as const, content: "I couldn't connect. Please try again." }]);
       },
     });
+  };
+
+  const handleCalPush = async (idx: number) => {
+    if (!quickCalForm || quickCalForm.idx !== idx) return;
+    let token = getGoogleToken();
+    if (!token) token = promptGoogleToken(toast);
+    if (!token) return;
+    setCalPushingIdx(idx);
+    const result = await pushToCalendar(
+      token,
+      {
+        summary: quickCalForm.summary || "Reminder from br(AI)n",
+        description: `Created by System AI from conversation.\n\n${messages[idx]?.content ?? ""}`,
+        startTime: `${quickCalForm.date}T09:00:00`,
+        allDay: false,
+      },
+      "appointment"
+    );
+    setCalPushingIdx(null);
+    setQuickCalForm(null);
+    if (result.success) {
+      toast({ title: "Event pushed to Calendar!", description: "Check Google Calendar — it'll sync to iOS within 1 minute." });
+    } else {
+      handleCalendarError(result.error ?? "Unknown error", toast);
+    }
   };
 
   return (
@@ -2743,23 +3156,65 @@ function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: Historica
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-primary" />
           <span className="text-sm font-display uppercase tracking-widest">System AI</span>
-          <span className="text-xs text-muted-foreground/60">— br(AI)n care assistant</span>
+          <span className="text-xs text-muted-foreground/60">— br(AI)n care assistant · calendar-aware</span>
         </div>
         {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
       </button>
 
       {open && (
         <div className="border-t border-border/30">
-          <div ref={scrollRef} className="h-64 overflow-y-auto p-4 space-y-3 bg-secondary/10">
+          <div ref={scrollRef} className="h-72 overflow-y-auto p-4 space-y-3 bg-secondary/10">
             {messages.length === 0 && (
-              <p className="text-xs text-muted-foreground/60 text-center py-4">Ask about care patterns, Haldol cycles, or current rotation status.</p>
+              <p className="text-xs text-muted-foreground/60 text-center py-4">
+                Ask about care patterns, appointments, or say "Pops has a cardiology visit Friday" — Jessica will offer to push it to Calendar.
+              </p>
             )}
             {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div key={i} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
                 <div className={`max-w-[85%] px-3 py-2 rounded-sm text-xs leading-relaxed ${m.role === "user" ? "bg-primary/15 text-foreground border border-primary/20" : "bg-secondary/40 text-foreground border border-border/30"}`}>
                   {m.role === "assistant" && <span className="font-display text-primary/70 text-xs uppercase tracking-widest block mb-1">System AI</span>}
                   {m.content}
                 </div>
+                {m.role === "assistant" && m.calSuggestion && quickCalForm?.idx === i && (
+                  <div className="max-w-[85%] mt-1.5">
+                    <div className="flex flex-col gap-1.5 p-2.5 bg-primary/5 border border-primary/25 rounded-sm">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <CalendarPlus size={11} className="text-primary/70" />
+                        <p className="text-[10px] font-display uppercase tracking-widest text-primary/70">Push to Calendar</p>
+                        <span className="text-[10px] text-muted-foreground/60 ml-auto">auto-detected · 30-min alert</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={quickCalForm.summary}
+                        onChange={(e) => setQuickCalForm({ ...quickCalForm, summary: e.target.value })}
+                        placeholder="Event title..."
+                        className="bg-background border border-border rounded-sm px-2 py-1 text-xs text-foreground w-full"
+                      />
+                      <input
+                        type="date"
+                        value={quickCalForm.date}
+                        onChange={(e) => setQuickCalForm({ ...quickCalForm, date: e.target.value })}
+                        className="bg-background border border-border rounded-sm px-2 py-1 text-xs text-foreground w-full"
+                      />
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleCalPush(i)}
+                          disabled={calPushingIdx === i}
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-primary/20 border border-primary/40 text-primary text-xs rounded-sm hover:bg-primary/30 transition-colors disabled:opacity-50"
+                        >
+                          {calPushingIdx === i ? <RefreshCw size={9} className="animate-spin" /> : <CalendarPlus size={9} />}
+                          {calPushingIdx === i ? "Pushing…" : "Push"}
+                        </button>
+                        <button
+                          onClick={() => setQuickCalForm(null)}
+                          className="px-2 py-1 text-muted-foreground text-xs border border-border rounded-sm hover:bg-secondary"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             {chatAssistant.isPending && (

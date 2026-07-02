@@ -16,6 +16,7 @@ router.post("/calendar/events", async (req, res) => {
     startTime: z.string(),
     endTime: z.string().optional(),
     allDay: z.boolean().optional().default(false),
+    reminderMinutes: z.number().int().min(0).optional(),
   }).parse(req.body);
 
   const event: Record<string, unknown> = {
@@ -31,6 +32,12 @@ router.post("/calendar/events", async (req, res) => {
     event.start = { dateTime: body.startTime, timeZone: "America/New_York" };
     const endIso = body.endTime ?? new Date(new Date(body.startTime).getTime() + 30 * 60000).toISOString();
     event.end = { dateTime: endIso, timeZone: "America/New_York" };
+
+    const mins = body.reminderMinutes !== undefined ? body.reminderMinutes : 30;
+    event.reminders = {
+      useDefault: false,
+      overrides: mins > 0 ? [{ method: "popup", minutes: mins }] : [],
+    };
   }
 
   try {
