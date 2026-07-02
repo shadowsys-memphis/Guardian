@@ -224,3 +224,16 @@ export const historicalCareLogsTable = pgTable("historical_care_logs", {
 
 export type RotationTask = typeof rotationTasksTable.$inferSelect;
 export type HistoricalCareLog = typeof historicalCareLogsTable.$inferSelect;
+
+export const inventoryItemsTable = pgTable("inventory_items", {
+  id: serial("id").primaryKey(),
+  itemName: text("item_name").notNull(),
+  category: text("category").notNull().default("food"),
+  replenishmentCycle: text("replenishment_cycle").notNull().default("weekly"),
+  lastRestockedDate: date("last_restocked_date"),
+  estimatedRunOutDate: date("estimated_run_out_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type InventoryItem = typeof inventoryItemsTable.$inferSelect;

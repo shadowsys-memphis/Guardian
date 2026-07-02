@@ -12,6 +12,8 @@ import shopperRouter from "./shopper";
 import rotationRouter from "./rotation";
 import adminRouter from "./admin";
 import workspaceRouter from "./workspace";
+import inventoryRouter from "./inventory";
+import intakeRouter from "./intake";
 
 const router: IRouter = Router();
 
@@ -28,5 +30,7 @@ router.use(shopperRouter);
 router.use(rotationRouter);
 router.use(adminRouter);
 router.use(workspaceRouter);
+router.use(inventoryRouter);
+router.use(intakeRouter);
 
 export default router;

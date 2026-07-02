@@ -809,6 +809,53 @@ export interface DriveExportResult {
   filename?: string;
 }
 
+export interface InventoryItem {
+  id: number;
+  itemName: string;
+  category: string;
+  replenishmentCycle: string;
+  lastRestockedDate?: string | null;
+  estimatedRunOutDate?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+}
+
+export interface CreateInventoryItemInput {
+  itemName: string;
+  category: string;
+  replenishmentCycle: string;
+  notes?: string;
+}
+
+export interface MealRemixInput {
+  currentPlan: string;
+  remixPrompt: string;
+}
+
+export interface MealRemixResult {
+  updatedPlan: string;
+}
+
+export interface IntakeDetectedItem {
+  name: string;
+  quantity: string;
+  price_per_unit?: number | null;
+  category?: string | null;
+  replenishment_cycle?: string | null;
+  needs_restock: boolean;
+}
+
+export interface IntakeImageInput {
+  imageBase64: string;
+  mimeType?: string;
+}
+
+export interface IntakeImageResult {
+  items_detected: IntakeDetectedItem[];
+  source_type?: string | null;
+  summary: string;
+}
+
 export type GetSymptomLogsParams = {
   limit?: number;
 };

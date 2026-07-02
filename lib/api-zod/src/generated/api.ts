@@ -1297,6 +1297,84 @@ export const ChatWithAssistantResponse = zod.object({
 });
 
 /**
+ * @summary List all inventory items ordered by creation time
+ */
+export const ListInventoryResponseItem = zod.object({
+  id: zod.number(),
+  itemName: zod.string(),
+  category: zod.string(),
+  replenishmentCycle: zod.string(),
+  lastRestockedDate: zod.string().nullish(),
+  estimatedRunOutDate: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string().optional(),
+});
+export const ListInventoryResponse = zod.array(ListInventoryResponseItem);
+
+/**
+ * @summary Create a new inventory item
+ */
+export const CreateInventoryItemBody = zod.object({
+  itemName: zod.string(),
+  category: zod.string(),
+  replenishmentCycle: zod.string(),
+  notes: zod.string().optional(),
+});
+
+/**
+ * @summary Mark an item as restocked today — auto-computes estimated run-out date
+ */
+export const RestockInventoryItemParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RestockInventoryItemResponse = zod.object({
+  id: zod.number(),
+  itemName: zod.string(),
+  category: zod.string(),
+  replenishmentCycle: zod.string(),
+  lastRestockedDate: zod.string().nullish(),
+  estimatedRunOutDate: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string().optional(),
+});
+
+/**
+ * @summary AI-powered meal plan remix using Gemini
+ */
+export const RemixMealPlanBody = zod.object({
+  currentPlan: zod.string(),
+  remixPrompt: zod.string(),
+});
+
+export const RemixMealPlanResponse = zod.object({
+  updatedPlan: zod.string(),
+});
+
+/**
+ * @summary Analyze a fridge/receipt/pantry photo with Gemini Vision and extract items
+ */
+export const IntakeImageBody = zod.object({
+  imageBase64: zod.string(),
+  mimeType: zod.string().optional(),
+});
+
+export const IntakeImageResponse = zod.object({
+  items_detected: zod.array(
+    zod.object({
+      name: zod.string(),
+      quantity: zod.string(),
+      price_per_unit: zod.number().nullish(),
+      category: zod.string().nullish(),
+      replenishment_cycle: zod.string().nullish(),
+      needs_restock: zod.boolean(),
+    }),
+  ),
+  source_type: zod.string().nullish(),
+  summary: zod.string(),
+});
+
+/**
  * @summary Create a Google Calendar event using an OAuth access token
  */
 export const CreateCalendarEventHeader = zod.object({

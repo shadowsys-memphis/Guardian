@@ -8,6 +8,7 @@ import {
   cartItemsTable,
   mealCravingsTable,
 } from "@workspace/db";
+import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -479,6 +480,40 @@ router.patch("/shopper/cravings/:id", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to update craving");
     res.status(400).json({ error: "Failed to update craving" });
+  }
+});
+
+// POST /meals/remix — AI-powered meal plan remix using Gemini
+router.post("/meals/remix", async (req, res) => {
+  try {
+    const { currentPlan, remixPrompt } = z.object({
+      currentPlan: z.string().min(1),
+      remixPrompt: z.string().min(1),
+    }).parse(req.body);
+
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{
+        role: "user" as const,
+        parts: [{
+          text: `You are a practical meal planning assistant for a veteran caregiver household with a $200/week budget.
+
+Current meal plan:
+${currentPlan}
+
+Remix instruction: "${remixPrompt}"
+
+Respond with ONLY the updated meal plan text in the same format as the original. Be budget-conscious and practical. Keep Pepsi (4×2L bottles/week) in mind as a weekly staple for Pops.`,
+        }],
+      }],
+    });
+
+    const updatedPlan = ((result as any).text ?? "").trim();
+    if (!updatedPlan) throw new Error("Gemini returned an empty response");
+    res.json({ updatedPlan });
+  } catch (err) {
+    req.log.error({ err }, "Meal remix failed");
+    res.status(500).json({ error: "Meal remix failed" });
   }
 });
 

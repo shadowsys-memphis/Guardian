@@ -31,6 +31,12 @@ import {
   Send,
   Cloud,
   CalendarPlus,
+  Package,
+  Scan,
+  Image,
+  Wand2,
+  AlertCircle,
+  Archive,
 } from "lucide-react";
 
 import {
@@ -51,6 +57,7 @@ import {
   useListRotationTasks, useCreateRotationTask, useUpdateRotationTask, useDeleteRotationTask, getListRotationTasksQueryKey,
   useListCareLogs, useCreateCareLog, getListCareLogsQueryKey,
   useGenerateClinicalSummary, useChatWithAssistant,
+  useListInventory, getListInventoryQueryKey, useCreateInventoryItem, useRestockInventoryItem, useRemixMealPlan,
   type UpdateAppStateInput,
   type VoiceScript,
   type ScheduleTask,
@@ -63,6 +70,7 @@ import {
   type MealCraving,
   type RotationTask,
   type HistoricalCareLog,
+  type InventoryItem,
 } from "@workspace/api-client-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,7 +81,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -120,6 +128,7 @@ export function AdminView() {
           <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
           <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
           <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
+          <NavButton active={activeTab === "inventory"} onClick={() => setActiveTab("inventory")} icon={<Package size={18} />} label="Inventory" />
           <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
           <div className="pt-2 border-t border-border/30 mt-2">
             <NavButton active={false} onClick={() => navigate("/admin/report")} icon={<FileText size={18} />} label="Doctor Report" />
@@ -140,6 +149,7 @@ export function AdminView() {
           {activeTab === "haldol" && <HaldolTab />}
           {activeTab === "health" && <HealthIntelligenceTab />}
           {activeTab === "shopper" && <ShopperTab />}
+          {activeTab === "inventory" && <InventoryTab />}
           {activeTab === "rotation" && <RotationTab />}
         </div>
       </main>
@@ -1452,6 +1462,8 @@ function ShopperTab() {
   const { data: cart, refetch: refetchCart } = useGetCart();
   const { data: cravings, refetch: refetchCravings } = useListCravings();
   const [mealDriveExporting, setMealDriveExporting] = useState(false);
+  const [remixInput, setRemixInput] = useState("");
+  const [remixedPlan, setRemixedPlan] = useState("");
 
   const handleExportMealPlan = async () => {
     let token = getGoogleToken();
@@ -1514,6 +1526,26 @@ function ShopperTab() {
   const createMeal = useCreateMeal({ mutation: { onSuccess: () => { refetchMeals(); setNewMealName(""); setShowAddMeal(false); toast({ title: "Meal added." }); } } });
   const deleteMeal = useDeleteMeal({ mutation: { onSuccess: () => { refetchMeals(); refetchCart(); } } });
   const updateCraving = useUpdateCraving({ mutation: { onSuccess: () => refetchCravings() } });
+  const remixMealPlanMutation = useRemixMealPlan({ mutation: {
+    onSuccess: (data) => { setRemixedPlan((data as any).updatedPlan ?? ""); setRemixInput(""); toast({ title: "Meal plan remixed!" }); },
+    onError: () => toast({ title: "Remix failed", description: "Gemini could not remix the plan.", variant: "destructive" }),
+  }});
+
+  const currentPlanText = (() => {
+    const mealsInCart = (cart?.meals ?? []) as any[];
+    if (mealsInCart.length === 0) return "";
+    return [
+      `Weekly Meal Plan — Week of ${cart?.weekStartDate ?? "this week"}`,
+      ...mealsInCart.map((m: any) => `• ${m.name} ($${(m.estimatedCostCents / 100).toFixed(2)})`),
+      `Total: $${((cart?.totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $200 budget`,
+    ].join("\n");
+  })();
+
+  const handleRemix = () => {
+    const plan = remixedPlan || currentPlanText;
+    if (!plan || !remixInput.trim()) return;
+    remixMealPlanMutation.mutate({ data: { currentPlan: plan, remixPrompt: remixInput.trim() } });
+  };
 
   const budget = cart?.budgetCents ?? 15000;
   const spent = cart?.totalEstimatedCostCents ?? 0;
@@ -1535,6 +1567,37 @@ function ShopperTab() {
           <Cloud size={14} /> Export Meal Plan to Drive
         </Button>
       </header>
+
+      {/* Budget Rules */}
+      <Card className="border-primary/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <AlertCircle size={14} className="text-primary" /> Budget Rules
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-sm border border-border/40 bg-secondary/20">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Weekly Cap</p>
+              <p className="text-2xl font-display text-primary">$200</p>
+            </div>
+            <div className="p-3 rounded-sm border-2 border-primary/60 bg-primary/10 relative">
+              <div className="absolute -top-2 left-2 px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold uppercase rounded-sm">⚠ Critical</div>
+              <p className="text-xs font-bold text-primary uppercase tracking-widest">Pepsi Factor</p>
+              <p className="text-lg font-display text-primary leading-tight">4× 2L bottles/wk</p>
+              <p className="text-xs text-primary/70 mt-0.5">Non-negotiable. Always on list.</p>
+            </div>
+            <div className="p-3 rounded-sm border border-border/40 bg-secondary/20">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Snack Limit</p>
+              <p className="text-xl font-display text-foreground">$25<span className="text-sm text-muted-foreground">/wk</span></p>
+            </div>
+            <div className="p-3 rounded-sm border border-border/40 bg-secondary/20">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Beverage Limit</p>
+              <p className="text-xl font-display text-foreground">$20<span className="text-sm text-muted-foreground">/wk</span></p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Budget Bar */}
       <Card>
@@ -1703,6 +1766,40 @@ function ShopperTab() {
         </Card>
       )}
 
+      {/* AI Meal Remix */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Wand2 size={16} className="text-primary" /> AI Meal Remix
+          </CardTitle>
+          <CardDescription className="text-xs">Describe a modification — Gemini rewrites the plan</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="p-3 rounded-sm border border-border/40 bg-secondary/20 min-h-[80px] text-sm text-muted-foreground whitespace-pre-wrap font-mono text-xs leading-relaxed">
+            {remixedPlan || currentPlanText || "Add meals to the cart to generate a plan for remix."}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={remixInput}
+              onChange={(e) => setRemixInput(e.target.value)}
+              placeholder="e.g. Low-sodium chicken instead of steak this week"
+              className="flex-1 text-sm"
+              onKeyDown={(e) => { if (e.key === "Enter" && remixInput.trim()) handleRemix(); }}
+            />
+            <Button size="sm" onClick={handleRemix} disabled={!remixInput.trim() || !currentPlanText || remixMealPlanMutation.isPending}>
+              {remixMealPlanMutation.isPending ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Wand2 size={14} className="mr-1" />}
+              Remix
+            </Button>
+          </div>
+          {remixedPlan && (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-success">✓ Remix applied — review the updated plan above</p>
+              <button onClick={() => setRemixedPlan("")} className="text-xs text-muted-foreground hover:text-foreground">Reset</button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Meal Catalog */}
       <Card>
         <CardHeader>
@@ -1835,6 +1932,328 @@ const MED_RESPONSES = [
   { key: "fatigued", label: "Fatigued", emoji: "🟠", color: "border-orange-500/40 text-orange-400" },
   { key: "agitated", label: "Agitated", emoji: "🔴", color: "border-destructive/40 text-destructive" },
 ] as const;
+
+function InventoryTab() {
+  const { toast } = useToast();
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addForm, setAddForm] = useState({ itemName: "", category: "food", replenishmentCycle: "weekly", notes: "" });
+  const [intakeImagePreview, setIntakeImagePreview] = useState<string | null>(null);
+  const [intakeImageBase64, setIntakeImageBase64] = useState<string | null>(null);
+  const [intakeMimeType, setIntakeMimeType] = useState("image/jpeg");
+  const [intakeResult, setIntakeResult] = useState<any>(null);
+  const [intakeLoading, setIntakeLoading] = useState(false);
+  const [voiceNote, setVoiceNote] = useState("");
+
+  const { data: rawInventory = [], refetch } = useListInventory({ query: { queryKey: getListInventoryQueryKey() } });
+  const inventory = rawInventory as InventoryItem[];
+
+  const createItem = useCreateInventoryItem({
+    mutation: {
+      onSuccess: () => { refetch(); setShowAddForm(false); setAddForm({ itemName: "", category: "food", replenishmentCycle: "weekly", notes: "" }); toast({ title: "Item added." }); },
+      onError: () => toast({ title: "Failed to add item", variant: "destructive" }),
+    }
+  });
+  const restockItem = useRestockInventoryItem({
+    mutation: {
+      onSuccess: () => { refetch(); toast({ title: "Marked as restocked." }); },
+      onError: () => toast({ title: "Restock failed", variant: "destructive" }),
+    }
+  });
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const grouped: Record<"weekly" | "monthly" | "quarterly" | "yearly", InventoryItem[]> = {
+    weekly: inventory.filter((i) => i.replenishmentCycle === "weekly"),
+    monthly: inventory.filter((i) => i.replenishmentCycle === "monthly"),
+    quarterly: inventory.filter((i) => i.replenishmentCycle === "quarterly"),
+    yearly: inventory.filter((i) => i.replenishmentCycle === "yearly"),
+  };
+
+  const isOverdue = (item: InventoryItem) =>
+    !!(item.estimatedRunOutDate && item.estimatedRunOutDate < today);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setIntakeImageBase64(dataUrl.split(",")[1]);
+      setIntakeImagePreview(dataUrl);
+      setIntakeMimeType(file.type || "image/jpeg");
+      setIntakeResult(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleIntakeAnalyze = async () => {
+    if (!intakeImageBase64) return;
+    setIntakeLoading(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/intake/image`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: intakeImageBase64, mimeType: intakeMimeType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Intake failed");
+      setIntakeResult(data);
+    } catch (err: any) {
+      toast({ title: "Intake failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIntakeLoading(false);
+    }
+  };
+
+  const handleVoiceDictation = async () => {
+    if (!voiceNote.trim()) return;
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/assistant/chat`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: voiceNote }],
+          context: `You are helping Raymo update a household inventory list. If the message mentions needing to buy or restock an item, extract the item name and respond with the exact string ADD_INVENTORY_ITEM followed by valid JSON on the same line like: ADD_INVENTORY_ITEM:{"itemName":"...","category":"food","replenishmentCycle":"weekly"}. Otherwise just acknowledge what you heard. Categories: food, paper, toiletry, cleaning, medical. Cycles: weekly, monthly, quarterly, yearly.`,
+        }),
+      });
+      const data = await res.json();
+      const reply: string = data?.reply ?? "";
+      const match = reply.match(/ADD_INVENTORY_ITEM:(\{[^\n]+\})/);
+      if (match) {
+        try {
+          const item = JSON.parse(match[1]);
+          createItem.mutate({ data: item });
+          toast({ title: "Item added from voice note", description: item.itemName });
+        } catch {
+          toast({ title: "Heard you", description: reply.slice(0, 120) });
+        }
+      } else {
+        toast({ title: "Jessica heard you", description: reply.slice(0, 120) });
+      }
+    } catch {
+      toast({ title: "Voice note failed", variant: "destructive" });
+    }
+    setVoiceNote("");
+  };
+
+  const CAT_ICON: Record<string, string> = { food: "🛒", paper: "📦", toiletry: "🧴", cleaning: "🧹", medical: "💊" };
+  const CYCLE_COLOR: Record<string, string> = {
+    weekly: "text-primary border-primary/40",
+    monthly: "text-green-400 border-green-500/40",
+    quarterly: "text-yellow-400 border-yellow-500/40",
+    yearly: "text-orange-400 border-orange-500/40",
+  };
+  const CYCLE_LABEL: Record<string, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
+
+  const renderGroup = (cycle: keyof typeof grouped) => {
+    const group = grouped[cycle];
+    if (group.length === 0) return null;
+    const overdueCount = group.filter(isOverdue).length;
+    return (
+      <Card key={cycle}>
+        <CardHeader className="pb-3">
+          <CardTitle className={`text-sm font-display uppercase tracking-widest flex items-center gap-2 ${CYCLE_COLOR[cycle]}`}>
+            <Archive size={14} /> {CYCLE_LABEL[cycle]}
+            {overdueCount > 0 && (
+              <span className="ml-auto px-2 py-0.5 rounded-sm bg-destructive/10 border border-destructive/30 text-destructive text-xs font-bold">
+                {overdueCount} overdue
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {group.map((item) => {
+              const overdue = isOverdue(item);
+              const isPepsi = !!(item.notes?.includes("PEPSI FACTOR"));
+              return (
+                <div
+                  key={item.id}
+                  className={`flex items-center gap-3 p-2.5 rounded-sm border transition-colors ${
+                    isPepsi ? "border-primary bg-primary/10" :
+                    overdue ? "border-destructive/40 bg-destructive/5" :
+                    "border-border/40 bg-secondary/20"
+                  }`}
+                >
+                  <span className="text-base shrink-0">{CAT_ICON[item.category] ?? "📦"}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-semibold ${isPepsi ? "text-primary" : ""}`}>{item.itemName}</span>
+                      {isPepsi && <span className="text-[10px] font-bold text-primary uppercase border border-primary/50 bg-primary/10 px-1.5 py-0.5 rounded-sm">⚠ critical</span>}
+                      {overdue && !isPepsi && <span className="text-xs text-destructive font-bold">overdue</span>}
+                    </div>
+                    <div className="flex gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                      {item.lastRestockedDate && <span>Restocked: {item.lastRestockedDate}</span>}
+                      {item.estimatedRunOutDate && (
+                        <span className={overdue ? "text-destructive font-semibold" : ""}>
+                          Runs out: {item.estimatedRunOutDate}
+                        </span>
+                      )}
+                    </div>
+                    {isPepsi && <p className="text-xs text-primary/70 mt-0.5 italic">{item.notes}</p>}
+                  </div>
+                  <button
+                    onClick={() => restockItem.mutate({ id: item.id })}
+                    className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-sm border border-green-500/40 text-green-400 text-xs hover:bg-green-500/10 transition-colors"
+                  >
+                    <Check size={10} /> Restocked
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-3">
+        <div>
+          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Inventory</h2>
+          <p className="text-sm text-muted-foreground mt-1">Household supply tracking by replenishment cycle</p>
+        </div>
+        <Button size="sm" onClick={() => setShowAddForm(!showAddForm)}>
+          <Plus size={14} className="mr-1" /> Add Item
+        </Button>
+      </header>
+
+      {showAddForm && (
+        <Card className="border-primary/40">
+          <CardContent className="pt-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Item Name</label>
+                <Input value={addForm.itemName} onChange={(e) => setAddForm({ ...addForm, itemName: e.target.value })} placeholder="e.g. Milk (1 gallon)" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Category</label>
+                <select
+                  value={addForm.category}
+                  onChange={(e) => setAddForm({ ...addForm, category: e.target.value })}
+                  className="flex h-9 w-full rounded-sm border border-border bg-input px-3 text-sm text-foreground"
+                >
+                  <option value="food">🛒 Food</option>
+                  <option value="paper">📦 Paper</option>
+                  <option value="toiletry">🧴 Toiletry</option>
+                  <option value="cleaning">🧹 Cleaning</option>
+                  <option value="medical">💊 Medical</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Cycle</label>
+                <select
+                  value={addForm.replenishmentCycle}
+                  onChange={(e) => setAddForm({ ...addForm, replenishmentCycle: e.target.value })}
+                  className="flex h-9 w-full rounded-sm border border-border bg-input px-3 text-sm text-foreground"
+                >
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Notes (optional)</label>
+                <Input value={addForm.notes} onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })} placeholder="Optional notes..." />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" onClick={() => createItem.mutate({ data: addForm })} disabled={!addForm.itemName.trim() || createItem.isPending}>
+                Add Item
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {(["weekly", "monthly", "quarterly", "yearly"] as const).map(renderGroup)}
+
+      {/* Phone Intake */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Scan size={16} className="text-primary" /> Phone Intake
+          </CardTitle>
+          <CardDescription className="text-xs">Upload a fridge/pantry photo or grocery receipt — Gemini Vision extracts items automatically</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="cursor-pointer flex items-center gap-2 px-3 py-2 rounded-sm border border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
+              <Image size={14} />
+              {intakeImagePreview ? "Change Photo" : "Upload Photo"}
+              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+            </label>
+            {intakeImagePreview && (
+              <>
+                <img src={intakeImagePreview} alt="Intake preview" className="h-14 w-14 object-cover rounded-sm border border-border" />
+                <Button size="sm" onClick={handleIntakeAnalyze} disabled={intakeLoading}>
+                  {intakeLoading ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Sparkles size={14} className="mr-1" />}
+                  Analyze with Gemini
+                </Button>
+              </>
+            )}
+          </div>
+
+          {intakeResult && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <p className="text-xs text-muted-foreground italic">{intakeResult.summary}</p>
+                <span className="text-xs font-bold text-muted-foreground uppercase">{intakeResult.source_type}</span>
+              </div>
+              <div className="space-y-1.5">
+                {(intakeResult.items_detected ?? []).map((item: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between gap-3 p-2 bg-secondary/20 rounded-sm border border-border/30">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold">{item.name}</span>
+                        <span className="text-xs text-muted-foreground">×{item.quantity}</span>
+                        {item.price_per_unit != null && <span className="text-xs text-primary">${Number(item.price_per_unit).toFixed(2)}</span>}
+                        {item.needs_restock && <span className="text-xs text-yellow-400 font-bold">needs restock</span>}
+                      </div>
+                      {item.category && <p className="text-xs text-muted-foreground capitalize">{item.category} · {item.replenishment_cycle}</p>}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs shrink-0"
+                      onClick={() => createItem.mutate({ data: {
+                        itemName: item.name,
+                        category: (item.category as any) ?? "food",
+                        replenishmentCycle: (item.replenishment_cycle as any) ?? "monthly",
+                        notes: `Intake: qty ${item.quantity}${item.price_per_unit != null ? `, ~$${Number(item.price_per_unit).toFixed(2)}` : ""}`,
+                      }})}
+                      disabled={createItem.isPending}
+                    >
+                      <Plus size={10} className="mr-1" /> Add
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="pt-3 border-t border-border/30">
+            <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest mb-2">Voice / Text Note</p>
+            <div className="flex gap-2">
+              <Input
+                value={voiceNote}
+                onChange={(e) => setVoiceNote(e.target.value)}
+                placeholder="Jessica, we need taco seasoning and paper towels..."
+                className="flex-1 text-sm"
+                onKeyDown={(e) => { if (e.key === "Enter") handleVoiceDictation(); }}
+              />
+              <Button size="sm" onClick={handleVoiceDictation} disabled={!voiceNote.trim()}>
+                <Send size={14} />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground/60 mt-1">Jessica parses your note and automatically adds items to the inventory list.</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function RotationTab() {
   const { toast } = useToast();

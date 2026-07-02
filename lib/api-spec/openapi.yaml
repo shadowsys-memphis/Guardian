@@ -35,6 +35,10 @@ tags:
     description: Admin AI assistant and clinical summary generation
   - name: workspace
     description: Google Workspace integration — Calendar events and Drive file export
+  - name: inventory
+    description: Household inventory tracking by replenishment cycle (weekly/monthly/quarterly/yearly)
+  - name: intake
+    description: AI-powered Gemini Vision intake for fridge/receipt/pantry photos
 paths:
   /healthz:
     get:
@@ -1164,6 +1168,95 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AssistantChatResult"
+
+  /inventory:
+    get:
+      operationId: listInventory
+      tags: [inventory]
+      summary: List all inventory items ordered by creation time
+      responses:
+        "200":
+          description: Array of inventory items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItem"
+    post:
+      operationId: createInventoryItem
+      tags: [inventory]
+      summary: Create a new inventory item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInventoryItemInput"
+      responses:
+        "201":
+          description: Created item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+
+  /inventory/{id}/restock:
+    patch:
+      operationId: restockInventoryItem
+      tags: [inventory]
+      summary: Mark an item as restocked today — auto-computes estimated run-out date
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+
+  /meals/remix:
+    post:
+      operationId: remixMealPlan
+      tags: [shopper]
+      summary: AI-powered meal plan remix using Gemini
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MealRemixInput"
+      responses:
+        "200":
+          description: Updated meal plan text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealRemixResult"
+
+  /intake/image:
+    post:
+      operationId: intakeImage
+      tags: [intake]
+      summary: Analyze a fridge/receipt/pantry photo with Gemini Vision and extract items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntakeImageInput"
+      responses:
+        "200":
+          description: Detected items and summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntakeImageResult"
 
   /calendar/events:
     post:
@@ -2635,3 +2728,115 @@ components:
           type: string
       required:
         - success
+
+    InventoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        itemName:
+          type: string
+        category:
+          type: string
+        replenishmentCycle:
+          type: string
+        lastRestockedDate:
+          type: string
+          nullable: true
+        estimatedRunOutDate:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - itemName
+        - category
+        - replenishmentCycle
+
+    CreateInventoryItemInput:
+      type: object
+      properties:
+        itemName:
+          type: string
+        category:
+          type: string
+        replenishmentCycle:
+          type: string
+        notes:
+          type: string
+      required:
+        - itemName
+        - category
+        - replenishmentCycle
+
+    MealRemixInput:
+      type: object
+      properties:
+        currentPlan:
+          type: string
+        remixPrompt:
+          type: string
+      required:
+        - currentPlan
+        - remixPrompt
+
+    MealRemixResult:
+      type: object
+      properties:
+        updatedPlan:
+          type: string
+      required:
+        - updatedPlan
+
+    IntakeDetectedItem:
+      type: object
+      properties:
+        name:
+          type: string
+        quantity:
+          type: string
+        price_per_unit:
+          type: number
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        replenishment_cycle:
+          type: string
+          nullable: true
+        needs_restock:
+          type: boolean
+      required:
+        - name
+        - quantity
+        - needs_restock
+
+    IntakeImageInput:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+        mimeType:
+          type: string
+      required:
+        - imageBase64
+
+    IntakeImageResult:
+      type: object
+      properties:
+        items_detected:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntakeDetectedItem"
+        source_type:
+          type: string
+          nullable: true
+        summary:
+          type: string
+      required:
+        - items_detected
+        - summary
