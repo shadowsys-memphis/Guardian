@@ -136,6 +136,58 @@ Action types and when to emit:
 Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.`;
 }
 
+async function synthesizeToBase64(text: string): Promise<string | null> {
+  try {
+    // Strip any residual system tags before synthesis
+    const cleanText = text
+      .replace(/<health_data>[\s\S]*?<\/health_data>/g, "")
+      .replace(/<device_command>[\s\S]*?<\/device_command>/g, "")
+      .replace(/<craving>[\s\S]*?<\/craving>/g, "")
+      .replace(/---ACTION---[\s\S]*?---END_ACTION---/g, "")
+      .trim();
+    if (!cleanText) return null;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ role: "user" as const, parts: [{ text: cleanText }] }],
+      config: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+        },
+      },
+    });
+
+    const inlineData = (result as any).candidates?.[0]?.content?.parts?.[0]?.inlineData;
+    if (!inlineData?.data) return null;
+
+    // Gemini TTS returns raw signed 16-bit PCM at 24kHz mono (audio/L16;rate=24000).
+    // Wrap it in a minimal WAV header so the browser's decodeAudioData can handle it.
+    const pcmBytes = Buffer.from(inlineData.data as string, "base64");
+    const sampleRate = 24000;
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const dataSize = pcmBytes.length;
+    const header = Buffer.alloc(44);
+    header.write("RIFF", 0, "ascii");
+    header.writeUInt32LE(36 + dataSize, 4);
+    header.write("WAVE", 8, "ascii");
+    header.write("fmt ", 12, "ascii");
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(sampleRate * numChannels * (bitsPerSample / 8), 28);
+    header.writeUInt16LE(numChannels * (bitsPerSample / 8), 32);
+    header.writeUInt16LE(bitsPerSample, 34);
+    header.write("data", 36, "ascii");
+    header.writeUInt32LE(dataSize, 40);
+    return Buffer.concat([header, pcmBytes]).toString("base64");
+  } catch {
+    return null;
+  }
+}
+
 function parseHealthDataTags(text: string): Array<{ category: string; questionId: number | null; parsedValue: string | null; parsedIntensity: string | null; rawResponse: string }> {
   const results: Array<{ category: string; questionId: number | null; parsedValue: string | null; parsedIntensity: string | null; rawResponse: string }> = [];
   const regex = /<health_data>([\s\S]*?)<\/health_data>/g;
@@ -167,6 +219,7 @@ function stripSystemTags(text: string): string {
     .replace(/<health_data>[\s\S]*?<\/health_data>/g, "")
     .replace(/<device_command>[\s\S]*?<\/device_command>/g, "")
     .replace(/<craving>[\s\S]*?<\/craving>/g, "")
+    .replace(/---ACTION---[\s\S]*?---END_ACTION---/g, "")
     .trim();
 }
 
@@ -180,13 +233,15 @@ function getStreamSafeVisible(accumulated: string): string {
     .replace(/<health_data>[\s\S]*?<\/health_data>/g, "")
     .replace(/<device_command>[\s\S]*?<\/device_command>/g, "")
     .replace(/<craving>[\s\S]*?<\/craving>/g, "")
+    .replace(/---ACTION---[\s\S]*?---END_ACTION---/g, "")
     .trim();
-  // 2. Strip unclosed open tag (opened but closing tag not yet arrived)
+  // 2. Strip unclosed open tag / action block (opened but closing tag not yet arrived)
   result = result.replace(/<health_data>[\s\S]*$/, "").trim();
   result = result.replace(/<device_command>[\s\S]*$/, "").trim();
   result = result.replace(/<craving>[\s\S]*$/, "").trim();
-  // 3. Strip partial tag prefix at end of string (e.g. "<health_da" or "<dev" or "<crav")
-  const tagPrefixes = ["<health_data", "</health_data", "<device_command", "</device_command", "<craving", "</craving"];
+  result = result.replace(/---ACTION---[\s\S]*$/, "").trim();
+  // 3. Strip partial tag prefix at end of string
+  const tagPrefixes = ["<health_data", "</health_data", "<device_command", "</device_command", "<craving", "</craving", "---ACTION---", "---END_ACTION---"];
   for (const prefix of tagPrefixes) {
     for (let i = prefix.length - 1; i >= 1; i--) {
       if (result.endsWith(prefix.slice(0, i))) {
@@ -288,10 +343,11 @@ router.post("/gemini/conversations", async (req, res) => {
     const now = new Date();
     const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     if (isInQuietWindow(currentHHMM, settings.quietWindowStart, settings.quietWindowEnd)) {
-      return res.status(423).json({
+      res.status(423).json({
         error: "quiet_window",
         message: `Jessica is in quiet mode until ${settings.quietWindowEnd}. Pops should be resting.`,
       });
+      return;
     }
     const { title } = z.object({ title: z.string() }).parse(req.body);
     const [created] = await db.insert(conversationsTable).values({ title }).returning();
@@ -313,7 +369,7 @@ router.get("/gemini/conversations/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const [convo] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id));
-    if (!convo) return res.status(404).json({ error: "Not found" });
+    if (!convo) { res.status(404).json({ error: "Not found" }); return; }
     const msgs = await db
       .select()
       .from(messagesTable)
@@ -365,7 +421,7 @@ router.get("/gemini/conversations/:id/messages", async (req, res) => {
 router.post("/gemini/conversations/:id/messages", async (req, res) => {
   try {
     const conversationId = parseInt(req.params.id, 10);
-    const { content } = z.object({ content: z.string() }).parse(req.body);
+    const { content, speak } = z.object({ content: z.string(), speak: z.boolean().optional() }).parse(req.body);
 
     const [userMsg] = await db
       .insert(messagesTable)
@@ -419,7 +475,16 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       const cravingMeal = parseCravingTag(fullResponse);
       const { healthDataTags } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
 
-      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length })}\n\n`);
+      // TTS synthesis — only when caller requested speech and content exists
+      let audioBase64: string | null = null;
+      if (speak && visibleContent) {
+        audioBase64 = await synthesizeToBase64(visibleContent);
+        if (audioBase64) {
+          res.write(`data: ${JSON.stringify({ audio: audioBase64 })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length, hasAudio: !!audioBase64 })}\n\n`);
       res.end();
     } else {
       // Gemini path — streaming (original behavior)
@@ -465,7 +530,16 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       const cravingMeal = parseCravingTag(fullResponse);
       const { healthDataTags } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
 
-      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length })}\n\n`);
+      // TTS synthesis — only when caller requested speech
+      let audioBase64: string | null = null;
+      if (speak && finalSafe) {
+        audioBase64 = await synthesizeToBase64(finalSafe);
+        if (audioBase64) {
+          res.write(`data: ${JSON.stringify({ audio: audioBase64 })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true, deviceCommand: deviceCommand ?? undefined, healthDataCount: healthDataTags.length, hasAudio: !!audioBase64 })}\n\n`);
       res.end();
     }
   } catch (err) {
