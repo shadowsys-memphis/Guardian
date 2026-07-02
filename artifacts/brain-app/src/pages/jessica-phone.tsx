@@ -349,7 +349,10 @@ export function JessicaPhone() {
   const ACTION_TYPE_COLORS: Record<string, string> = {
     ADD_EVENT: "text-primary border-primary/30",
     TOGGLE_SMART_DEVICE: "text-yellow-400 border-yellow-500/30",
-    ADD_TASK: "text-success border-success/30",
+    ADD_TASK: "text-green-400 border-green-500/30",
+    MED_CONFIRMED: "text-green-400 border-green-500/30",
+    MED_REFUSED: "text-destructive border-destructive/30",
+    WELLBEING_ALERT: "text-orange-400 border-orange-500/30",
     COMMAND: "text-muted-foreground border-border",
   };
 
