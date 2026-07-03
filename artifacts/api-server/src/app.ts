@@ -25,7 +25,25 @@ app.use(
     },
   }),
 );
-app.use(cors());
+const allowedOrigins = [
+  process.env["VITE_PUBLIC_SITE_URL"],          // production Replit URL
+  "http://localhost:5173",                        // Vite dev server
+  "http://localhost:3000",
+].filter(Boolean) as string[];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow same-origin and server-to-server requests (no Origin header)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
+    credentials: true,
+  })
+);
 
 // Stripe webhook MUST receive the raw bytes for signature verification.
 // Mount express.raw() on this path only, BEFORE the global express.json() below,

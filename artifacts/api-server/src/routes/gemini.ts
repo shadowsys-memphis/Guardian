@@ -8,12 +8,14 @@ import {
   healthDataPointsTable,
   mealCravingsTable,
   appSettingsTable,
+  voiceScriptsTable,
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQuietWindow } from "./health-assessment";
 import { ensureMealsSeeded } from "./shopper";
+import { dispatchAll, type HermesAction } from "../lib/hermes";
 
 const router: IRouter = Router();
 
@@ -74,14 +76,30 @@ async function callLmStudio(
   return content;
 }
 
-function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean): string {
+function buildJessicaSystemPrompt(
+  questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[],
+  cycleDay: number | null,
+  isZombiePhase: boolean,
+  activeScripts: { taskKey: string; scriptText: string; tone: string }[]
+): string {
   const toneProfile = isZombiePhase
     ? "Today is a rest day for Pops — his Haldol cycle is in the high-symptom phase (days 1-5). Keep everything soft, brief, and low-pressure. No long conversations. Gentle check-ins only."
     : "Today is a normal day for Pops. You can be warm, engaged, and conversational. Keep him anchored and positive.";
 
   const questionList = questions.slice(0, 12).map((q, i) => `${i + 1}. [${q.category}|qid:${q.id}] "${q.text}"`).join("\n");
 
+  const scriptSection = activeScripts.length > 0
+    ? `\nVOICE SCRIPTS (use these exact phrases for the listed tasks — tone and wording matter):\n${activeScripts.map((s) => `- [${s.taskKey}] (tone: ${s.tone}): "${s.scriptText}"`).join("\n")}`
+    : "";
+
   return `You are Jessica, the AI companion and care coordinator for a veteran named Pops who lives with his caregiver Ray (Raymo). You have a warm, grounding, and calm voice. You speak clearly and gently — never rushed, never clinical.
+
+INTERFACE CONTEXT:
+- The web/admin dashboard is used by Ray, the caregiver and system operator.
+- The phone/voice experience is used by Pops, the care recipient.
+- When speaking through the phone interface, address Pops directly.
+- When reporting logs, alerts, summaries, or admin status, address Ray.
+- Never confuse Ray's admin instructions with Pops' spoken care instructions.
 
 TONE PROFILE:
 ${toneProfile}
@@ -93,7 +111,7 @@ YOUR JOB:
 - Answer questions about the day, schedule, medications, or how he's feeling
 - Parse smart home commands and confirm them (e.g. "turn on the living room light")
 - Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.
-
+${scriptSection}
 HEALTH CHECK-IN (weave these naturally — pick 3-5 per call based on flow):
 ${questionList}
 
@@ -285,6 +303,18 @@ function parseDeviceCommand(text: string): { device: string; action: string; val
   try { return JSON.parse(match[1]); } catch { return null; }
 }
 
+async function getActiveVoiceScripts(): Promise<{ taskKey: string; scriptText: string; tone: string }[]> {
+  try {
+    return await db
+      .select({ taskKey: voiceScriptsTable.taskKey, scriptText: voiceScriptsTable.scriptText, tone: voiceScriptsTable.tone })
+      .from(voiceScriptsTable)
+      .where(eq(voiceScriptsTable.isActive, true))
+      .orderBy(asc(voiceScriptsTable.taskKey));
+  } catch {
+    return [];
+  }
+}
+
 async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; isZombiePhase: boolean }> {
   try {
     const rows = await db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1);
@@ -292,7 +322,8 @@ async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; isZombi
     const injection = new Date(rows[0].lastInjectionDate);
     const today = new Date();
     const diffMs = today.getTime() - injection.getTime();
-    const cycleDay = Math.max(1, Math.min(14, Math.floor(diffMs / 86400000) + 1));
+    const diffDays = Math.floor(diffMs / 86400000);
+    const cycleDay = (diffDays % 14) + 1;
     return { cycleDay, isZombiePhase: cycleDay <= 5 };
   } catch {
     return { cycleDay: null, isZombiePhase: false };
@@ -347,7 +378,7 @@ async function savePostProcessing(
     }
   }
 
-  return { cleanContent, healthDataTags };
+  return { cleanContent, healthDataTags, sessionId: sessionRows[0]?.id ?? null };
 }
 
 router.get("/gemini/conversations", async (req, res) => {
@@ -461,8 +492,11 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       .orderBy(asc(messagesTable.createdAt));
 
     const { cycleDay, isZombiePhase } = await getCurrentCycleInfo();
-    const questions = await getActiveQuestionsForCycleDay(cycleDay);
-    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase);
+    const [questions, activeScripts] = await Promise.all([
+      getActiveQuestionsForCycleDay(cycleDay),
+      getActiveVoiceScripts(),
+    ]);
+    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, activeScripts);
 
     const activeModel = await getActiveModel();
 
@@ -499,8 +533,14 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
 
       const deviceCommand = parseDeviceCommand(fullResponse);
       const cravingMeal = parseCravingTag(fullResponse);
-      const { healthDataTags } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
+      const { healthDataTags, sessionId } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
       const parsedActions = parseActionBlocksRaw(fullResponse);
+      const tenantId = (req as any).tenantSession?.sub;
+      if (tenantId && parsedActions.length > 0) {
+        await dispatchAll(parsedActions as HermesAction[], { tenantId, sessionId: sessionId ?? undefined, cycleDay, source: "jessica", actor: "jessica" });
+      } else if (!tenantId) {
+        req.log.warn("Hermes: tenantSession.sub missing — skipping dispatchAll to prevent cross-tenant ledger writes");
+      }
 
       // TTS synthesis — only when caller requested speech and content exists
       let audioBase64: string | null = null;
@@ -555,8 +595,14 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
 
       const deviceCommand = parseDeviceCommand(fullResponse);
       const cravingMeal = parseCravingTag(fullResponse);
-      const { healthDataTags } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
+      const { healthDataTags, sessionId } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
       const parsedActions = parseActionBlocksRaw(fullResponse);
+      const tenantId = (req as any).tenantSession?.sub;
+      if (tenantId && parsedActions.length > 0) {
+        await dispatchAll(parsedActions as HermesAction[], { tenantId, sessionId: sessionId ?? undefined, cycleDay, source: "jessica", actor: "jessica" });
+      } else if (!tenantId) {
+        req.log.warn("Hermes: tenantSession.sub missing — skipping dispatchAll to prevent cross-tenant ledger writes");
+      }
 
       // TTS synthesis — only when caller requested speech
       let audioBase64: string | null = null;

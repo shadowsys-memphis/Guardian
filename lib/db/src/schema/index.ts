@@ -241,3 +241,40 @@ export const inventoryItemsTable = pgTable("inventory_items", {
 });
 
 export type InventoryItem = typeof inventoryItemsTable.$inferSelect;
+
+// Guardian Hermes Adapter — evidence ledger
+// Append-only. Every meaningful care event across the app is recorded here.
+// Powers doctor-file generation, pattern analysis, and future recursive learning.
+// Real person names (caregiver, patient) are stored in profile/onboarding config — never here.
+export const careEventsTable = pgTable("care_events", {
+  id: serial("id").primaryKey(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  // Tenant isolation — first-class security boundary, not derived from session join
+  tenantId: text("tenant_id").notNull().default("local"),
+  // Where the event originated
+  source: text("source").notNull(), // jessica | admin | system | schedule | device | patient_app
+  // Who caused or triggered the event
+  actor: text("actor").notNull(),   // jessica | patient | admin | caregiver | system
+  eventType: text("event_type").notNull(),
+  // Optional links to related rows
+  sessionId: integer("session_id"),
+  taskId: integer("task_id"),
+  medicationId: integer("medication_id"),
+  // Clinical context
+  severity: text("severity"),       // none | mild | moderate | severe
+  confidence: text("confidence"),   // low | medium | high
+  // Full structured payload — the complete action or event details
+  payload: text("payload").notNull().default("{}"),
+  // Additional care context (cycle day, quarter, phase, etc.)
+  context: text("context"),
+  // What happened after dispatch
+  outcome: text("outcome").notNull().default("pending"), // dispatched | completed | failed | skipped | pending
+  // Did an admin/caregiver need to intervene or override?
+  adminIntervention: boolean("admin_intervention").notNull().default(false),
+  // Flags for downstream consumers
+  doctorRelevant: boolean("doctor_relevant").notNull().default(false),
+  learningRelevant: boolean("learning_relevant").notNull().default(false),
+});
+
+export type CareEvent = typeof careEventsTable.$inferSelect;
+export type InsertCareEvent = typeof careEventsTable.$inferInsert;

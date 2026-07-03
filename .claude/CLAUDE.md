@@ -261,16 +261,53 @@ Jessica is a Gemini-powered AI companion. When a call starts:
 
 1. `POST /gemini/conversations` → creates `conversations` row **and** auto-creates a linked `call_sessions` row (both happen in the Gemini route handler)
 2. `POST /gemini/conversations/:id/messages` → streams Gemini response via SSE
-3. Jessica's system prompt instructs Gemini to emit invisible XML tags in responses:
+3. Jessica's system prompt instructs Gemini to emit invisible XML tags and action blocks:
    - `<health_data>{...}</health_data>` — parsed server-side, saved to `health_data_points`
    - `<device_command>{...}</device_command>` — smart home commands
    - `<craving>{...}</craving>` — meal craving capture
+   - `---ACTION--- ... ---END_ACTION---` — structured dispatch (ADD_EVENT, TOGGLE_SMART_DEVICE, ADD_TASK, MED_CONFIRMED, MED_REFUSED, WELLBEING_ALERT)
 4. `POST /gemini/conversations/:id/end` → closes session, computes summary
 5. Anomaly detection: categories flagged in 3+ of last 5 sessions → `sustainedAnomalies`
 
 Note: `/health-assessment/sessions` endpoints exist as a standalone admin API, but the Jessica phone UI (`/jessica`) drives the entire call lifecycle through the `/gemini/conversations` endpoints.
 
-System prompt is built in `artifacts/api-server/src/routes/gemini.ts` → `buildJessicaSystemPrompt()`.
+System prompt is built in `artifacts/api-server/src/routes/gemini.ts` → `buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, activeScripts)`. Active voice scripts are fetched from `voice_scripts` table via `getActiveVoiceScripts()` and injected so Jessica uses exact phrasing for care tasks. An INTERFACE CONTEXT block separates Ray (admin/caregiver) from Pops (phone/care recipient) — Gemini must never conflate the two.
+
+---
+
+## Hermes — Action Dispatch Layer
+
+Hermes is the server-side router that sits between Jessica's signal parsing and the downstream care systems. It is the bridge that turns Jessica's structured `---ACTION---` blocks into real side effects.
+
+### Flow
+
+```
+Pops talks to Jessica
+        ↓
+Jessica/Gemini responds + emits hidden health/action signals
+        ↓
+Backend (gemini.ts) parses those signals via parseActionBlocksRaw()
+        ↓
+Hermes receives each structured action (lib/hermes.ts → dispatch())
+        ↓
+Hermes routes to the right system:
+  ADD_EVENT          → insert schedule_tasks row
+  TOGGLE_SMART_DEVICE → update smart_home_devices (isOn, volume, brightness)
+  ADD_TASK           → insert schedule_tasks row (active, for Ray's queue)
+  MED_CONFIRMED      → insert health_data_points (category: medication, parsedValue: yes)
+  MED_REFUSED        → insert health_data_points (category: medication, parsedValue: no, flagged)
+  WELLBEING_ALERT    → flag call_sessions + insert health_data_points (category: mood, severity: severe)
+```
+
+### Location
+
+`artifacts/api-server/src/lib/hermes.ts` — exports a single `dispatch(action, sessionId)` async function.
+
+Called from `gemini.ts` after `parseActionBlocksRaw()` at both the LM Studio and Gemini SSE post-processing points. Actions are dispatched in parallel via `Promise.allSettled` so one failing dispatch does not block the others.
+
+### Contract
+
+The action schema is defined by Jessica's system prompt. Each action is a flat JSON object with a `type` field and type-specific payload fields. Hermes validates the type and ignores unknown fields — it never throws on a malformed action, only logs a warning.
 
 ---
 
@@ -286,7 +323,11 @@ System prompt is built in `artifacts/api-server/src/routes/gemini.ts` → `build
 
 5. **Quarter system** — `currentQuarter` in `app_state` is the *effective* quarter (override if set, else wall-clock computed). `computedQuarter` is always the wall-clock value. Both are returned by `getAppState`.
 
-6. **Haldol cycle days 1–5** — `isZombiePhase` is computed from `lastInjectionDate`. Days 1–5 = high-symptom Zombie Mode. Jessica's tone shifts to "soft/brief/low-pressure" automatically via system prompt.
+6. **Haldol cycle math — modulo only** — `isZombiePhase` is computed via `(diffDays % 14) + 1`. Do NOT use `Math.max/Math.min` clamping — it breaks after cycle 1 by locking at day 14 forever. Both `haldol.ts` and `gemini.ts` must use the same modulo formula.
+
+10. **CORS is exact-match allowlist** — `app.ts` uses `allowedOrigins.includes(origin)`. Do not relax to prefix matching (`startsWith`). Allowed: `VITE_PUBLIC_SITE_URL`, `localhost:5173`, `localhost:3000`.
+
+11. **SESSION_SECRET required at startup** — `tenant-auth.ts` throws if unset. JWT signs both Ray's local session and tenant sessions. Never rotate without coordinated session invalidation.
 
 7. **`/scripts/active` before `/scripts/:id`** — Express route order matters. The `active` literal path must be registered before `/:id` or Express will try to match "active" as an ID parameter.
 

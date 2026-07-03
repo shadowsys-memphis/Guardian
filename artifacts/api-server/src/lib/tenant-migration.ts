@@ -82,6 +82,39 @@ export async function runTenantMigration(): Promise<void> {
       END $$
     `);
 
+    // ── care_events — Guardian Hermes Adapter evidence ledger ────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS care_events (
+        id SERIAL PRIMARY KEY,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        tenant_id TEXT NOT NULL DEFAULT 'local',
+        source TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        session_id INTEGER,
+        task_id INTEGER,
+        medication_id INTEGER,
+        severity TEXT,
+        confidence TEXT,
+        payload TEXT NOT NULL DEFAULT '{}',
+        context TEXT,
+        outcome TEXT NOT NULL DEFAULT 'pending',
+        admin_intervention BOOLEAN NOT NULL DEFAULT FALSE,
+        doctor_relevant BOOLEAN NOT NULL DEFAULT FALSE,
+        learning_relevant BOOLEAN NOT NULL DEFAULT FALSE
+      )
+    `);
+    // Idempotent column add for existing deployments that ran an earlier version of this migration
+    await pool.query(`ALTER TABLE care_events ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'local'`);
+    // Core isolation index — all queries must be tenant-scoped
+    await pool.query(`CREATE INDEX IF NOT EXISTS care_events_tenant_idx ON care_events (tenant_id)`);
+    // Composite indexes for the two primary query patterns
+    await pool.query(`CREATE INDEX IF NOT EXISTS care_events_tenant_created_idx ON care_events (tenant_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS care_events_tenant_doctor_idx ON care_events (tenant_id, doctor_relevant) WHERE doctor_relevant = TRUE`);
+    // Secondary lookup indexes
+    await pool.query(`CREATE INDEX IF NOT EXISTS care_events_session_idx ON care_events (session_id) WHERE session_id IS NOT NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS care_events_event_type_idx ON care_events (event_type)`);
+
     logger.info("Tenant migration complete");
   } catch (err) {
     logger.error({ err }, "Tenant migration failed");
