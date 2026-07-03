@@ -20,6 +20,7 @@
 - Current source is a Vite React SPA. Non-JavaScript bots and social preview bots only see `artifacts/brain-app/index.html`.
 - `artifacts/brain-app/src/App.tsx` currently routes directly to the internal app views; the repo still contains `vault-context` / `vault-gate` components, but they are not wired into the delivered shell.
 - The current crawl strategy is privacy-first: `index.html` emits `noindex, nofollow, noarchive`, and `artifacts/brain-app/public/robots.txt` disallows all crawlers.
+- Root-URL share preview tags currently depend on `VITE_PUBLIC_SITE_URL` being supplied at build time; without it, Vite leaves literal placeholder values in the built Open Graph and Twitter image tags.
 
 ## Dismissed categories
 - Do not propose generic ranking/content optimizations for the internal caregiver SPA while the project intentionally excludes the shell from search.
