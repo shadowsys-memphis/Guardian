@@ -1,0 +1,106 @@
+Brain Guardian — Monetization Launch
+
+What & Why
+
+Launch Brain Guardian as the first paid vertical of the broader br(AI)n platform.
+
+Brain Guardian targets caregiver families first because the pain is specific, urgent, emotionally clear, and subscription-worthy. These families are managing medication routines, meals, appointments, care notes, family coordination, document tracking, daily logs, caregiver handoffs, and recurring care decisions. The product should help them reduce chaos, prevent missed responsibilities, and keep everyone aligned inside one private AI-supported workspace.
+
+The underlying architecture must remain generic. The core br(AI)n platform should not be hard-coded as a caregiver-only application.
+
+Strategic Structure
+
+br(AI)n is the core private life-operations platform.
+
+It should support generic primitives such as:
+
+* People
+* Tasks
+* Routines
+* Documents
+* Logs
+* Notes
+* Roles
+* Workspaces
+* AI summaries
+* Tenant-scoped data
+* Subscription status
+* Private workspace access
+
+Brain Guardian is the first paid vertical layered on top of br(AI)n.
+
+It is specifically positioned for caregiver families, family-care coordination, veteran support, parent care, medication organization, daily care routines, care notes, meals, appointments, and family handoffs.
+
+Future verticals may include:
+
+* Home Guardian
+* Finance Guardian
+* Business Guardian
+* Wellness Guardian
+* Personal Guardian
+
+Only Brain Guardian ships in this monetization phase.
+
+Language Rules
+
+Public-facing product language should use caregiver-focused terms:
+
+* Brain Guardian
+* Care Circle
+* Care Routines
+* Care Notes
+* Family Care Workspace
+* Private Care Hub
+* Care Handoffs
+* Daily Care Log
+
+Core architecture should use generic platform terms:
+
+* Tenant
+* Workspace
+* User
+* Role
+* Session
+* Subscription
+* Task
+* Routine
+* Document
+* Log
+* Note
+* AI Summary
+
+Do not hard-code caregiver-only concepts into shared platform architecture unless they belong specifically to the Brain Guardian vertical layer.
+
+Product Positioning
+
+Brain Guardian should be presented as:
+
+A private AI care workspace for families managing real-life care.
+
+It is not an AI doctor, diagnosis tool, or medical decision engine. It is a care-operations system that helps families organize responsibilities, routines, notes, documents, and communication.
+
+The strongest positioning:
+
+Brain Guardian by br(AI)n helps caregiver families stay organized, aligned, and less overwhelmed — with one private workspace for care routines, notes, appointments, meals, documents, and AI-powered summaries.
+
+Monetization Direction
+
+Brain Guardian should launch as a subscription product.
+
+Initial plans:
+
+* Family Plan — $19/month
+* Multi-Care Plan — $39/month
+* 14-day free trial for both plans
+
+The subscription offer should be simple, trust-based, and emotionally clear. Families should immediately understand what they are paying for: less chaos, better coordination, fewer missed tasks, and a private place to manage care.
+
+Build Principle
+
+Start niche. Design universal.
+
+Brain Guardian is the first paid market wedge.
+
+br(AI)n is the larger platform.
+
+The caregiver lane gives the product a clear reason to exist and a clear buyer, while the generic architecture keeps the platform expandable into future life-operations verticals.

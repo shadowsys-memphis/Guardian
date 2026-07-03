@@ -8,9 +8,14 @@ import {
   DeleteScheduleTaskParams,
   CompleteScheduleTaskParams,
 } from "@workspace/api-zod";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, and } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+function getTenantId(req: any): string {
+  const session = req.tenantSession;
+  return session?.type === "local" ? "local" : (session?.sub ?? "local");
+}
 
 function serializeTask(task: typeof scheduleTasksTable.$inferSelect) {
   return {
@@ -29,9 +34,11 @@ function serializeTask(task: typeof scheduleTasksTable.$inferSelect) {
 
 router.get("/schedule", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const tasks = await db
       .select()
       .from(scheduleTasksTable)
+      .where(eq(scheduleTasksTable.tenantId, tenantId))
       .orderBy(asc(scheduleTasksTable.order));
     res.json(tasks.map(serializeTask));
   } catch (err) {
@@ -42,8 +49,12 @@ router.get("/schedule", async (req, res) => {
 
 router.post("/schedule", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const body = CreateScheduleTaskBody.parse(req.body);
-    const [created] = await db.insert(scheduleTasksTable).values(body).returning();
+    const [created] = await db
+      .insert(scheduleTasksTable)
+      .values({ ...body, tenantId })
+      .returning();
     res.status(201).json(serializeTask(created));
   } catch (err) {
     req.log.error({ err }, "Failed to create task");
@@ -53,12 +64,13 @@ router.post("/schedule", async (req, res) => {
 
 router.put("/schedule/:id", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const { id } = UpdateScheduleTaskParams.parse(req.params);
     const body = UpdateScheduleTaskBody.parse(req.body);
     const [updated] = await db
       .update(scheduleTasksTable)
       .set(body)
-      .where(eq(scheduleTasksTable.id, id))
+      .where(and(eq(scheduleTasksTable.id, id), eq(scheduleTasksTable.tenantId, tenantId)))
       .returning();
     if (!updated) return res.status(404).json({ error: "Task not found" });
     res.json(serializeTask(updated));
@@ -70,8 +82,11 @@ router.put("/schedule/:id", async (req, res) => {
 
 router.delete("/schedule/:id", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const { id } = DeleteScheduleTaskParams.parse(req.params);
-    await db.delete(scheduleTasksTable).where(eq(scheduleTasksTable.id, id));
+    await db
+      .delete(scheduleTasksTable)
+      .where(and(eq(scheduleTasksTable.id, id), eq(scheduleTasksTable.tenantId, tenantId)));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete task");
@@ -81,11 +96,12 @@ router.delete("/schedule/:id", async (req, res) => {
 
 router.post("/schedule/:id/complete", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const { id } = CompleteScheduleTaskParams.parse(req.params);
     const [updated] = await db
       .update(scheduleTasksTable)
       .set({ isCompleted: true, completedAt: new Date() })
-      .where(eq(scheduleTasksTable.id, id))
+      .where(and(eq(scheduleTasksTable.id, id), eq(scheduleTasksTable.tenantId, tenantId)))
       .returning();
     if (!updated) return res.status(404).json({ error: "Task not found" });
     res.json(serializeTask(updated));

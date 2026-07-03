@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -26,6 +26,12 @@ app.use(
   }),
 );
 app.use(cors());
+
+// Stripe webhook MUST receive the raw bytes for signature verification.
+// Mount express.raw() on this path only, BEFORE the global express.json() below,
+// so the two parsers never compete for the same request stream.
+app.use("/api/billing/webhook", express.raw({ type: "application/json" }));
+
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 

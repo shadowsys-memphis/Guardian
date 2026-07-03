@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const appStateTable = pgTable("app_state", {
   id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
   currentQuarter: text("current_quarter").notNull().default("Q1"),
   quarterOverride: text("quarter_override"),
   zombieMode: boolean("zombie_mode").notNull().default(false),
@@ -15,6 +16,7 @@ export const appStateTable = pgTable("app_state", {
 
 export const scheduleTasksTable = pgTable("schedule_tasks", {
   id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
   quarter: text("quarter").notNull(),
   timeLabel: text("time_label").notNull(),
   title: text("title").notNull(),
@@ -28,6 +30,7 @@ export const scheduleTasksTable = pgTable("schedule_tasks", {
 
 export const symptomLogsTable = pgTable("symptom_logs", {
   id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
   loggedAt: timestamp("logged_at").notNull().defaultNow(),
   ptsdTrigger: boolean("ptsd_trigger").notNull().default(false),
   hallucinationIntensity: integer("hallucination_intensity").notNull().default(0),
@@ -227,6 +230,7 @@ export type HistoricalCareLog = typeof historicalCareLogsTable.$inferSelect;
 
 export const inventoryItemsTable = pgTable("inventory_items", {
   id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
   itemName: text("item_name").notNull(),
   category: text("category").notNull().default("food"),
   replenishmentCycle: text("replenishment_cycle").notNull().default("weekly"),

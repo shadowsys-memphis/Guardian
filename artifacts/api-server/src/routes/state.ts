@@ -14,16 +14,31 @@ function computeCurrentQuarter(): "Q1" | "Q2" | "Q3" | "Q4" {
   return "Q4";
 }
 
-async function ensureState() {
-  const rows = await db.select().from(appStateTable).limit(1);
+/** tenantId is "local" for Ray's session or the tenant UUID for subscribers. */
+function getTenantId(req: any): string {
+  const session = req.tenantSession;
+  return session?.type === "local" ? "local" : (session?.sub ?? "local");
+}
+
+async function ensureState(tenantId: string) {
+  const rows = await db
+    .select()
+    .from(appStateTable)
+    .where(eq(appStateTable.tenantId, tenantId))
+    .limit(1);
   if (rows.length === 0) {
     await db.insert(appStateTable).values({
+      tenantId,
       currentQuarter: "Q1",
       zombieMode: false,
       motivationLevel: 3,
       activeMessage: "Good morning, friend. Let's take it one step at a time.",
     });
-    const created = await db.select().from(appStateTable).limit(1);
+    const created = await db
+      .select()
+      .from(appStateTable)
+      .where(eq(appStateTable.tenantId, tenantId))
+      .limit(1);
     return created[0];
   }
   return rows[0];
@@ -44,20 +59,26 @@ function serializeTask(task: typeof scheduleTasksTable.$inferSelect) {
   };
 }
 
-async function fetchCurrentTask(quarter: "Q1" | "Q2" | "Q3" | "Q4") {
+async function fetchCurrentTask(quarter: "Q1" | "Q2" | "Q3" | "Q4", tenantId: string) {
   const tasks = await db
     .select()
     .from(scheduleTasksTable)
-    .where(and(eq(scheduleTasksTable.quarter, quarter), eq(scheduleTasksTable.isActive, true)))
+    .where(
+      and(
+        eq(scheduleTasksTable.tenantId, tenantId),
+        eq(scheduleTasksTable.quarter, quarter),
+        eq(scheduleTasksTable.isActive, true)
+      )
+    )
     .orderBy(asc(scheduleTasksTable.order))
     .limit(1);
   return tasks.length > 0 ? serializeTask(tasks[0]) : null;
 }
 
-async function serializeState(state: typeof appStateTable.$inferSelect) {
+async function serializeState(state: typeof appStateTable.$inferSelect, tenantId: string) {
   const computed = computeCurrentQuarter();
   const effective = (state.quarterOverride as "Q1" | "Q2" | "Q3" | "Q4" | null) ?? computed;
-  const currentScheduledTask = await fetchCurrentTask(effective);
+  const currentScheduledTask = await fetchCurrentTask(effective, tenantId);
   return {
     id: state.id,
     currentQuarter: effective,
@@ -74,8 +95,9 @@ async function serializeState(state: typeof appStateTable.$inferSelect) {
 
 router.get("/state", async (req, res) => {
   try {
-    const state = await ensureState();
-    res.json(await serializeState(state));
+    const tenantId = getTenantId(req);
+    const state = await ensureState(tenantId);
+    res.json(await serializeState(state, tenantId));
   } catch (err) {
     req.log.error({ err }, "Failed to get app state");
     res.status(500).json({ error: "Failed to get state" });
@@ -84,8 +106,9 @@ router.get("/state", async (req, res) => {
 
 router.put("/state", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const body = UpdateAppStateBody.parse(req.body);
-    const state = await ensureState();
+    const state = await ensureState(tenantId);
 
     const updatePayload: Record<string, unknown> = { lastUpdated: new Date() };
     if (body.zombieMode !== undefined) updatePayload.zombieMode = body.zombieMode;
@@ -97,9 +120,9 @@ router.put("/state", async (req, res) => {
     const [updated] = await db
       .update(appStateTable)
       .set(updatePayload)
-      .where(eq(appStateTable.id, state.id))
+      .where(and(eq(appStateTable.id, state.id), eq(appStateTable.tenantId, tenantId)))
       .returning();
-    res.json(await serializeState(updated));
+    res.json(await serializeState(updated, tenantId));
   } catch (err) {
     req.log.error({ err }, "Failed to update app state");
     res.status(400).json({ error: "Failed to update state" });

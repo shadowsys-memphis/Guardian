@@ -9,7 +9,12 @@ import { JessicaView } from "@/pages/jessica-view";
 import { JessicaPhone } from "@/pages/jessica-phone";
 import { SmartHomePanel } from "@/pages/smart-home";
 import { DoctorReport } from "@/pages/doctor-report";
-import { Home, Phone, Mic, ShieldAlert } from "lucide-react";
+import { GuardianPage } from "@/pages/guardian";
+import { GuardianSuccessPage } from "@/pages/guardian-success";
+import { MySubscriptionPage } from "@/pages/my-subscription";
+import { VaultGate } from "@/pages/vault-gate";
+import { VaultProvider, useVault } from "@/lib/vault-context";
+import { Home, Phone, Mic, ShieldAlert, CreditCard } from "lucide-react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +30,7 @@ const NAV_ITEMS = [
   { path: "/jessica", label: "Jessica", icon: <Phone size={20} /> },
   { path: "/smarthome", label: "Devices", icon: <Mic size={20} /> },
   { path: "/admin", label: "Admin", icon: <ShieldAlert size={20} /> },
+  { path: "/my-subscription", label: "Plan", icon: <CreditCard size={20} /> },
 ];
 
 function BottomNav() {
@@ -51,7 +57,13 @@ function BottomNav() {
   );
 }
 
-function AppContent() {
+function PrivateWorkspace() {
+  const { isUnlocked } = useVault();
+
+  if (!isUnlocked) {
+    return <VaultGate>{null}</VaultGate>;
+  }
+
   return (
     <div className="pb-16">
       <Switch>
@@ -64,6 +76,7 @@ function AppContent() {
         <Route path="/admin" component={AdminView} />
         <Route path="/admin/report" component={DoctorReport} />
         <Route path="/scripts" component={JessicaView} />
+        <Route path="/my-subscription" component={MySubscriptionPage} />
         <Route component={NotFound} />
       </Switch>
       <BottomNav />
@@ -71,14 +84,28 @@ function AppContent() {
   );
 }
 
+function AppContent() {
+  return (
+    <Switch>
+      <Route path="/guardian" component={GuardianPage} />
+      <Route path="/guardian/success" component={GuardianSuccessPage} />
+      <Route>
+        <PrivateWorkspace />
+      </Route>
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppContent />
-        </WouterRouter>
-        <Toaster />
+        <VaultProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AppContent />
+          </WouterRouter>
+          <Toaster />
+        </VaultProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

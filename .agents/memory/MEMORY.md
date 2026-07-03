@@ -1,1 +1,2 @@
 - [DB migration via raw SQL](db-migration-raw-sql.md) — drizzle-kit push needs interactive TTY; use `node -e` with pg Pool for non-interactive migrations.
+- [Brain Guardian tenant auth](tenant-auth-pattern.md) — multi-tenant auth uses JWT + bcrypt; VAULT_PASSPHRASE env var gates Ray's local access; legacy fallback if neither set.

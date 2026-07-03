@@ -5,9 +5,14 @@ import {
   GetSymptomLogsQueryParams,
   CreateSymptomLogBody,
 } from "@workspace/api-zod";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+function getTenantId(req: any): string {
+  const session = req.tenantSession;
+  return session?.type === "local" ? "local" : (session?.sub ?? "local");
+}
 
 function serializeLog(log: typeof symptomLogsTable.$inferSelect) {
   return {
@@ -23,10 +28,12 @@ function serializeLog(log: typeof symptomLogsTable.$inferSelect) {
 
 router.get("/symptoms", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const { limit } = GetSymptomLogsQueryParams.parse(req.query);
     const logs = await db
       .select()
       .from(symptomLogsTable)
+      .where(eq(symptomLogsTable.tenantId, tenantId))
       .orderBy(desc(symptomLogsTable.loggedAt))
       .limit(limit ?? 20);
     res.json(logs.map(serializeLog));
@@ -38,8 +45,12 @@ router.get("/symptoms", async (req, res) => {
 
 router.post("/symptoms", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const body = CreateSymptomLogBody.parse(req.body);
-    const [created] = await db.insert(symptomLogsTable).values(body).returning();
+    const [created] = await db
+      .insert(symptomLogsTable)
+      .values({ ...body, tenantId })
+      .returning();
     res.status(201).json(serializeLog(created));
   } catch (err) {
     req.log.error({ err }, "Failed to log symptom");

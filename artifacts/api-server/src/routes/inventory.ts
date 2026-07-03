@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { inventoryItemsTable } from "@workspace/db";
-import { eq, asc, sql } from "drizzle-orm";
+import { eq, asc, and } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -12,6 +12,11 @@ const CYCLE_DAYS: Record<string, number> = {
   quarterly: 90,
   yearly: 365,
 };
+
+function getTenantId(req: any): string {
+  const session = req.tenantSession;
+  return session?.type === "local" ? "local" : (session?.sub ?? "local");
+}
 
 function computeRunOut(lastRestockedDate: string, cycle: string): string {
   const d = new Date(lastRestockedDate);
@@ -55,25 +60,18 @@ const INVENTORY_BASELINE = [
   { itemName: "Extra Bath Towels", category: "paper", replenishmentCycle: "yearly" },
 ] as const;
 
-export async function ensureInventorySeeded() {
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS inventory_items (
-      id SERIAL PRIMARY KEY,
-      item_name TEXT NOT NULL,
-      category TEXT NOT NULL DEFAULT 'food',
-      replenishment_cycle TEXT NOT NULL DEFAULT 'weekly',
-      last_restocked_date DATE,
-      estimated_run_out_date DATE,
-      notes TEXT,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    )
-  `);
-  const existing = await db.select().from(inventoryItemsTable).limit(1);
+export async function ensureInventorySeeded(tenantId: string) {
+  const existing = await db
+    .select()
+    .from(inventoryItemsTable)
+    .where(eq(inventoryItemsTable.tenantId, tenantId))
+    .limit(1);
   if (existing.length > 0) return;
 
   const today = new Date().toISOString().split("T")[0];
   for (const item of INVENTORY_BASELINE) {
     await db.insert(inventoryItemsTable).values({
+      tenantId,
       itemName: item.itemName,
       category: item.category,
       replenishmentCycle: item.replenishmentCycle,
@@ -86,8 +84,13 @@ export async function ensureInventorySeeded() {
 
 router.get("/inventory", async (req, res) => {
   try {
-    await ensureInventorySeeded();
-    const items = await db.select().from(inventoryItemsTable).orderBy(asc(inventoryItemsTable.createdAt));
+    const tenantId = getTenantId(req);
+    await ensureInventorySeeded(tenantId);
+    const items = await db
+      .select()
+      .from(inventoryItemsTable)
+      .where(eq(inventoryItemsTable.tenantId, tenantId))
+      .orderBy(asc(inventoryItemsTable.createdAt));
     res.json(items);
   } catch (err) {
     req.log.error({ err }, "Failed to list inventory");
@@ -97,7 +100,8 @@ router.get("/inventory", async (req, res) => {
 
 router.post("/inventory", async (req, res) => {
   try {
-    await ensureInventorySeeded();
+    const tenantId = getTenantId(req);
+    await ensureInventorySeeded(tenantId);
     const body = z.object({
       itemName: z.string().min(1),
       category: z.enum(["food", "paper", "toiletry", "cleaning", "medical"]),
@@ -106,6 +110,7 @@ router.post("/inventory", async (req, res) => {
     }).parse(req.body);
     const today = new Date().toISOString().split("T")[0];
     const [item] = await db.insert(inventoryItemsTable).values({
+      tenantId,
       itemName: body.itemName,
       category: body.category,
       replenishmentCycle: body.replenishmentCycle,
@@ -122,14 +127,19 @@ router.post("/inventory", async (req, res) => {
 
 router.patch("/inventory/:id/restock", async (req, res) => {
   try {
+    const tenantId = getTenantId(req);
     const id = parseInt(req.params.id, 10);
-    const existing = await db.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id, id)).limit(1);
+    const existing = await db
+      .select()
+      .from(inventoryItemsTable)
+      .where(and(eq(inventoryItemsTable.id, id), eq(inventoryItemsTable.tenantId, tenantId)))
+      .limit(1);
     if (!existing[0]) { res.status(404).json({ error: "Not found" }); return; }
     const today = new Date().toISOString().split("T")[0];
     const runOut = computeRunOut(today, existing[0].replenishmentCycle);
     const [updated] = await db.update(inventoryItemsTable)
       .set({ lastRestockedDate: today, estimatedRunOutDate: runOut })
-      .where(eq(inventoryItemsTable.id, id))
+      .where(and(eq(inventoryItemsTable.id, id), eq(inventoryItemsTable.tenantId, tenantId)))
       .returning();
     res.json(updated);
   } catch (err) {
