@@ -24,3 +24,9 @@ id = "nrcvH6UDVuXwRYSypZuvd"
 uri = "file://brain-handoff-fable.zip"
 type = "unspecified"
 title = "br(AI)n — Fable Handoff Package"
+
+[[outputs]]
+id = "ECt-H1thMSyRvpBtTvBeJ"
+uri = "file://Guardian-07.03.26.zip"
+type = "unspecified"
+title = "Guardian-07.03.26"
