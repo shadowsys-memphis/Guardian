@@ -26,6 +26,39 @@ if (!basePath) {
   );
 }
 
+const rawSiteUrl = process.env.VITE_PUBLIC_SITE_URL;
+
+if (!rawSiteUrl) {
+  throw new Error(
+    "VITE_PUBLIC_SITE_URL environment variable is required but was not provided. " +
+      "Set it to the absolute origin of the site (e.g. https://example.com) so that " +
+      "Open Graph and Twitter share-preview tags resolve correctly.",
+  );
+}
+
+// Validate that VITE_PUBLIC_SITE_URL is a well-formed absolute origin.
+// We parse it and require an http/https protocol, then normalise to url.origin
+// (which strips any path, query, or hash) so that index.html tag values are stable.
+let parsedSiteUrl: URL;
+try {
+  parsedSiteUrl = new URL(rawSiteUrl);
+} catch {
+  throw new Error(
+    `VITE_PUBLIC_SITE_URL is not a valid URL: "${rawSiteUrl}". ` +
+      "Expected an absolute origin such as https://example.com",
+  );
+}
+
+if (parsedSiteUrl.protocol !== "https:" && parsedSiteUrl.protocol !== "http:") {
+  throw new Error(
+    `VITE_PUBLIC_SITE_URL must use http or https protocol, got "${parsedSiteUrl.protocol}" in "${rawSiteUrl}".`,
+  );
+}
+
+// Normalise to a bare origin (no path, query, or trailing slash) so that
+// %VITE_PUBLIC_SITE_URL%/opengraph.jpg never produces double-slash or path-relative URLs.
+process.env.VITE_PUBLIC_SITE_URL = parsedSiteUrl.origin;
+
 export default defineConfig({
   base: basePath,
   plugins: [
