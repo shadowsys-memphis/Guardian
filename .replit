@@ -24,3 +24,8 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.production]
+VITE_PUBLIC_SITE_URL = "https://guardian-os-LedgerGhost90.replit.app"
