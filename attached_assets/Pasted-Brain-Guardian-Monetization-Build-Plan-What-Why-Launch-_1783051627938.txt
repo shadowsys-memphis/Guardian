@@ -1,0 +1,485 @@
+Brain Guardian Monetization Build Plan
+
+What & Why
+
+Launch Brain Guardian as the first paid vertical of the broader br(AI)n platform.
+
+Brain Guardian should target caregiver families first because the pain is specific, urgent, emotionally clear, and subscription-worthy: medication routines, meals, appointments, care notes, family coordination, document tracking, daily logs, and caregiver handoffs.
+
+However, the underlying architecture should remain generic. The core br(AI)n platform should not be hard-coded as a caregiver-only app.
+
+The strategic structure is:
+
+* br(AI)n = the core private life-operations platform
+* Brain Guardian = the first paid vertical for caregiver families
+* Future verticals = Home Guardian, Finance Guardian, Business Guardian, Wellness Guardian, etc.
+
+The br(AI)n core should stay modular around:
+
+* People
+* Tasks
+* Routines
+* Documents
+* Logs
+* Notes
+* Roles
+* Workspaces
+* AI summaries
+* Tenant-scoped data
+
+Brain Guardian is the caregiver-themed product layer on top of that core system.
+
+Done Looks Like
+
+A public Brain Guardian landing page exists at /guardian.
+
+The landing page is outside the locked private workspace and can be viewed without a passphrase.
+
+The landing page includes:
+
+* Hero section
+* Product explanation
+* Feature grid
+* Pricing cards
+* “Start Free Trial” CTA
+* Brain Guardian by br(AI)n branding
+* Privacy-forward positioning
+* Clear caregiver-family use case
+
+Stripe Checkout is integrated.
+
+Visitors can start a 14-day free trial for:
+
+* Family Plan — $19/month
+* Multi-Care Plan — $39/month
+
+After successful checkout, the subscriber is routed to a secure success/setup page.
+
+The setup page gives the subscriber a one-time workspace invite or generated passphrase for their private Brain Guardian workspace.
+
+The API server has tenant support.
+
+Each paying family is represented as a separate tenant with its own isolated data namespace.
+
+The app’s private workspace system is tenant-aware.
+
+All private data routes are scoped to the authenticated tenant on the server side.
+
+A simple My Subscription page exists inside the private workspace.
+
+The My Subscription page shows:
+
+* Current plan
+* Subscription status
+* Renewal/trial end date
+* Stripe Customer Portal button for cancellation, update, or payment management
+
+Stripe webhooks are implemented.
+
+Webhook events handled:
+
+* checkout.session.completed
+* customer.subscription.deleted
+* invoice.payment_failed
+
+Tenant status updates automatically based on billing state.
+
+Out of Scope
+
+Do not ship other verticals yet.
+
+The architecture should support future verticals, but only Brain Guardian ships in this phase.
+
+Out of scope for this task:
+
+* Home Guardian
+* Finance Guardian
+* Business Guardian
+* Wellness Guardian
+* OAuth / social login
+* Full admin subscriber dashboard for Ray
+* Mobile companion app monetization
+* Advanced enterprise compliance layer
+* Multi-org B2B sales portal
+
+Passphrase-based workspace entry is acceptable for the first paid version, but the implementation must be secure and tenant-aware.
+
+Core Technical Direction
+
+Use caregiver-focused language on the public Brain Guardian layer.
+
+Use generic platform language in the core br(AI)n architecture.
+
+Public language:
+
+* Brain Guardian
+* Private Care Workspace
+* Family Care Hub
+* Care Circle
+* Care Notes
+* Care Routines
+
+Core architecture language:
+
+* tenant
+* workspace
+* people
+* tasks
+* routines
+* documents
+* logs
+* roles
+* sessions
+* subscriptions
+
+Avoid hard-coding caregiver-only concepts into the database or shared app architecture unless they belong specifically to the Brain Guardian vertical.
+
+Required Build Steps
+
+1. Stripe Setup
+
+Add required Stripe environment secrets:
+
+* STRIPE_SECRET_KEY
+* STRIPE_WEBHOOK_SECRET
+* STRIPE_FAMILY_PRICE_ID
+* STRIPE_MULTI_CARE_PRICE_ID
+* STRIPE_CUSTOMER_PORTAL_RETURN_URL
+* STRIPE_CHECKOUT_SUCCESS_URL
+* STRIPE_CHECKOUT_CANCEL_URL
+
+Install the Stripe Node SDK in the API server.
+
+Create two Stripe products/prices in the Stripe dashboard:
+
+* Family Plan — $19/month with 14-day trial
+* Multi-Care Plan — $39/month with 14-day trial
+
+Store the Stripe Price IDs as environment variables.
+
+2. Tenant Database Schema
+
+Add a tenants table.
+
+Recommended fields:
+
+* id
+* name
+* email
+* stripe_customer_id
+* stripe_subscription_id
+* plan
+* status
+* passphrase_hash
+* setup_token_hash
+* setup_completed_at
+* trial_ends_at
+* current_period_end
+* created_at
+* updated_at
+
+Recommended tenant statuses:
+
+* pending_checkout
+* active
+* trialing
+* past_due
+* suspended
+* cancelled
+
+Use the existing raw-SQL pg Pool migration pattern instead of relying on drizzle-kit push if the current environment has TTY issues.
+
+Run the migration safely on server startup or through an explicit migration script.
+
+3. Stripe Checkout Route
+
+Add:
+
+POST /api/billing/checkout
+
+Request body:
+
+* plan
+* email
+* optional family_name
+
+Flow:
+
+1. Validate selected plan.
+2. Create a pending tenant.
+3. Create a Stripe Checkout session.
+4. Attach tenant_id in Stripe metadata.
+5. Redirect the user to Stripe Checkout.
+
+Important: create the pending tenant before checkout so the webhook has a tenant record to activate.
+
+4. Stripe Webhook Route
+
+Add:
+
+POST /api/billing/webhook
+
+Handle:
+
+checkout.session.completed
+
+* Find tenant by tenant_id metadata.
+* Store Stripe customer ID.
+* Store Stripe subscription ID.
+* Mark tenant as trialing or active.
+* Generate a one-time setup token.
+* Store only the hashed setup token.
+
+customer.subscription.deleted
+
+* Find tenant by Stripe subscription ID.
+* Mark tenant as cancelled or suspended.
+* Disable private workspace access unless policy says otherwise.
+
+invoice.payment_failed
+
+* Find tenant by Stripe customer/subscription ID.
+* Mark tenant as past_due.
+* Keep access policy simple for now: either warn only or suspend after a later follow-up task.
+
+5. Checkout Success / Setup Page
+
+Add a public post-checkout setup route:
+
+/guardian/success
+
+The page should receive the Stripe session_id.
+
+The page should call:
+
+GET /api/billing/checkout-session?session_id=...
+
+The API verifies the session with Stripe, confirms payment/trial status, finds the tenant, and returns a one-time workspace setup flow.
+
+The page should display:
+
+* Workspace name
+* Plan
+* Trial status
+* One-time generated passphrase or invite setup link
+* Copy button
+* Clear warning: save this passphrase now
+
+Important: the passphrase should only be shown once.
+
+Preferred safer flow:
+
+* Success page shows a one-time setup screen.
+* User creates their own passphrase.
+* API stores only the bcrypt hash.
+* The raw passphrase is never stored.
+
+6. Tenant Authentication
+
+Add:
+
+POST /api/tenants/auth
+
+Request body:
+
+* passphrase
+
+Server behavior:
+
+1. Compare passphrase against stored tenant passphrase hashes.
+2. If valid and tenant status allows access, return a session token or secure session response.
+3. Include tenant ID, plan, and status in the authenticated server-side session context.
+
+Do not rely on the frontend alone to decide tenant access.
+
+Do not treat a raw X-Tenant-ID header as trusted identity.
+
+7. Tenant-Scoped API Middleware
+
+Add server-side tenant middleware.
+
+All private data routes should resolve tenant identity from the authenticated session.
+
+Every database query for tenant-owned data must include tenant scope.
+
+Example rule:
+
+* No private route should read or write family data unless a valid tenant session exists.
+* No private route should accept arbitrary tenant IDs from the client without verification.
+* All tenant-owned tables should include tenant_id.
+
+This is the real isolation layer.
+
+Frontend tenant context is convenience only.
+
+Server-side tenant enforcement is mandatory.
+
+8. Vault / Workspace Context Update
+
+Update:
+
+artifacts/brain-app/src/lib/vault-context.tsx
+
+Rename carefully where appropriate:
+
+* Internal code may keep vault-context for now to avoid unnecessary breakage.
+* Public UI should say “workspace,” “private workspace,” or “care workspace.”
+
+Update unlock() so it calls:
+
+POST /api/tenants/auth
+
+Store the authenticated tenant session.
+
+All API calls should include the session credential/token.
+
+If X-Tenant-ID remains temporarily, it should be treated as a secondary hint, not the source of truth.
+
+9. Brain Guardian Landing Page
+
+Add public route:
+
+/guardian
+
+The route must sit outside the private workspace gate.
+
+Landing page sections:
+
+Hero:
+
+* Brain Guardian by br(AI)n
+* “A private AI care workspace for families managing real-life care.”
+* CTA: Start Free Trial
+
+Feature grid:
+
+* Care routines
+* Medication organization
+* Meal planning
+* Appointment tracking
+* Family handoffs
+* AI care summaries
+* Notes and logs
+* Documents and emergency info
+
+Pricing:
+
+* 14-day free trial
+* Family Plan — $19/month
+* Multi-Care Plan — $39/month
+
+Footer:
+
+* Privacy-first language
+* Not medical advice
+* Built for family care coordination
+
+10. Subscription Management
+
+Add private route/page:
+
+/subscription or /my-subscription
+
+API routes:
+
+GET /api/billing/status
+
+Returns:
+
+* plan
+* status
+* trial end
+* renewal date
+* payment status
+
+POST /api/billing/customer-portal
+
+Creates a Stripe Customer Portal session and returns the redirect URL.
+
+The page should include:
+
+* Current plan
+* Status
+* Renewal/trial date
+* Manage Billing button
+
+11. App Routing Update
+
+Update:
+
+artifacts/brain-app/src/App.tsx
+
+Routing rule:
+
+* /guardian
+* /guardian/success
+* any public billing setup routes
+
+must be available before the private workspace gate.
+
+Existing private routes remain behind the workspace/passphrase gate.
+
+12. Relevant Files
+
+Frontend:
+
+* artifacts/brain-app/src/App.tsx
+* artifacts/brain-app/src/pages/vault-gate.tsx
+* artifacts/brain-app/src/lib/vault-context.tsx
+* artifacts/brain-app/src/pages/guardian.tsx
+* artifacts/brain-app/src/pages/guardian-success.tsx
+* artifacts/brain-app/src/pages/my-subscription.tsx
+
+API server:
+
+* artifacts/api-server/src/app.ts
+* artifacts/api-server/src/index.ts
+* artifacts/api-server/src/routes/index.ts
+* artifacts/api-server/src/routes/billing.ts
+* artifacts/api-server/src/routes/tenants.ts
+* artifacts/api-server/src/middleware/tenant.ts
+
+Database:
+
+* artifacts/api-server/src/db/migrate.ts
+* existing schema/migration location if already established
+
+Acceptance Criteria
+
+Brain Guardian landing page is publicly visible without passphrase.
+
+Stripe Checkout opens correctly for both pricing plans.
+
+Successful checkout creates or activates a tenant.
+
+Subscriber can complete setup and enter their private workspace.
+
+Tenant passphrase is hashed, not stored raw.
+
+Private app routes require valid tenant authentication.
+
+Tenant-owned API data is scoped server-side.
+
+My Subscription page shows billing status.
+
+Customer Portal redirect works.
+
+Webhook events update tenant status correctly.
+
+Existing Ray/local Guardian instance is not broken or merged with public customer tenants.
+
+No old crypto, intercom, or unrelated vault subsystem is reintroduced.
+
+Final Build Direction
+
+Ship Brain Guardian as the first paid caregiver-family vertical of br(AI)n.
+
+Keep the public product focused and emotionally specific.
+
+Keep the underlying architecture generic, modular, and ready for future verticals.
+
+Do not overbuild admin tools yet.
+
+Do not market br(AI)n as “for everyone” in the first release.
+
+Start with the caregiver lane, prove willingness to pay, and let Brain Guardian become the first monetized proof that br(AI)n can expand into a full private life-operations platform.
