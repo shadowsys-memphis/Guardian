@@ -26,7 +26,7 @@ const DEVICE_ICONS: Record<string, React.ReactNode> = {
 const TYPE_COLORS: Record<string, string> = {
   alexa: "text-blue-400 border-blue-400/30 bg-blue-400/10",
   sonos: "text-green-400 border-green-400/30 bg-green-400/10",
-  light: "text-yellow-400 border-yellow-400/30 bg-yellow-400/10",
+  light: "text-primary border-primary/30 bg-primary/10",
 };
 
 export function SmartHomePanel() {

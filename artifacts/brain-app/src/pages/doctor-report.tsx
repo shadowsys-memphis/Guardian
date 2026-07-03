@@ -17,14 +17,14 @@ const CATEGORY_ICONS: Record<string, string> = {
   cognition: "🧠", voices: "👂", energy: "⚡", task: "✅",
 };
 const CAT_COLORS: Record<string, string> = {
-  mood: "#fbbf24", medication: "#22c55e", sleep: "#818cf8", appetite: "#f97316",
+  mood: "#d97087", medication: "#22c55e", sleep: "#818cf8", appetite: "#f97316",
   cognition: "#06b6d4", voices: "#ec4899", energy: "#84cc16", task: "#a78bfa",
 };
 const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
 
 function StatusIcon({ status }: { status: string }) {
   if (status === "green") return <CheckCircle2 size={16} className="text-green-600 print:text-green-700" />;
-  if (status === "yellow") return <MinusCircle size={16} className="text-yellow-500 print:text-yellow-600" />;
+  if (status === "yellow") return <MinusCircle size={16} className="text-sky-500 print:text-sky-600" />;
   if (status === "red") return <XCircle size={16} className="text-red-500 print:text-red-600" />;
   return <MinusCircle size={16} className="text-gray-400" />;
 }
@@ -32,7 +32,7 @@ function StatusIcon({ status }: { status: string }) {
 function StatusBadge({ status }: { status: string }) {
   const cls =
     status === "green" ? "bg-green-50 text-green-700 border-green-200 print:bg-green-50 print:text-green-800" :
-    status === "yellow" ? "bg-yellow-50 text-yellow-700 border-yellow-200 print:bg-yellow-50 print:text-yellow-800" :
+    status === "yellow" ? "bg-sky-50 text-sky-700 border-sky-200 print:bg-sky-50 print:text-sky-800" :
     status === "red" ? "bg-red-50 text-red-700 border-red-200 print:bg-red-50 print:text-red-800" :
     "bg-gray-50 text-gray-500 border-gray-200";
   const label = status === "green" ? "Stable" : status === "yellow" ? "Monitor" : status === "red" ? "Concern" : "No Data";
@@ -119,7 +119,7 @@ function WeeklyTab() {
               <div key={i} className="border rounded-lg p-3 bg-white text-sm print:border-gray-300">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="text-xs text-gray-500">{format(new Date(log.loggedAt), "MMM d, h:mm a")}</span>
-                  {log.ptsdTrigger && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 rounded font-semibold">PTSD Trigger</span>}
+                  {log.ptsdTrigger && <span className="text-xs bg-red-100 text-red-700 px-1.5 rounded font-semibold">PTSD Trigger</span>}
                   <span className="text-xs text-gray-600">Hallucination intensity: <strong>{log.hallucinationIntensity}/10</strong></span>
                   <span className="text-xs text-gray-600">Motivation: <strong>{log.motivationLevel}/5</strong></span>
                 </div>
@@ -269,7 +269,7 @@ function MonthlyTab() {
 function StatCard({ label, value, unit, color }: { label: string; value: any; unit?: string; color?: string }) {
   const colorCls =
     color === "green" ? "text-green-700" :
-    color === "yellow" ? "text-yellow-600" :
+    color === "yellow" ? "text-sky-600" :
     color === "red" ? "text-red-600" :
     color === "blue" ? "text-blue-700" :
     "text-gray-800";
@@ -302,8 +302,8 @@ export function DoctorReport() {
           .print\\:border-gray-300 { border-color: #d1d5db !important; }
           .print\\:text-green-800 { color: #166534 !important; }
           .print\\:bg-green-50 { background-color: #f0fdf4 !important; }
-          .print\\:text-yellow-800 { color: #713f12 !important; }
-          .print\\:bg-yellow-50 { background-color: #fefce8 !important; }
+          .print\\:text-sky-800 { color: #075985 !important; }
+          .print\\:bg-sky-50 { background-color: #f0f9ff !important; }
           .print\\:text-red-800 { color: #7f1d1d !important; }
           .print\\:bg-red-50 { background-color: #fef2f2 !important; }
         }

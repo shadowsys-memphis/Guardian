@@ -371,11 +371,11 @@ export function JessicaPhone() {
 
   const ACTION_TYPE_COLORS: Record<string, string> = {
     ADD_EVENT: "text-primary border-primary/30",
-    TOGGLE_SMART_DEVICE: "text-yellow-400 border-yellow-500/30",
-    ADD_TASK: "text-green-400 border-green-500/30",
-    MED_CONFIRMED: "text-green-400 border-green-500/30",
+    TOGGLE_SMART_DEVICE: "text-primary border-primary/30",
+    ADD_TASK: "text-success border-success/30",
+    MED_CONFIRMED: "text-success border-success/30",
     MED_REFUSED: "text-destructive border-destructive/30",
-    WELLBEING_ALERT: "text-orange-400 border-orange-500/30",
+    WELLBEING_ALERT: "text-accent border-accent/30",
     COMMAND: "text-muted-foreground border-border",
   };
 
@@ -403,7 +403,7 @@ export function JessicaPhone() {
             <div className="space-y-6">
               <button
                 onClick={startCall}
-                className="group relative h-40 w-40 mx-auto rounded-full bg-primary/10 border-2 border-primary/40 flex flex-col items-center justify-center gap-2 hover:bg-primary/20 hover:border-primary transition-all shadow-[0_0_60px_rgba(251,191,36,0.15)] hover:shadow-[0_0_80px_rgba(251,191,36,0.3)]"
+                className="group relative h-40 w-40 mx-auto rounded-full bg-primary/10 border-2 border-primary/40 flex flex-col items-center justify-center gap-2 hover:bg-primary/20 hover:border-primary transition-all shadow-[0_0_60px_rgba(70,159,104,0.15)] hover:shadow-[0_0_80px_rgba(70,159,104,0.3)]"
               >
                 <div className="absolute inset-0 rounded-full border border-primary/20 animate-ping opacity-30" />
                 <Phone className="h-12 w-12 text-primary group-hover:scale-110 transition-transform" />
@@ -432,13 +432,13 @@ export function JessicaPhone() {
                     .then((d: any) => setLmStatus(d?.connected ? "connected" : "unreachable"))
                     .catch(() => setLmStatus("unreachable"));
                 }}
-                className={`flex items-center gap-2 px-3 py-1 rounded-sm border text-xs font-display uppercase tracking-widest ${activeModelId === "gemini" ? "border-primary/30 text-primary/60 bg-primary/5 cursor-default" : "border-amber-500/30 text-amber-400/70 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"}`}
+                className={`flex items-center gap-2 px-3 py-1 rounded-sm border text-xs font-display uppercase tracking-widest ${activeModelId === "gemini" ? "border-primary/30 text-primary/60 bg-primary/5 cursor-default" : "border-border text-muted-foreground/70 bg-secondary/50 hover:bg-secondary transition-colors"}`}
               >
                 {isLocalModel && (
                   <span
                     className={`h-2 w-2 rounded-full shrink-0 ${
                       lmStatus === "checking" ? "bg-muted-foreground animate-pulse" :
-                      lmStatus === "connected" ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.8)]" :
+                      lmStatus === "connected" ? "bg-success shadow-[0_0_6px_rgba(70,159,104,0.6)]" :
                       lmStatus === "unreachable" ? "bg-destructive" :
                       "bg-muted-foreground/40"
                     }`}
@@ -473,7 +473,7 @@ export function JessicaPhone() {
             </p>
           </div>
 
-          <div className="h-32 w-32 mx-auto rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center shadow-[0_0_60px_rgba(251,191,36,0.2)]">
+          <div className="h-32 w-32 mx-auto rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center shadow-[0_0_60px_rgba(70,159,104,0.2)]">
             <WaveformBars active={true} />
           </div>
 
@@ -496,7 +496,7 @@ export function JessicaPhone() {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="bg-card border-b border-border px-6 py-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
-          <div className="h-3 w-3 rounded-full bg-success animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.8)]" />
+          <div className="h-3 w-3 rounded-full bg-success animate-pulse shadow-[0_0_10px_rgba(70,159,104,0.6)]" />
           <div>
             <p className="text-xl font-display font-bold text-primary tracking-widest uppercase">JESSICA ACTIVE</p>
             <p className="text-xs text-muted-foreground uppercase tracking-widest">

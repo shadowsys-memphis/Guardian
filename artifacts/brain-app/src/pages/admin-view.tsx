@@ -165,7 +165,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 const STATUS_COLORS: Record<string, string> = {
   green: "border-success/40 bg-success/10 text-success",
-  yellow: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
+  yellow: "border-accent/40 bg-accent/10 text-accent",
   red: "border-destructive/50 bg-destructive/10 text-destructive",
   unknown: "border-border bg-secondary text-muted-foreground",
 };
@@ -236,7 +236,7 @@ function CycleDayHeatmap({ trends, haldolCycleDay }: { trends: any[]; haldolCycl
                 let bg = "bg-secondary/30";
                 if (val !== undefined) {
                   if (val >= 0.7) bg = "bg-success/60";
-                  else if (val >= 0.4) bg = "bg-yellow-500/50";
+                  else if (val >= 0.4) bg = "bg-sky-400/50";
                   else bg = "bg-destructive/60";
                 }
                 return (
@@ -248,7 +248,7 @@ function CycleDayHeatmap({ trends, haldolCycleDay }: { trends: any[]; haldolCycl
           ))}
           <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-destructive/60" /> Low (&lt;0.4)</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-yellow-500/50" /> Mid</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-sky-400/50" /> Mid</span>
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-success/60" /> Good (≥0.7)</span>
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-secondary/30" /> No data</span>
           </div>
@@ -288,11 +288,11 @@ function HealthSummarySection() {
         </div>
       )}
       {flaggedCategories.length > 0 && sustainedAnomalies.length === 0 && (
-        <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
-          <AlertTriangle className="text-yellow-400 shrink-0 mt-0.5" size={20} />
+        <div className="flex items-start gap-3 p-4 bg-accent/10 border border-accent/30 rounded-md">
+          <AlertTriangle className="text-accent shrink-0 mt-0.5" size={20} />
           <div>
-            <p className="text-sm font-bold text-yellow-400 uppercase tracking-widest">Today's Alert</p>
-            <p className="text-sm text-yellow-400/80 mt-1">
+            <p className="text-sm font-bold text-accent uppercase tracking-widest">Today's Alert</p>
+            <p className="text-sm text-accent/80 mt-1">
               Flagged today: {flaggedCategories.map((c) => CATEGORY_LABELS[c]).join(", ")}.
             </p>
           </div>
@@ -351,14 +351,14 @@ function HealthSummarySection() {
                   <CardContent className="pb-4 px-2">
                     <ResponsiveContainer width="100%" height={120}>
                       <LineChart data={data}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                        <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#888" }} />
-                        <YAxis tick={{ fontSize: 9, fill: "#888" }} domain={[0, 1]} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                        <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#6b7280" }} />
+                        <YAxis tick={{ fontSize: 9, fill: "#6b7280" }} domain={[0, 1]} />
                         <Tooltip
-                          contentStyle={{ background: "#1a1a1a", border: "1px solid #333", fontSize: 11 }}
+                          contentStyle={{ background: "#fafaf8", border: "1px solid #d1d5db", fontSize: 11 }}
                           formatter={(v: number) => [v.toFixed(2), CATEGORY_LABELS[cat]]}
                         />
-                        <Line type="monotone" dataKey="value" stroke={sustainedAnomalies.includes(cat) ? "#ef4444" : "#fbbf24"} strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="value" stroke={sustainedAnomalies.includes(cat) ? "#ef4444" : "#4a9f68"} strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -452,7 +452,7 @@ function HealthSessionsSection() {
                               <div className="flex-1">
                                 <span className="text-muted-foreground uppercase font-bold tracking-widest">{CATEGORY_LABELS[dp.category] ?? dp.category}</span>
                                 {dp.parsedValue && <span className="ml-2 text-primary">→ {dp.parsedValue}</span>}
-                                {dp.parsedIntensity && dp.parsedIntensity !== "none" && <span className="ml-1 text-yellow-400">({dp.parsedIntensity})</span>}
+                                {dp.parsedIntensity && dp.parsedIntensity !== "none" && <span className="ml-1 text-accent">({dp.parsedIntensity})</span>}
                                 {dp.questionId && questionsMap[dp.questionId] && (
                                   <p className="text-primary/50 mt-0.5 text-xs">Q: {questionsMap[dp.questionId]}</p>
                                 )}
@@ -734,7 +734,7 @@ function AiBrainSection() {
           {testResult && (
             <div className={`p-3 rounded-sm border text-xs font-display space-y-2 ${
               testResult.connected
-                ? "border-green-500/30 bg-green-500/10 text-green-400"
+                ? "border-success/30 bg-success/10 text-success"
                 : "border-destructive/30 bg-destructive/10 text-destructive"
             }`}>
               <p className="uppercase tracking-widest">
@@ -743,12 +743,12 @@ function AiBrainSection() {
                   : `Not reachable — ${testResult.error ?? "unknown error"}`}
               </p>
               {testResult.connected && testResult.modelIds && testResult.modelIds.length > 0 && (
-                <ul className="space-y-1 pt-1 border-t border-green-500/20">
+                <ul className="space-y-1 pt-1 border-t border-success/20">
                   {testResult.modelIds.map((id) => {
                     const knownModel = models.find((m) => m.lmStudioModelId && id.toLowerCase().includes(m.lmStudioModelId.toLowerCase()));
                     return (
-                      <li key={id} className={`flex items-center gap-2 ${knownModel ? "text-green-300" : "text-green-600/60"}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${knownModel ? "bg-green-400" : "bg-green-700/50"}`} />
+                      <li key={id} className={`flex items-center gap-2 ${knownModel ? "text-success" : "text-success/50"}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${knownModel ? "bg-success" : "bg-success/30"}`} />
                         <span className="font-mono normal-case tracking-normal truncate">{id}</span>
                         {knownModel && <span className="ml-auto shrink-0 opacity-60">{knownModel.label}</span>}
                       </li>
@@ -757,7 +757,7 @@ function AiBrainSection() {
                 </ul>
               )}
               {testResult.connected && (testResult.modelIds ?? []).length === 0 && (
-                <p className="uppercase tracking-widest text-amber-400 border-t border-green-500/20 pt-1">
+                <p className="uppercase tracking-widest text-accent border-t border-success/20 pt-1">
                   No models loaded — open a model in LM Studio
                 </p>
               )}
@@ -765,7 +765,7 @@ function AiBrainSection() {
                 const activeInfo = models.find((m) => m.id === activeModel);
                 const isLoaded = activeInfo?.lmStudioModelId && testResult.modelIds!.some((id) => id.toLowerCase().includes(activeInfo.lmStudioModelId!.toLowerCase()));
                 return !isLoaded ? (
-                  <p className="uppercase tracking-widest text-amber-400 border-t border-green-500/20 pt-1">
+                  <p className="uppercase tracking-widest text-accent border-t border-success/20 pt-1">
                     ⚠ Active model ({activeInfo?.label ?? activeModel}) not found in loaded list
                   </p>
                 ) : null;
@@ -1343,7 +1343,7 @@ function ScriptsTab() {
 
       <div className="grid gap-4">
         {scripts?.map((script) => (
-          <Card key={script.id} className={`transition-all ${editingId === script.id ? "border-primary shadow-[0_0_20px_rgba(251,191,36,0.1)]" : ""}`}>
+          <Card key={script.id} className={`transition-all ${editingId === script.id ? "border-primary shadow-[0_0_20px_rgba(70,159,104,0.15)]" : ""}`}>
             <CardHeader className="py-3 flex flex-row items-center justify-between bg-secondary/30">
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${script.isActive ? "bg-success animate-pulse" : "bg-muted-foreground"}`} />
@@ -1755,7 +1755,7 @@ function ShopperTab() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-display uppercase tracking-widest">Weekly Budget</CardTitle>
             <div className="flex items-center gap-3">
-              <span className={`text-lg font-bold font-display ${budgetPct >= 90 ? "text-destructive" : budgetPct >= 70 ? "text-yellow-400" : "text-success"}`}>
+              <span className={`text-lg font-bold font-display ${budgetPct >= 90 ? "text-destructive" : budgetPct >= 70 ? "text-accent" : "text-success"}`}>
                 {fmtDollars(spent)}
               </span>
               <span className="text-muted-foreground text-sm">of {fmtDollars(budget)}</span>
@@ -1771,7 +1771,7 @@ function ShopperTab() {
         <CardContent>
           <div className="h-4 rounded-sm bg-secondary overflow-hidden">
             <div
-              className={`h-full transition-all duration-500 rounded-sm ${budgetPct >= 90 ? "bg-destructive" : budgetPct >= 70 ? "bg-yellow-500" : "bg-success"}`}
+              className={`h-full transition-all duration-500 rounded-sm ${budgetPct >= 90 ? "bg-destructive" : budgetPct >= 70 ? "bg-accent" : "bg-success"}`}
               style={{ width: `${budgetPct}%` }}
             />
           </div>
@@ -1863,8 +1863,8 @@ function ShopperTab() {
                   const isUrgent = urgentItems.has(item.ingredientName);
                   const isPushing = urgentPushingKey === item.ingredientName;
                   return (
-                    <div key={item.id} className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-sm text-xs transition-colors ${isUrgent ? "bg-orange-500/10 border border-orange-500/30" : "hover:bg-secondary/30"}`}>
-                      <span className={`${isUrgent ? "text-orange-400 font-bold" : "text-foreground/80"}`}>
+                    <div key={item.id} className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-sm text-xs transition-colors ${isUrgent ? "bg-accent/10 border border-accent/30" : "hover:bg-secondary/30"}`}>
+                      <span className={`${isUrgent ? "text-accent font-bold" : "text-foreground/80"}`}>
                         {isUrgent && "⚡ "}{item.ingredientName} <span className="text-muted-foreground font-normal">×{item.totalQuantity} {item.unit}</span>
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
@@ -1875,8 +1875,8 @@ function ShopperTab() {
                           title={isUrgent ? "Marked urgent — click to un-mark" : "Mark urgent & push calendar alert"}
                           className={`flex items-center gap-1 px-1.5 py-0.5 rounded-sm border text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${
                             isUrgent
-                              ? "bg-orange-500/20 border-orange-500/50 text-orange-400"
-                              : "border-border/40 text-muted-foreground/60 hover:border-orange-500/40 hover:text-orange-400"
+                              ? "bg-accent/20 border-accent/50 text-accent"
+                              : "border-border/40 text-muted-foreground/60 hover:border-accent/40 hover:text-accent"
                           }`}
                         >
                           {isPushing ? <RefreshCw size={8} className="animate-spin" /> : <CalendarPlus size={8} />}
@@ -1897,16 +1897,16 @@ function ShopperTab() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
-              <Flame size={16} className="text-orange-400" /> Pops' Cravings
+              <Flame size={16} className="text-accent" /> Pops' Cravings
             </CardTitle>
             <CardDescription className="text-xs">Jessica captured these during check-ins — add to next week if you want</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {(cravings ?? []).map((craving: MealCraving) => (
-                <div key={craving.id} className="flex items-center justify-between gap-3 p-3 bg-orange-500/5 border border-orange-500/20 rounded-sm">
+                <div key={craving.id} className="flex items-center justify-between gap-3 p-3 bg-accent/5 border border-accent/20 rounded-sm">
                   <div className="flex items-center gap-2">
-                    <Flame size={14} className="text-orange-400 shrink-0" />
+                    <Flame size={14} className="text-accent shrink-0" />
                     <span className="text-sm font-semibold">{craving.mealName}</span>
                     <span className="text-xs text-muted-foreground">via {craving.source}</span>
                   </div>
@@ -2099,8 +2099,8 @@ const ROTATION_CATEGORY_EMOJI: Record<string, string> = {
 
 const MED_RESPONSES = [
   { key: "stable", label: "Stable", emoji: "🟢", color: "border-success/40 text-success" },
-  { key: "drowsy", label: "Drowsy", emoji: "🟡", color: "border-yellow-500/40 text-yellow-400" },
-  { key: "fatigued", label: "Fatigued", emoji: "🟠", color: "border-orange-500/40 text-orange-400" },
+  { key: "drowsy", label: "Drowsy", emoji: "🟡", color: "border-accent/40 text-accent" },
+  { key: "fatigued", label: "Fatigued", emoji: "🟠", color: "border-accent/60 text-accent/80" },
   { key: "agitated", label: "Agitated", emoji: "🔴", color: "border-destructive/40 text-destructive" },
 ] as const;
 
@@ -2210,9 +2210,9 @@ function InventoryTab() {
   const CAT_ICON: Record<string, string> = { food: "🛒", paper: "📦", toiletry: "🧴", cleaning: "🧹", medical: "💊" };
   const CYCLE_COLOR: Record<string, string> = {
     weekly: "text-primary border-primary/40",
-    monthly: "text-green-400 border-green-500/40",
-    quarterly: "text-yellow-400 border-yellow-500/40",
-    yearly: "text-orange-400 border-orange-500/40",
+    monthly: "text-success border-success/40",
+    quarterly: "text-primary/70 border-primary/30",
+    yearly: "text-accent border-accent/40",
   };
   const CYCLE_LABEL: Record<string, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
 
@@ -2434,7 +2434,7 @@ function InventoryTab() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      {item.needs_restock && <span className="text-xs text-yellow-400 font-bold">needs restock</span>}
+                      {item.needs_restock && <span className="text-xs text-accent font-bold">needs restock</span>}
                       <div className="flex gap-2 ml-auto">
                         <button
                           onClick={() => setEditedIntakeItems(editedIntakeItems.filter((_, j) => j !== i))}
@@ -2655,11 +2655,11 @@ function RotationTab() {
         <Card className="p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-widest font-display mb-2">Rotation Compliance</p>
           <div className="flex items-end gap-2 mb-2">
-            <span className="text-3xl font-display font-bold text-orange-400">{hourlyPct}%</span>
+            <span className="text-3xl font-display font-bold text-accent">{hourlyPct}%</span>
             <span className="text-xs text-muted-foreground mb-1">{hourlyDone}/{hourlyTotal} repositions</span>
           </div>
           <div className="w-full h-2 rounded-full bg-secondary/50">
-            <div className="h-2 rounded-full bg-orange-400 transition-all duration-500" style={{ width: `${hourlyPct}%` }} />
+            <div className="h-2 rounded-full bg-accent transition-all duration-500" style={{ width: `${hourlyPct}%` }} />
           </div>
         </Card>
       </div>
@@ -2704,7 +2704,7 @@ function RotationTab() {
                       {emoji} {t.title}
                     </span>
                     <span className="text-xs text-muted-foreground/60">{t.timeSlot}</span>
-                    {t.isHourly && <Badge variant="outline" className="text-xs text-orange-400 border-orange-500/30 py-0">↺ 2hr</Badge>}
+                    {t.isHourly && <Badge variant="outline" className="text-xs text-accent border-accent/30 py-0">↺ 2hr</Badge>}
                     <Badge variant="outline" className="text-xs text-muted-foreground/50 border-border/20 capitalize py-0">{t.period}</Badge>
                     <Badge variant="outline" className="text-xs text-muted-foreground/50 border-border/20 py-0">{t.category}</Badge>
                   </div>
@@ -2808,11 +2808,11 @@ function RotationTab() {
               <div key={l.id} className="rounded-sm border border-border bg-card p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-display uppercase tracking-widest text-muted-foreground">{l.dateLabel}</span>
-                  <span className={`text-xl font-bold font-display ${l.efficacyScore >= 8 ? "text-success" : l.efficacyScore >= 5 ? "text-yellow-400" : "text-destructive"}`}>{l.efficacyScore}/10</span>
+                  <span className={`text-xl font-bold font-display ${l.efficacyScore >= 8 ? "text-success" : l.efficacyScore >= 5 ? "text-accent" : "text-destructive"}`}>{l.efficacyScore}/10</span>
                 </div>
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between text-muted-foreground"><span>Wants responded</span><span className="text-foreground">{l.wantsRespondedRate}%</span></div>
-                  <div className="flex justify-between text-muted-foreground"><span>Med adherence</span><span className={l.medAdherence === 100 ? "text-success font-semibold" : "text-yellow-400"}>{l.medAdherence}%</span></div>
+                  <div className="flex justify-between text-muted-foreground"><span>Med adherence</span><span className={l.medAdherence === 100 ? "text-success font-semibold" : "text-accent"}>{l.medAdherence}%</span></div>
                   <div className="flex justify-between text-muted-foreground"><span>Rotation complete</span><span className="text-foreground">{l.soreRotationComplete}%</span></div>
                 </div>
                 {l.generalNotes && <p className="text-xs text-muted-foreground/60 mt-2 italic leading-relaxed">{l.generalNotes}</p>}

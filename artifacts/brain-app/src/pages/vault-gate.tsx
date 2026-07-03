@@ -32,7 +32,7 @@ export function VaultGate({ children: _children }: VaultGateProps) {
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="w-full max-w-sm mx-auto px-6">
         <div className="text-center mb-10 space-y-3">
-          <div className="h-20 w-20 mx-auto rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center shadow-[0_0_40px_rgba(251,191,36,0.1)]">
+          <div className="h-20 w-20 mx-auto rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center shadow-[0_0_40px_rgba(70,159,104,0.12)]">
             <Lock className="h-9 w-9 text-primary" />
           </div>
           <h1 className="text-4xl font-display font-bold text-primary tracking-widest uppercase">br(AI)n</h1>

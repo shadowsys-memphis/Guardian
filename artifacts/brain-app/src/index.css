@@ -43,37 +43,37 @@
 }
 
 :root {
-  /* MILITARY COMMAND CENTER THEME - NAVY AND GOLD */
-  --background: 222 47% 8%;
-  --foreground: 43 96% 90%;
+  /* PASTEL GREEN & ROSE — OFF-WHITE THEME */
+  --background: 40 30% 96%;
+  --foreground: 220 20% 18%;
   
-  --card: 222 47% 11%;
-  --card-foreground: 43 96% 90%;
+  --card: 40 25% 99%;
+  --card-foreground: 220 20% 18%;
   
-  --popover: 222 47% 11%;
-  --popover-foreground: 43 96% 90%;
+  --popover: 40 25% 99%;
+  --popover-foreground: 220 20% 18%;
   
-  --primary: 43 96% 56%;
-  --primary-foreground: 222 47% 8%;
+  --primary: 142 38% 44%;
+  --primary-foreground: 0 0% 100%;
   
-  --secondary: 217 32% 17%;
-  --secondary-foreground: 43 96% 80%;
+  --secondary: 142 20% 92%;
+  --secondary-foreground: 220 15% 25%;
   
-  --muted: 217 32% 17%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 142 15% 91%;
+  --muted-foreground: 220 10% 48%;
   
-  --accent: 200 80% 45%;
+  --accent: 355 60% 68%;
   --accent-foreground: 0 0% 100%;
   
-  --destructive: 0 84% 60%;
+  --destructive: 0 72% 56%;
   --destructive-foreground: 0 0% 100%;
   
-  --success: 142 71% 45%;
-  --success-foreground: 222 47% 8%;
+  --success: 142 55% 38%;
+  --success-foreground: 0 0% 100%;
 
-  --border: 217 32% 20%;
-  --input: 217 32% 17%;
-  --ring: 43 96% 56%;
+  --border: 142 18% 82%;
+  --input: 142 15% 91%;
+  --ring: 142 38% 44%;
   
   --radius: 0.25rem;
 }
@@ -83,10 +83,10 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased font-sans selection:bg-primary/30 selection:text-primary;
+    @apply bg-background text-foreground antialiased font-sans selection:bg-primary/20 selection:text-primary;
     background-image: 
-      radial-gradient(circle at 50% 0%, hsl(222, 47%, 15%) 0%, transparent 70%),
-      linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.4));
+      radial-gradient(circle at 50% 0%, hsl(142, 30%, 94%) 0%, transparent 70%),
+      linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.02));
     background-attachment: fixed;
   }
   
@@ -95,7 +95,7 @@
   }
 }
 
-/* Custom Scrollbar for the terminal feel */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -111,7 +111,7 @@
   background: hsl(var(--primary) / 0.5);
 }
 
-/* Radar Scanline effect for Jessica View */
+/* Subtle scanline effect for terminal views */
 .scanline {
   position: relative;
   overflow: hidden;
@@ -124,9 +124,9 @@
   left: 0;
   bottom: 0;
   right: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background: linear-gradient(rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.04) 50%);
   z-index: 10;
-  background-size: 100% 2px, 3px 100%;
+  background-size: 100% 4px;
   pointer-events: none;
 }
 
@@ -135,9 +135,9 @@
 }
 
 @keyframes flicker {
-  0% { opacity: 0.95; }
+  0% { opacity: 0.99; }
   50% { opacity: 1; }
-  100% { opacity: 0.95; }
+  100% { opacity: 0.99; }
 }
 
 @keyframes waveform {

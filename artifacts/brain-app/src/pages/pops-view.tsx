@@ -55,10 +55,10 @@ export function PopsView() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col crt-flicker">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       <header className="bg-secondary/40 border-b-2 border-primary px-8 py-5 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-5">
-          <div className="h-4 w-4 rounded-full bg-primary animate-pulse shadow-[0_0_15px_rgba(251,191,36,0.8)]" />
+          <div className="h-4 w-4 rounded-full bg-primary animate-pulse shadow-[0_0_15px_rgba(70,159,104,0.6)]" />
           <span className="text-3xl md:text-4xl font-display font-bold tracking-widest text-primary">
             br(AI)n_OS // ONLINE
           </span>
@@ -92,7 +92,7 @@ export function PopsView() {
 
 function ZombieScreen({ currentTime }: { currentTime: Date }) {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center crt-flicker">
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center">
       <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums mb-12">
         {format(currentTime, "HH:mm:ss")}
       </div>
