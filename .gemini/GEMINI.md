@@ -1,10 +1,16 @@
-# br(AI)n App — Gemini Code Assist Context
+# Brain Guardian OS — Gemini Code Assist Context
+
+> **Cross-agent ground rules** — multi-tenancy, system boundaries, and git discipline live in [`GEMINI.md`](../GEMINI.md) at the repo root. Read that first. This file is the deep Gemini/Jessica technical reference only.
 
 ## Project Mission
 
-The **br(AI)n App** is a unified AI caregiver system for a Veteran named **Pops** (PTSD, Schizophrenia, Auditory Hallucinations). His caregiver **Raymo** runs the system. **Jessica** — the AI personality you power — calls Pops daily via a Gemini-backed conversation pipeline, extracts health data from natural speech, and routes it to Raymo's admin dashboard.
+The **Brain Guardian OS** is a unified AI caregiving platform. Its earlier working name, **br(AI)n App**, came from the Google AI Studio prototype/build flow and may still appear in legacy folders, comments, or imported docs. Treat **Brain Guardian OS** as the current product name and **br(AI)n App** as legacy/prototype provenance only.
 
-This project uses the **Replit-managed Gemini integration** (`@workspace/integrations-gemini-ai`) — no API key is required in code; it is injected by the platform.
+**Jessica** is the AI companion who calls the **patient** daily via a Gemini-backed conversation pipeline, extracts health data from natural speech, and routes it to the **admin/caregiver** dashboard.
+
+Roles: **admin** (caregiver who operates the system), **patient** (care recipient). Do not hardcode personal names in new code, schema, or prompts.
+
+> **Runtime AI note:** Brain Guardian OS currently uses the Replit-managed Gemini integration (`@workspace/integrations-gemini-ai`) in app code, so no Gemini API key should be hardcoded. This is separate from `GEMINI.md`, which is the Gemini CLI / Gemini Code Assist harness file for coding-agent context.
 
 ---
 
@@ -70,7 +76,7 @@ The Gemini route handles both in one step — a separate `POST /health-assessmen
 
 - **Tone profile**: If `isZombiePhase` (Haldol cycle days 1–5), tone = "soft, brief, low-pressure." Normal days = "warm, engaged, conversational."
 - **Health questions**: Up to 12 active questions selected by `getActiveQuestionsForCycleDay()`, embedded with their `qid` and `category`.
-- **Invisible tag protocol**: Jessica is instructed to emit structured XML tags in responses that are parsed server-side and never shown to Pops:
+- **Invisible tag protocol**: Jessica is instructed to emit structured XML tags in responses that are parsed server-side and never shown to the patient:
 
 ```xml
 <health_data>{"category":"mood","questionId":4,"parsedValue":"yes","parsedIntensity":"mild","rawResponse":"I'm doing okay I guess"}</health_data>
@@ -157,7 +163,7 @@ POST /gemini/conversations/:id/end  →  set ended_at, compute summary, set flag
 |---|---|
 | `app_state` | Single-row live state (quarter, zombie mode, motivation, active message) |
 | `schedule_tasks` | Daily tasks by quarter (Q1–Q4) with optional voice scripts |
-| `symptom_logs` | Raymo-logged PTSD triggers, hallucination intensity, behavior notes |
+| `symptom_logs` | Caregiver-logged PTSD triggers, hallucination intensity, behavior notes |
 | `voice_scripts` | Jessica's phone scripts by `task_key`, with tone and patch history |
 | `haldol_cycle` | Last injection date — cycle day computed on read |
 | `conversations` | Gemini chat threads (one per Jessica call) |
@@ -173,7 +179,7 @@ POST /gemini/conversations/:id/end  →  set ended_at, compute summary, set flag
 | `grocery_carts` | Weekly grocery carts with budget and approval status |
 | `cart_meals` | Join table: cart ↔ meals |
 | `cart_items` | Aggregated ingredient list for a cart |
-| `meal_cravings` | Pops' food cravings captured by Jessica during calls |
+| `meal_cravings` | Patient food cravings captured by Jessica during calls |
 
 ---
 
@@ -247,4 +253,4 @@ The `ai` client is pre-configured with Replit-managed credentials — no `GEMINI
 | Q3 | 18:00–22:00 | Evening wind-down |
 | Q4 | 22:00–06:00 | Night/sleep |
 
-`computedQuarter` = always wall-clock based. `currentQuarter` = override if set by Raymo, else computed. Zombie Mode (days 1–5 Haldol) reduces task load and shifts Jessica's tone.
+`computedQuarter` = always wall-clock based. `currentQuarter` = override if set by the admin, else computed. Zombie Mode (days 1–5 Haldol) reduces task load and shifts Jessica's tone.

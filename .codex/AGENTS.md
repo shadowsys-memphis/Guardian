@@ -1,8 +1,14 @@
-# br(AI)n App — OpenAI Codex Agent Context
+# Brain Guardian OS — OpenAI Codex Agent Context
+
+> **Cross-agent ground rules** — multi-tenancy, system boundaries, and git discipline live in [`AGENTS.md`](../AGENTS.md) at the repo root. Read that first. This file is the deep Codex/monorepo technical reference only.
 
 ## What This Project Is
 
-A **pnpm monorepo** — the br(AI)n caregiver AI system for a Veteran (Pops) with PTSD/Schizophrenia, operated by his caregiver Raymo. Jessica is the AI companion (Gemini-backed) who calls Pops daily and pipes health data back to Raymo's dashboard.
+A **pnpm monorepo** — the **Brain Guardian OS**, a multi-tenant AI caregiving platform. Its earlier working name, **br(AI)n App**, came from the Google AI Studio prototype/build flow and may still appear in legacy folders or comments. Treat **Brain Guardian OS** as the current product name.
+
+**Jessica** is the AI companion (Gemini-backed) who calls the **patient** daily and pipes health data back to the **admin/caregiver** dashboard.
+
+Roles: **admin** (caregiver), **patient** (care recipient). Do not hardcode personal names in new code or schema.
 
 ---
 
@@ -220,8 +226,8 @@ meal_cravings       — meal_name, source (jessica|ray), status (pending|added|d
 
 | Path | Component | Purpose |
 |---|---|---|
-| `/pops` | `PopsView` | Pops' zero-touch passive display — auto-refresh 30s |
-| `/admin` | `AdminView` | Raymo's dashboard (7 tabs) |
+| `/pops` | `PopsView` | Patient zero-touch passive display — auto-refresh 30s |
+| `/admin` | `AdminView` | Admin/caregiver dashboard (7 tabs) |
 | `/admin/report` | `DoctorReport` | Weekly/monthly health report for doctor |
 | `/jessica` | `JessicaPhone` | Active Jessica call interface — `pages/jessica-phone.tsx` |
 | `/scripts` | `JessicaView` | Terminal-style script manifest view — `pages/jessica-view.tsx` |
