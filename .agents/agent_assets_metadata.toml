@@ -18,3 +18,9 @@ id = "MJ3NL0AIF8p4jAp8l-qZq"
 uri = "file://HANDOFF.md"
 type = "text"
 title = "br(AI)n Task Handoff Package"
+
+[[outputs]]
+id = "nrcvH6UDVuXwRYSypZuvd"
+uri = "file://brain-handoff-fable.zip"
+type = "unspecified"
+title = "br(AI)n — Fable Handoff Package"
