@@ -1,16 +1,20 @@
 # Shopper Engine Upgrades + Inventory Baseline + Phone Intake
 
+**Status:** Implementation pending Sheets audit. See `tasks/shopper-sheets-audit.md` before implementing any inventory baseline or Drive export. Budget rules (caps, per-item limits) come from tenant profile data — never hardcoded.
+
 ## What & Why
-Extends the existing Shopper tab with the full caregiver-os Shopper Engine spec: explicit budget rules UI (Pepsi Factor, snack/beverage caps), AI meal remix, Google Drive export of meal plans, a structured inventory baseline system (weekly/monthly/quarterly/yearly replenishment cycles), and a Gemini-vision phone intake protocol so Raymo can text a photo of the fridge or a receipt and the AI updates the cart automatically.
+Extends the existing Shopper tab into the full caregiver logistics engine: explicit budget rules UI, AI meal remix, a structured inventory baseline system (weekly/monthly/quarterly/yearly replenishment cycles), and a Gemini-vision phone intake protocol so the caregiver can photograph a fridge or receipt and the AI updates the cart automatically.
+
+Shopper is a primary caregiver tool. The caregiver should be able to check cart status, review critical household needs, and approve or adjust from their iPhone without sitting at a desk.
 
 ## Done looks like
-- The **Shopper tab** in Admin view shows a "Budget Rules" info panel at the top: $200/week cap, Pepsi Factor (exactly 4x 2L bottles/week — highlighted as critical), $25/week snack limit, $20/week beverage limit.
-- Below the meal plan text area there is an **AI Meal Remix** input field. Raymo types a modification (e.g. "Low-sodium chicken instead of steak this week") and hits "Remix". The app POSTs to `/api/meals/remix` and displays the updated plan.
-- An **"Export Meal Plan to Drive"** button sends the current plan to Google Drive via `/api/drive/export`.
+- The **Shopper tab** in Admin view shows a "Budget Rules" info panel at the top: weekly budget cap, snack/beverage sub-limits, and any critical recurring items — all pulled from tenant config, not hardcoded.
+- Below the meal plan text area there is an **AI Meal Remix** input field. The caregiver types a modification (e.g. "Low-sodium option this week") and hits "Remix". The app POSTs to `/api/meals/remix` and displays the updated plan.
+- An **"Export Meal Plan"** button sends the current plan to Google Drive via `/api/drive/export` (requires Sheets audit first — see `tasks/shopper-sheets-audit.md`).
 - A new **"Inventory"** tab (or panel) within Admin view shows items grouped by replenishment cycle (Weekly / Monthly / Quarterly / Yearly), each with `item_name`, `category`, `last_restocked_date`, and `estimated_run_out_date`.
-- Raymo can mark items as restocked (updates `last_restocked_date`) and the system auto-computes `estimated_run_out_date` based on cycle length.
-- A **"Phone Intake"** panel (in the Inventory or Shopper section) lets Raymo upload a photo (receipt or fridge/pantry shot). The image is sent to `/api/intake/image` where Gemini Vision analyzes it, extracts detected items with quantities and prices, and returns a structured JSON payload displayed as an editable list. Raymo can approve detected items to add them to the cart or update the budget baseline.
-- A **voice dictation** input field lets Raymo type a natural-language note (e.g. "Jessica, we need taco seasoning and paper towels"). The app sends it to the existing `/api/assistant` endpoint and the response contains an ADD_INVENTORY_ITEM action that updates the list.
+- Caregiver can mark items as restocked (updates `last_restocked_date`) and the system auto-computes `estimated_run_out_date` based on cycle length.
+- A **"Phone Intake"** panel lets the caregiver upload a photo (receipt or fridge/pantry shot). The image is sent to `/api/intake/image` where Gemini Vision extracts detected items with quantities and prices, returning a structured editable list. Caregiver approves detected items to add to the cart or update the budget baseline.
+- A **voice/text dictation** input field lets the caregiver log a natural-language note (e.g. "Need taco seasoning and paper towels"). Routes through the assistant endpoint and produces an ADD_INVENTORY_ITEM action.
 - All inventory items persist in a new `inventory_items` Drizzle table.
 
 ## Out of scope
@@ -36,7 +40,6 @@ Extends the existing Shopper tab with the full caregiver-os Shopper Engine spec:
 - `artifacts/api-server/src/routes/shopper.ts`
 - `artifacts/api-server/src/routes/gemini.ts`
 - `artifacts/api-server/src/routes/index.ts`
-- `/tmp/caregiver-os/src/App.tsx:76-505`
-- `/tmp/caregiver-os/INVENTORY_BASELINE.md`
-- `/tmp/caregiver-os/PHONE_INTAKE_PROTOCOL.md`
-- `/tmp/caregiver-os/server.ts`
+- `docs/core-guardian/INVENTORY_BASELINE.md`
+- `docs/core-guardian/PHONE_INTAKE_PROTOCOL.md`
+- `docs/core-guardian/shopper-positioning.md`
