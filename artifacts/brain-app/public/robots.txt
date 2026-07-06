@@ -1,25 +1,56 @@
+# Brain Guardian — crawler policy
+#
+# /guardian is the public acquisition landing page — allow all crawlers to index it.
+# Everything else is a private care workspace and must not be indexed or crawled.
+
 User-agent: *
+Allow: /guardian$
+Allow: /guardian/
+Disallow: /guardian/success
 Disallow: /
 
+# Block AI training crawlers from the private workspace,
+# but allow them to index the public acquisition page.
 User-agent: GPTBot
+Allow: /guardian$
+Allow: /guardian/
+Disallow: /guardian/success
 Disallow: /
 
 User-agent: ChatGPT-User
+Allow: /guardian$
+Allow: /guardian/
+Disallow: /guardian/success
 Disallow: /
 
 User-agent: Google-Extended
+Allow: /guardian$
+Allow: /guardian/
+Disallow: /guardian/success
 Disallow: /
 
 User-agent: anthropic-ai
+Allow: /guardian$
+Allow: /guardian/
+Disallow: /guardian/success
 Disallow: /
 
 User-agent: ClaudeBot
+Allow: /guardian$
+Allow: /guardian/
+Disallow: /guardian/success
 Disallow: /
 
 User-agent: PerplexityBot
+Allow: /guardian$
+Allow: /guardian/
+Disallow: /guardian/success
 Disallow: /
 
 User-agent: cohere-ai
+Allow: /guardian$
+Allow: /guardian/
+Disallow: /guardian/success
 Disallow: /
 
 User-agent: Bytespider
@@ -27,3 +58,5 @@ Disallow: /
 
 User-agent: CCBot
 Disallow: /
+
+Sitemap: https://guardian-os-LedgerGhost90.replit.app/sitemap.xml

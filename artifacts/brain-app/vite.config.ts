@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import fs from "fs";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const rawPort = process.env.PORT;
@@ -59,12 +60,40 @@ if (parsedSiteUrl.protocol !== "https:" && parsedSiteUrl.protocol !== "http:") {
 // %VITE_PUBLIC_SITE_URL%/opengraph.jpg never produces double-slash or path-relative URLs.
 process.env.VITE_PUBLIC_SITE_URL = parsedSiteUrl.origin;
 
+// Plugin: serve route-specific HTML files in dev mode for public acquisition routes.
+// In production the build.rollupOptions.input entries handle this via separate HTML outputs.
+function publicRouteHtmlPlugin() {
+  const root = path.resolve(import.meta.dirname);
+  const routes: Record<string, string> = {
+    "/guardian": path.join(root, "guardian.html"),
+    "/guardian/success": path.join(root, "guardian-success.html"),
+  };
+  return {
+    name: "public-route-html",
+    configureServer(server: import("vite").ViteDevServer) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url?.split("?")[0] ?? "";
+        const htmlFile = routes[url] ?? routes[url.replace(/\/$/, "")];
+        if (htmlFile && fs.existsSync(htmlFile)) {
+          server.transformIndexHtml(url, fs.readFileSync(htmlFile, "utf-8")).then((html) => {
+            res.setHeader("Content-Type", "text/html");
+            res.end(html);
+          }).catch(next);
+          return;
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: basePath,
   plugins: [
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
+    publicRouteHtmlPlugin(),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
@@ -90,6 +119,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(import.meta.dirname, "index.html"),
+        guardian: path.resolve(import.meta.dirname, "guardian.html"),
+        "guardian-success": path.resolve(import.meta.dirname, "guardian-success.html"),
+      },
+    },
   },
   server: {
     port,
