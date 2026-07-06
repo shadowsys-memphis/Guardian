@@ -5,7 +5,7 @@ import { useGetActiveScripts } from "@workspace/api-client-react";
 
 export function JessicaView() {
   const [time, setTime] = useState(new Date());
-  const { data: scripts, isLoading } = useGetActiveScripts({ query: { refetchInterval: 10000 } });
+  const { data: scripts, isLoading } = useGetActiveScripts({ query: { refetchInterval: 10000 } as any });
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);

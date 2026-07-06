@@ -126,7 +126,7 @@ router.post("/billing/webhook", async (req: Request, res: Response) => {
 
       if (sub) {
         try {
-          const subscription = await stripe.subscriptions.retrieve(sub);
+          const subscription = (await stripe.subscriptions.retrieve(sub)) as any;
           if (subscription.trial_end) {
             trialEnd = new Date(subscription.trial_end * 1000);
             status = "trialing";
@@ -158,14 +158,14 @@ router.post("/billing/webhook", async (req: Request, res: Response) => {
         [session.customer, sub, status, trialEnd, periodEnd, tokenHash, rawToken, tenantId]
       );
     } else if (event.type === "customer.subscription.deleted") {
-      const subscription = event.data.object as import("stripe").Stripe.Subscription;
+      const subscription = event.data.object as any;
       await pool.query(
         `UPDATE tenants SET status = 'cancelled', updated_at = NOW()
          WHERE stripe_subscription_id = $1`,
         [subscription.id]
       );
     } else if (event.type === "invoice.payment_failed") {
-      const invoice = event.data.object as import("stripe").Stripe.Invoice;
+      const invoice = event.data.object as any;
       if (invoice.subscription) {
         await pool.query(
           `UPDATE tenants SET status = 'past_due', updated_at = NOW()
@@ -174,7 +174,7 @@ router.post("/billing/webhook", async (req: Request, res: Response) => {
         );
       }
     } else if (event.type === "customer.subscription.updated") {
-      const subscription = event.data.object as import("stripe").Stripe.Subscription;
+      const subscription = event.data.object as any;
       let status = "active";
       if (subscription.status === "trialing") status = "trialing";
       else if (subscription.status === "past_due") status = "past_due";

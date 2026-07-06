@@ -56,10 +56,18 @@ router.get("/haldol", async (req, res) => {
 router.put("/haldol", async (req, res) => {
   try {
     const body = UpdateHaldolCycleBody.parse(req.body);
+    const updateValues: { notes?: string; lastInjectionDate?: string } = {
+      notes: body.notes ?? undefined,
+    };
+    if (body.lastInjectionDate) {
+      updateValues.lastInjectionDate = body.lastInjectionDate instanceof Date 
+        ? body.lastInjectionDate.toISOString().split("T")[0] 
+        : String(body.lastInjectionDate);
+    }
     const cycle = await ensureCycle();
     const [updated] = await db
       .update(haldolCycleTable)
-      .set(body)
+      .set(updateValues)
       .where(eq(haldolCycleTable.id, cycle.id))
       .returning();
     res.json(serializeCycle(updated));
