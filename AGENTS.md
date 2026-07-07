@@ -58,6 +58,18 @@ Edits to this repo do not touch OpenClaw, ClawX, or LM Studio unless explicitly 
 
 ---
 
+## Model routing / cost discipline
+
+Applies to every agent in the Hermes/OpenClaw/Gemini/Codex/Claude world. Full workflow: [`.claude/skills/spec-first-routing/SKILL.md`](.claude/skills/spec-first-routing/SKILL.md).
+
+- **Separate command from labor.** A strong/frontier model (Claude, Fable, GPT-5.5-class) plans, writes the spec, and reviews the diff. A cheaper model (Codex, Gemini CLI, Haiku-class) writes the bulk code and applies fixes.
+- **The spec is the handoff contract.** Never send a builder model into this repo without a locked, written spec (files touched, exact signatures/routes, edge cases, acceptance criteria). The spec is what stops every model from rediscovering the whole architecture on every task.
+- **Never let the cheap model make architecture decisions.** If a builder hits an ambiguity the spec doesn't cover, it stops and escalates back to the architect — it does not guess.
+- **Never merge without a strong-model review of the diff.** The reviewer checks the diff against the spec *and* against this file's non-negotiable rules (tenant scoping, CORS, zod/v4, generated files, etc.) before anything ships.
+- **Route by task, not by habit.** Trivial one-line fixes, auth/tenant-scoping/billing code, and genuinely ambiguous/exploratory work stay with the strong model — writing a spec for those costs more than it saves.
+
+---
+
 ## Branch discipline
 
 - `master` — stable, always deployable
