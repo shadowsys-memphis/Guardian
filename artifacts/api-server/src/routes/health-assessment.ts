@@ -147,7 +147,10 @@ router.put("/health-assessment/questions/:id", async (req, res) => {
       active: z.boolean().optional(),
     }).parse(req.body);
     const [updated] = await db.update(healthQuestionsTable).set(body).where(eq(healthQuestionsTable.id, id)).returning();
-    if (!updated) return res.status(404).json({ error: "Not found" });
+    if (!updated) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "Failed to update question");
@@ -209,7 +212,10 @@ router.put("/health-assessment/sessions/:id/end", async (req, res) => {
       .set({ endedAt: new Date(), summary, flagged })
       .where(eq(callSessionsTable.id, id))
       .returning();
-    if (!updated) return res.status(404).json({ error: "Not found" });
+    if (!updated) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "Failed to end session");
@@ -233,7 +239,8 @@ router.get("/health-assessment/summary/today", async (req, res) => {
     const today = new Date().toISOString().split("T")[0];
     const sessions = await db.select().from(callSessionsTable).where(eq(callSessionsTable.sessionDate, today)).orderBy(desc(callSessionsTable.startedAt));
     if (sessions.length === 0) {
-      return res.json({ sessionId: null, sessionDate: today, cycleDay: null, dataPoints: [], categoryStatus: {}, flagged: false, totalDataPoints: 0 });
+      res.json({ sessionId: null, sessionDate: today, cycleDay: null, dataPoints: [], categoryStatus: {}, flagged: false, totalDataPoints: 0 });
+      return;
     }
     const session = sessions[0];
     const dataPoints = await db.select().from(healthDataPointsTable).where(eq(healthDataPointsTable.sessionId, session.id)).orderBy(asc(healthDataPointsTable.createdAt));
@@ -305,7 +312,10 @@ router.get("/health-assessment/trends", async (req, res) => {
     const cutoff = thirtyDaysAgo.toISOString().split("T")[0];
     const sessions = await db.select().from(callSessionsTable).where(gte(callSessionsTable.sessionDate, cutoff));
     const sessionIds = sessions.map((s) => s.id);
-    if (sessionIds.length === 0) return res.json([]);
+    if (sessionIds.length === 0) {
+      res.json([]);
+      return;
+    }
     const allPoints = await db.select().from(healthDataPointsTable).where(
       inArray(healthDataPointsTable.sessionId, sessionIds)
     );
@@ -632,7 +642,8 @@ router.put("/ai-model", async (req, res) => {
   try {
     const { activeModel } = z.object({ activeModel: z.string() }).parse(req.body);
     if (!AI_MODELS.find((m) => m.id === activeModel)) {
-      return res.status(400).json({ error: `Invalid model. Valid options: ${AI_MODELS.map((m) => m.id).join(", ")}` });
+      res.status(400).json({ error: `Invalid model. Valid options: ${AI_MODELS.map((m) => m.id).join(", ")}` });
+      return;
     }
     const existing = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "active_ai_model"));
     if (existing.length > 0) {

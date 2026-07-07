@@ -1598,6 +1598,10 @@ components:
           type: string
           format: date
           description: "Date of the last Haldol injection"
+        doseMg:
+          type: integer
+          nullable: true
+          description: "Injection dose in milligrams (null until confirmed)"
         cycleDay:
           type: integer
           description: "Current day within the 14-day cycle (1-14)"
@@ -1622,6 +1626,10 @@ components:
         lastInjectionDate:
           type: string
           format: date
+        doseMg:
+          type: integer
+          nullable: true
+          description: "Injection dose in milligrams"
         notes:
           type: string
 

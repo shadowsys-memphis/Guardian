@@ -95,7 +95,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "rotation" | "inventory" | "calendar-sync";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -123,7 +123,6 @@ export function AdminView() {
           <NavButton active={activeTab === "scripts"} onClick={() => setActiveTab("scripts")} icon={<Mic size={18} />} label="Voice Scripts" />
           <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
           <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
-          <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
           <NavButton active={activeTab === "inventory"} onClick={() => setActiveTab("inventory")} icon={<Package size={18} />} label="Inventory" />
           <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
           <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
@@ -145,7 +144,6 @@ export function AdminView() {
           {activeTab === "scripts" && <ScriptsTab />}
           {activeTab === "haldol" && <HaldolTab />}
           {activeTab === "health" && <HealthIntelligenceTab />}
-          {activeTab === "shopper" && <ShopperTab />}
           {activeTab === "inventory" && <InventoryTab />}
           {activeTab === "rotation" && <RotationTab />}
           {activeTab === "calendar-sync" && <CalendarSyncTab />}

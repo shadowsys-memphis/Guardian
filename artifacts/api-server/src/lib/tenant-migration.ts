@@ -115,6 +115,9 @@ export async function runTenantMigration(): Promise<void> {
     await pool.query(`CREATE INDEX IF NOT EXISTS care_events_session_idx ON care_events (session_id) WHERE session_id IS NOT NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS care_events_event_type_idx ON care_events (event_type)`);
 
+    // ── haldol_cycle — add dose_mg column ───────────────────────────────────
+    await pool.query(`ALTER TABLE haldol_cycle ADD COLUMN IF NOT EXISTS dose_mg INTEGER`);
+
     logger.info("Tenant migration complete");
   } catch (err) {
     logger.error({ err }, "Tenant migration failed");

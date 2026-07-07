@@ -71,7 +71,10 @@ router.put("/scripts/:id", async (req, res) => {
       .set({ ...body, lastPatched: new Date() })
       .where(eq(voiceScriptsTable.id, id))
       .returning();
-    if (!updated) return res.status(404).json({ error: "Script not found" });
+    if (!updated) {
+      res.status(404).json({ error: "Script not found" });
+      return;
+    }
     res.json(serializeScript(updated));
   } catch (err) {
     req.log.error({ err }, "Failed to update script");

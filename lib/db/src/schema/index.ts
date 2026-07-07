@@ -53,6 +53,7 @@ export const voiceScriptsTable = pgTable("voice_scripts", {
 export const haldolCycleTable = pgTable("haldol_cycle", {
   id: serial("id").primaryKey(),
   lastInjectionDate: date("last_injection_date").notNull(),
+  doseMg: integer("dose_mg"),
   notes: text("notes"),
 });
 

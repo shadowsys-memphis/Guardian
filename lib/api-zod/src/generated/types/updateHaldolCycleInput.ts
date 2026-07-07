@@ -8,5 +8,7 @@
 
 export interface UpdateHaldolCycleInput {
   lastInjectionDate?: Date;
+  /** Injection dose in milligrams */
+  doseMg?: number | null;
   notes?: string;
 }
