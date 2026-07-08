@@ -18,11 +18,12 @@
 - No public organic-search keyword strategy identified in the source.
 
 ## Notes
-- Current source is a Vite React SPA. Non-JavaScript bots and social preview bots only see `artifacts/brain-app/index.html`.
+- Current source is a Vite React SPA. Non-JavaScript bots and social preview bots only see the static HTML files emitted at build time.
 - `artifacts/brain-app/src/App.tsx` exposes two public, pre-unlock routes: `/guardian` and `/guardian/success`.
-- The current crawl strategy is privacy-first for the shared shell: `index.html` emits `noindex, nofollow, noarchive`, and `artifacts/brain-app/public/robots.txt` disallows all crawlers.
-- Public acquisition routes currently inherit that same privacy-first shell, creating a crawlability mismatch for Brain Guardian if organic discovery is intended.
-- Root-URL and acquisition-route share-preview tags currently come from the single shared HTML shell, not from route-specific SSR or prerendered HTML.
+- `/guardian` now has a dedicated static HTML shell (`artifacts/brain-app/guardian.html`) plus a production rewrite from `/guardian` to `/guardian.html`.
+- The root app shell remains privacy-first: `artifacts/brain-app/index.html` emits `noindex, nofollow, noarchive` for the private workspace.
+- The public crawl policy now allows `/guardian`, but `artifacts/brain-app/public/robots.txt` still blocks the shared static assets the page relies on (`/assets/**`, `/opengraph.jpg`, `/favicon.svg`) unless explicitly allowed.
+- `/guardian` now has route-specific title, description, canonical, Open Graph, and JSON-LD tags, but its body content is still client-rendered and absent from the static HTML response.
 - The prior `%VITE_PUBLIC_SITE_URL%` placeholder-share issue is fixed in source via `artifacts/brain-app/vite.config.ts` validation.
 
 ## Dismissed categories
