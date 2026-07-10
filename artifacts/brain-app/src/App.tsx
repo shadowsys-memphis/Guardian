@@ -7,14 +7,14 @@ import { PopsView } from "@/pages/pops-view";
 import { AdminView } from "@/pages/admin-view";
 import { JessicaView } from "@/pages/jessica-view";
 import { JessicaPhone } from "@/pages/jessica-phone";
-import { SmartHomePanel } from "@/pages/smart-home";
+import { ShopperView } from "@/pages/shopper-view";
 import { DoctorReport } from "@/pages/doctor-report";
 import { GuardianPage } from "@/pages/guardian";
 import { GuardianSuccessPage } from "@/pages/guardian-success";
 import { MySubscriptionPage } from "@/pages/my-subscription";
 import { VaultGate } from "@/pages/vault-gate";
 import { VaultProvider, useVault } from "@/lib/vault-context";
-import { Home, Phone, Mic, ShieldAlert, CreditCard } from "lucide-react";
+import { Home, Phone, ShoppingCart, ShieldAlert, CreditCard } from "lucide-react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,7 +28,7 @@ const queryClient = new QueryClient({
 const NAV_ITEMS = [
   { path: "/pops", label: "Home", icon: <Home size={20} /> },
   { path: "/jessica", label: "Jessica", icon: <Phone size={20} /> },
-  { path: "/smarthome", label: "Devices", icon: <Mic size={20} /> },
+  { path: "/shopper", label: "Shopper", icon: <ShoppingCart size={20} /> },
   { path: "/admin", label: "Admin", icon: <ShieldAlert size={20} /> },
   { path: "/my-subscription", label: "Plan", icon: <CreditCard size={20} /> },
 ];
@@ -72,7 +72,7 @@ function PrivateWorkspace() {
         </Route>
         <Route path="/pops" component={PopsView} />
         <Route path="/jessica" component={JessicaPhone} />
-        <Route path="/smarthome" component={SmartHomePanel} />
+        <Route path="/shopper" component={ShopperView} />
         <Route path="/admin" component={AdminView} />
         <Route path="/admin/report" component={DoctorReport} />
         <Route path="/scripts" component={JessicaView} />

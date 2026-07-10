@@ -1522,7 +1522,7 @@ function HaldolTab() {
   );
 }
 
-function ShopperTab() {
+export function ShopperTab() {
   const { toast } = useToast();
   const [sheetId, setSheetId] = useState("");
   const [showAddMeal, setShowAddMeal] = useState(false);
