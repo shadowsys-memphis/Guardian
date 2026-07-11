@@ -37,3 +37,15 @@ STRIPE_CUSTOMER_PORTAL_RETURN_URL = "https://guardian-os-LedgerGhost90.replit.ap
 
 [userenv.development]
 VITE_PUBLIC_SITE_URL = "https://guardian-os-LedgerGhost90.replit.app"
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 80
+
+[[ports]]
+localPort = 23920
+externalPort = 3000
