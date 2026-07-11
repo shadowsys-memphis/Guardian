@@ -88,6 +88,7 @@ import {
 } from "@workspace/api-client-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScheduleTabDnD } from "@/components/schedule-dnd";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1039,13 +1040,15 @@ function ScheduleTab() {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
+    const quarter = formData.get("quarter") as "Q1" | "Q2" | "Q3" | "Q4";
+    const autoOrder = (schedule ?? []).filter((t) => t.quarter === quarter).length;
     const data = {
-      quarter: formData.get("quarter") as "Q1" | "Q2" | "Q3" | "Q4",
+      quarter,
       timeLabel: formData.get("timeLabel") as string,
       title: formData.get("title") as string,
       description: formData.get("description") as string,
       voiceScript: formData.get("voiceScript") as string,
-      order: parseInt(formData.get("order") as string, 10),
+      order: editingTask ? editingTask.order : autoOrder,
     };
 
     if (editingTask) {
@@ -1079,74 +1082,15 @@ function ScheduleTab() {
         </Button>
       </header>
 
-      <div className="space-y-8">
-        {quarters.map((q) => {
-          const qTasks = schedule?.filter((t) => t.quarter === q).sort((a, b) => a.order - b.order) ?? [];
-          return (
-            <Card key={q}>
-              <CardHeader className="bg-secondary/50 py-3">
-                <CardTitle className="text-xl font-display tracking-widest">{quarterLabels[q]}</CardTitle>
-              </CardHeader>
-              <div className="p-0">
-                {qTasks.length === 0 ? (
-                  <p className="p-6 text-muted-foreground italic">No tasks in this quarter.</p>
-                ) : (
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-muted-foreground uppercase bg-card border-b border-border">
-                      <tr>
-                        <th className="px-6 py-3">Status</th>
-                        <th className="px-6 py-3">Time</th>
-                        <th className="px-6 py-3">Title</th>
-                        <th className="px-6 py-3">Order</th>
-                        <th className="px-6 py-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {qTasks.map((task) => (
-                        <tr key={task.id} className="border-b border-border/50 hover:bg-secondary/20">
-                          <td className="px-6 py-4">
-                            {task.isCompleted ? (
-                              <Badge variant="success">Done</Badge>
-                            ) : (
-                              <Badge variant="outline">Pending</Badge>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 font-bold">{task.timeLabel}</td>
-                          <td className="px-6 py-4 font-display text-lg tracking-wider">{task.title}</td>
-                          <td className="px-6 py-4">{task.order}</td>
-                          <td className="px-6 py-4 text-right flex justify-end gap-2">
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              className="h-8 w-8 text-primary/60 hover:text-primary hover:bg-primary/10 border-primary/20"
-                              title="Push to Calendar (30-min alert)"
-                              disabled={calSyncingId === task.id}
-                              onClick={() => handlePushTaskToCalendar(task)}
-                            >
-                              {calSyncingId === task.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
-                            </Button>
-                            {!task.isCompleted && (
-                              <Button size="icon" variant="outline" className="h-8 w-8 text-success hover:bg-success/20 hover:text-success border-success/30" onClick={() => completeTask.mutate({ id: task.id })}>
-                                <Check className="h-4 w-4" />
-                              </Button>
-                            )}
-                            <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => { setEditingTask(task); setIsModalOpen(true); }}>
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => { if (confirm("Delete task?")) deleteTask.mutate({ id: task.id }); }}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+      <ScheduleTabDnD
+        schedule={schedule}
+        updateTask={(vars) => updateTask.mutate(vars)}
+        completeTask={(vars) => completeTask.mutate(vars)}
+        deleteTask={(vars) => deleteTask.mutate(vars)}
+        onEdit={(task) => { setEditingTask(task); setIsModalOpen(true); }}
+        onCalendar={handlePushTaskToCalendar}
+        calSyncingId={calSyncingId}
+      />
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingTask ? "Edit Task" : "New Task"}>
         <form onSubmit={handleSave} className="space-y-4">
@@ -1176,10 +1120,6 @@ function ScheduleTab() {
           <div className="space-y-2">
             <label className="text-sm font-bold uppercase text-muted-foreground">Jessica's Voice Prompt (Optional)</label>
             <Input name="voiceScript" defaultValue={editingTask?.voiceScript} placeholder="What the AI should say..." />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-bold uppercase text-muted-foreground">Sort Order</label>
-            <Input name="order" type="number" defaultValue={editingTask?.order ?? 0} required />
           </div>
           <div className="pt-4 flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
