@@ -1,0 +1,47 @@
+[
+  {
+    "id": "BR-001",
+    "title": "Fix buttonVariants missing export from button.tsx",
+    "acceptanceCriteria": [
+      "button.tsx exports a `buttonVariants` cva helper alongside the Button component",
+      "`pnpm run typecheck` reports zero errors in alert-dialog.tsx, calendar.tsx, and pagination.tsx",
+      "No existing Button usage is broken"
+    ],
+    "passes": false
+  },
+  {
+    "id": "BR-002",
+    "title": "Delete conflicting public/guardian.html static file",
+    "acceptanceCriteria": [
+      "`artifacts/brain-app/public/guardian.html` is deleted",
+      "The MPA entry at `artifacts/brain-app/guardian.html` still exists and is unchanged",
+      "`pnpm --filter @workspace/brain-app run build` completes without error",
+      "The `/guardian` route still serves the correct MPA entry in production"
+    ],
+    "passes": false
+  },
+  {
+    "id": "BR-003",
+    "title": "Add /guardian/success production rewrite to artifact.toml",
+    "acceptanceCriteria": [
+      "`artifacts/brain-app/.replit-artifact/artifact.toml` has an explicit rewrite for `/guardian/success` → `/guardian-success.html`",
+      "`artifacts/brain-app/.replit-artifact/artifact.toml` has an explicit rewrite for `/guardian/success/` → `/guardian-success.html`",
+      "The catch-all `/* → /index.html` rewrite comes after both guardian rewrites",
+      "`artifacts/brain-app/guardian-success.html` exists as an MPA entry (create if missing)",
+      "A production HTTP fetch of `/guardian/success` returns the guardian-success-specific `<title>` and meta tags, not the generic SPA shell"
+    ],
+    "passes": false
+  },
+  {
+    "id": "BR-004",
+    "title": "Add uncomplete schedule task endpoint",
+    "acceptanceCriteria": [
+      "A new endpoint exists (e.g. `DELETE /api/schedule/:id/complete`) that sets `is_completed = false` and `completed_at = null`",
+      "The endpoint is documented in `lib/api-spec/openapi.yaml` with operationId `uncompleteScheduleTask`",
+      "Codegen runs clean: `pnpm --filter @workspace/api-spec run codegen` produces a `useUncompleteScheduleTask` hook",
+      "The Done badge in `schedule-dnd.tsx` toggles back to Pending when clicked, calling the new hook",
+      "`pnpm run typecheck` passes with zero new errors"
+    ],
+    "passes": false
+  }
+]

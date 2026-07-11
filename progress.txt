@@ -1,0 +1,22 @@
+# br(AI)n — Agent Progress Log
+# Format: DATE | STORY | WHAT WAS LEARNED | WATCH FOR NEXT TIME
+# Append one entry after each prd.json story passes.
+# Keep entries tight — this is a lookup, not a narrative.
+# ─────────────────────────────────────────────────────────────────────────────
+
+2026-07-11 | INIT | Bootstrap entry — Ralph loop wired up. AGENTS.md rewritten from live codebase. prd.json seeded with BR-001 through BR-004 from known debt. | Nothing passes yet.
+
+2026-07-11 | SCHEDULE-DND (pre-BR) | dnd-kit multi-container sortable pattern:
+  - onDragOver handles cross-quarter moves in local state (visual)
+  - onDragEnd handles same-quarter arrayMove + commits all changed tasks to API
+  - useEffect MUST guard on `!activeId` before syncing from remote — otherwise
+    a React Query refetch during drag resets item order mid-gesture
+  - Only mutate tasks whose (quarter, order) pair actually changed — avoids
+    write storms on large schedules
+  - drizzle-kit push stalls on TTY confirmation in Replit containers — use
+    raw SQL via pg Pool (node -e with Pool from @workspace/db) for any
+    non-interactive migration
+  - TouchSensor needs activationConstraint: { delay: 150, tolerance: 5 } or
+    normal scrolling triggers accidental drags on mobile
+  | Watch: DragOverlay needs its own static TaskCard instance (no useSortable)
+    or it inherits transform styles and renders off-screen.
