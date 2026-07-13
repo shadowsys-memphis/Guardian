@@ -27,13 +27,22 @@ interface ParsedAction {
 
 const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const SPEECH_PRESETS = [
-  "How is Pops feeling right now?",
-  "Did he take his medication?",
-  "Any hallucinations today?",
+const SPEECH_PRESETS_RAY = [
+  "Order groceries",
+  "What's in the cart?",
+  "Commit cart",
+  "Cancel cart",
+  "How is Pops doing today?",
   "Schedule update for this afternoon",
-  "Add a reminder to give water",
-  "How's his appetite been?",
+];
+
+const SPEECH_PRESETS_POPS = [
+  "How are you feeling right now?",
+  "Did you take your medication?",
+  "Any rough moments today?",
+  "What sounds good for dinner?",
+  "How's your sleep been?",
+  "Anything bothering you?",
 ];
 
 function parseDeviceCommand(text: string): DeviceCommandResult | null {
@@ -98,6 +107,8 @@ export function JessicaPhone() {
   const [deviceCommandResult, setDeviceCommandResult] = useState<DeviceCommandResult | null>(null);
   const [actionStream, setActionStream] = useState<ParsedAction[]>([]);
   const [healthDataCount, setHealthDataCount] = useState(0);
+  const [awaitingCartApproval, setAwaitingCartApproval] = useState(false);
+  const [mode, setMode] = useState<"ray" | "pops">("ray");
   const [quietWindowMessage, setQuietWindowMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const synth = useRef<SpeechSynthesis | null>(null);
@@ -214,6 +225,7 @@ export function JessicaPhone() {
       setDeviceCommandResult(null);
       setActionStream([]);
       setHealthDataCount(0);
+      setAwaitingCartApproval(false);
     }, 2000);
   };
 
@@ -241,7 +253,7 @@ export function JessicaPhone() {
       const response = await fetch(`${BASE_URL}/api/gemini/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userContent, speak: speakerOn && !isMuted }),
+        body: JSON.stringify({ content: userContent, speak: speakerOn && !isMuted, mode }),
       });
 
       const reader = response.body!.getReader();
@@ -358,6 +370,76 @@ export function JessicaPhone() {
               throw new Error(`SmartHome API ${res.status}: ${body}`);
             }
           }
+        } else if (action.type === "GROCERY_ORDER") {
+          const cartRes = await fetch(`${BASE_URL}/api/shopper/cart`);
+          if (!cartRes.ok) throw new Error("Could not load cart");
+          const cart = await cartRes.json() as any;
+          const meals: any[] = cart.meals ?? [];
+          const items: any[] = cart.items ?? [];
+          const total = (cart.totalEstimatedCostCents ?? 0) / 100;
+          const budget = (cart.budgetCents ?? 15000) / 100;
+          let summary: string;
+          if (meals.length === 0) {
+            summary = "The cart is empty right now — no meals loaded for this week. Tell me which meals you want and I'll add them, or say 'add the standard meals' to load all five.";
+          } else {
+            const mealList = meals.map((m: any) => m.name).join(", ");
+            summary = `Cart's ready — ${meals.length} meal${meals.length !== 1 ? "s" : ""}: ${mealList}. That's ${items.length} item${items.length !== 1 ? "s" : ""}, estimated $${total.toFixed(2)} of a $${budget.toFixed(2)} budget. Say "commit" to lock it in or "cancel" to dismiss.`;
+          }
+          const cartMsg: Message = {
+            id: `cart-summary-${Date.now()}`,
+            role: "assistant",
+            content: summary,
+            createdAt: new Date(),
+          };
+          setMessages((prev) => [...prev, cartMsg]);
+          speak(summary);
+          if (meals.length > 0) setAwaitingCartApproval(true);
+
+        } else if (action.type === "ADD_MEAL_TO_CART") {
+          const mealName = (action.payload as any).mealName as string;
+          const mealsRes = await fetch(`${BASE_URL}/api/shopper/meals`);
+          if (!mealsRes.ok) throw new Error("Could not load meals catalog");
+          const allMeals = await mealsRes.json() as any[];
+          const match = allMeals.find((m: any) =>
+            m.name.toLowerCase().includes(mealName.toLowerCase()) ||
+            mealName.toLowerCase().includes(m.name.toLowerCase())
+          );
+          if (!match) throw new Error(`Meal "${mealName}" not found in catalog`);
+          const addRes = await fetch(`${BASE_URL}/api/shopper/cart/meals`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mealId: match.id }),
+          });
+          if (!addRes.ok) {
+            const body = await addRes.text().catch(() => addRes.statusText);
+            throw new Error(`Could not add ${mealName}: ${body}`);
+          }
+
+        } else if (action.type === "APPROVE_CART") {
+          const approveRes = await fetch(`${BASE_URL}/api/shopper/cart/approve`, { method: "POST" });
+          if (!approveRes.ok) throw new Error("Could not approve cart");
+          setAwaitingCartApproval(false);
+          const confirmMsg: Message = {
+            id: `cart-approved-${Date.now()}`,
+            role: "assistant",
+            content: "Order approved and locked in. Shopping list is set — let Ray know it's ready to execute.",
+            createdAt: new Date(),
+          };
+          setMessages((prev) => [...prev, confirmMsg]);
+          speak("Order approved and locked in.");
+
+        } else if (action.type === "CANCEL_CART") {
+          const cancelRes = await fetch(`${BASE_URL}/api/shopper/cart/dismiss`, { method: "POST" });
+          if (!cancelRes.ok) throw new Error("Could not cancel cart");
+          setAwaitingCartApproval(false);
+          const cancelMsg: Message = {
+            id: `cart-cancelled-${Date.now()}`,
+            role: "assistant",
+            content: "Cart dismissed — nothing was ordered. Let me know when you're ready to try again.",
+            createdAt: new Date(),
+          };
+          setMessages((prev) => [...prev, cancelMsg]);
+          speak("Cart dismissed — nothing was ordered.");
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -376,6 +458,10 @@ export function JessicaPhone() {
     MED_CONFIRMED: "text-success border-success/30",
     MED_REFUSED: "text-destructive border-destructive/30",
     WELLBEING_ALERT: "text-accent border-accent/30",
+    GROCERY_ORDER: "text-warning border-warning/30",
+    ADD_MEAL_TO_CART: "text-warning border-warning/30",
+    APPROVE_CART: "text-success border-success/30",
+    CANCEL_CART: "text-destructive border-destructive/30",
     COMMAND: "text-muted-foreground border-border",
   };
 
@@ -516,6 +602,20 @@ export function JessicaPhone() {
           )}
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center rounded-sm border border-border overflow-hidden">
+            <button
+              onClick={() => setMode("ray")}
+              className={`px-3 py-1.5 font-display text-xs uppercase tracking-widest transition-colors ${mode === "ray" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Ray
+            </button>
+            <button
+              onClick={() => setMode("pops")}
+              className={`px-3 py-1.5 font-display text-xs uppercase tracking-widest transition-colors ${mode === "pops" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Pops
+            </button>
+          </div>
           <button
             onClick={() => setIsMuted(!isMuted)}
             className={`p-2 rounded-sm border transition-colors ${isMuted ? "border-destructive/40 text-destructive" : "border-border text-muted-foreground hover:text-foreground"}`}
@@ -550,6 +650,38 @@ export function JessicaPhone() {
           <button onClick={() => setDeviceCommandResult(null)} className="ml-auto text-muted-foreground hover:text-foreground">
             <Trash2 size={14} />
           </button>
+        </div>
+      )}
+
+      {awaitingCartApproval && (
+        <div className="bg-success/10 border-b border-success/30 px-6 py-3 shrink-0">
+          <p className="text-xs font-display text-success uppercase tracking-widest mb-2">Cart Ready — Awaiting Approval</p>
+          <div className="flex gap-3">
+            <button
+              onClick={async () => {
+                await fetch(`${BASE_URL}/api/shopper/cart/approve`, { method: "POST" });
+                setAwaitingCartApproval(false);
+                const m: Message = { id: `cart-approved-${Date.now()}`, role: "assistant", content: "Order approved and locked in.", createdAt: new Date() };
+                setMessages((prev) => [...prev, m]);
+                speak("Order approved and locked in.");
+              }}
+              className="px-5 py-2 bg-success text-primary-foreground rounded-sm font-display text-sm uppercase tracking-widest hover:bg-success/90 transition-colors"
+            >
+              Commit Order
+            </button>
+            <button
+              onClick={async () => {
+                await fetch(`${BASE_URL}/api/shopper/cart/dismiss`, { method: "POST" });
+                setAwaitingCartApproval(false);
+                const m: Message = { id: `cart-cancelled-${Date.now()}`, role: "assistant", content: "Cart dismissed — nothing was ordered.", createdAt: new Date() };
+                setMessages((prev) => [...prev, m]);
+                speak("Cart dismissed.");
+              }}
+              className="px-5 py-2 border border-border text-muted-foreground rounded-sm font-display text-sm uppercase tracking-widest hover:text-foreground hover:border-foreground/40 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -613,7 +745,7 @@ export function JessicaPhone() {
 
       <div className="bg-card border-t border-border shrink-0">
         <div className="px-6 pt-3 pb-1 flex flex-wrap gap-1.5">
-          {SPEECH_PRESETS.map((preset) => (
+          {(mode === "ray" ? SPEECH_PRESETS_RAY : SPEECH_PRESETS_POPS).map((preset) => (
             <button
               key={preset}
               onClick={() => sendMessage(preset)}

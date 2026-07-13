@@ -1,0 +1,65 @@
+Here’s the full flow so you can see what “starting Jessica” ultimately means.
+
+flowchart TD
+    A["You speak to Jessica"] --> B["Jessica sends request to Guardian server"]
+    B --> C["Meal and pantry engine"]
+    C --> D["Consolidated grocery cart"]
+    D --> E["Walmart+ first"]
+    E --> F{"Items unavailable?"}
+    F -- Yes --> G["DoorDash or Stater Bros."]
+    F -- No --> H["Approval summary"]
+    G --> H
+    H --> I{"Commit or cancel?"}
+    I -- Commit --> J["Order submitted"]
+    I -- Cancel --> K["Nothing purchased"]
+
+What happens in practice
+
+You say:
+
+“Jessica, order groceries for our five dinners.”
+
+Jessica sends that request to the Guardian API server. That server is the brain behind the voice interface—it holds the meal plan, household rules, shopping logic, and approval ledger.
+
+Jessica then responds:
+
+“I found five dinners. I’m building one consolidated Walmart cart and excluding pantry staples.”
+
+The shopper engine:
+
+* Converts every meal into ingredients and quantities.
+* Combines duplicates.
+* Checks your pantry records.
+* Applies household limits and preferred brands.
+* Searches Walmart first.
+* Sends missing or urgent items to DoorDash or Stater Bros.
+* Does not buy anything yet.
+
+Then Jessica says something like:
+
+“Your Walmart order contains 31 items for approximately $127. Two substitutions are proposed. Ground sirloin replaces shaved steak, and frozen green beans replace fresh. Delivery is available between 4 and 6 PM. Say ‘review,’ ‘commit,’ or ‘cancel.’”
+
+You say:
+
+“Commit.”
+
+Only then does the system place the order and write the result to the household ledger.
+
+What must actually be running
+
+There are three separate pieces:
+
+1. Guardian API server
+    The backend brain containing meals, shopping rules, approvals, and household data.
+2. Jessica voice interface
+    Captures your speech, sends it to the server, and reads the response aloud.
+3. Retailer connector
+    Builds or submits the Walmart/DoorDash cart.
+
+The important reality: we know the Guardian server and Jessica concepts exist in your project, but we have not verified that the retailer connector is implemented. Until it is, Jessica may generate the cart correctly but still require you to open Walmart and add or approve the items manually.
+
+So our first live test is not “buy groceries.” It is:
+
+Start the Guardian server → ask Jessica for the five meals → verify she generates the correct consolidated cart → confirm she stops before purchasing.
+
+Then we connect the cart to a retailer safely.

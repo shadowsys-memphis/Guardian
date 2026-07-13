@@ -8,6 +8,10 @@ import {
   healthDataPointsTable,
   mealCravingsTable,
   appSettingsTable,
+  scheduleTasksTable,
+  symptomLogsTable,
+  mealsTable,
+  groceryCartsTable,
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, asc, desc } from "drizzle-orm";
@@ -74,7 +78,63 @@ async function callLmStudio(
   return content;
 }
 
-function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean): string {
+async function loadLiveContext(): Promise<string> {
+  try {
+    const [meals, schedule, symptoms, carts] = await Promise.all([
+      db.select({ id: mealsTable.id, name: mealsTable.name, estimatedCostCents: mealsTable.estimatedCostCents })
+        .from(mealsTable).where(eq(mealsTable.active, true)).limit(20),
+      db.select({ id: scheduleTasksTable.id, title: scheduleTasksTable.title, quarter: scheduleTasksTable.quarter, isCompleted: scheduleTasksTable.isCompleted })
+        .from(scheduleTasksTable).where(eq(scheduleTasksTable.isActive, true)).limit(30),
+      db.select().from(symptomLogsTable).orderBy(desc(symptomLogsTable.loggedAt)).limit(3),
+      db.select().from(groceryCartsTable).orderBy(desc(groceryCartsTable.id)).limit(1),
+    ]);
+
+    const mealList = meals.length > 0
+      ? meals.map((m) => `  - ${m.name} (~$${((m.estimatedCostCents ?? 0) / 100).toFixed(2)})`).join("\n")
+      : "  (no active meals in catalog yet)";
+
+    const scheduleByQ: Record<string, string[]> = {};
+    for (const t of schedule) {
+      const q = t.quarter ?? "Q1";
+      if (!scheduleByQ[q]) scheduleByQ[q] = [];
+      scheduleByQ[q].push(`${t.isCompleted ? "✓" : "○"} ${t.title}`);
+    }
+    const scheduleStr = Object.entries(scheduleByQ).sort()
+      .map(([q, items]) => `  ${q}: ${items.join(", ")}`).join("\n") || "  (no active schedule tasks)";
+
+    const symptomStr = symptoms.length > 0
+      ? symptoms.map((s) => {
+          const parts: string[] = [];
+          if (s.ptsdTrigger) parts.push("PTSD trigger active");
+          if (s.hallucinationIntensity > 0) parts.push(`hallucinations ${s.hallucinationIntensity}/5`);
+          if (s.motivationLevel !== null) parts.push(`motivation ${s.motivationLevel}/5`);
+          if (s.behaviorNotes) parts.push(s.behaviorNotes);
+          const date = s.loggedAt ? new Date(s.loggedAt).toLocaleDateString() : "unknown";
+          return `  - [${date}] ${parts.join(", ") || "no notable symptoms noted"}`;
+        }).join("\n")
+      : "  (no recent symptom entries)";
+
+    const cartStr = carts.length > 0
+      ? `Week of ${carts[0].weekStartDate} | status: ${carts[0].status} | est. $${((carts[0].totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $${((carts[0].budgetCents ?? 15000) / 100).toFixed(2)} budget`
+      : "No cart created for this week yet — say 'order groceries' to build one";
+
+    return `LIVE SYSTEM CONTEXT (refreshed each message):
+Meal Catalog — active meals available to add to cart:
+${mealList}
+
+This Week's Grocery Cart: ${cartStr}
+
+Today's Schedule:
+${scheduleStr}
+
+Recent Symptom Logs (latest 3):
+${symptomStr}`;
+  } catch {
+    return "LIVE SYSTEM CONTEXT: (unavailable — DB query failed)";
+  }
+}
+
+function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string): string {
   const toneProfile = isZombiePhase
     ? "Today is a rest day for Pops — his Haldol cycle is in the high-symptom phase (days 1-5). Keep everything soft, brief, and low-pressure. No long conversations. Gentle check-ins only."
     : "Today is a normal day for Pops. You can be warm, engaged, and conversational. Keep him anchored and positive.";
@@ -86,11 +146,12 @@ function buildJessicaSystemPrompt(questions: { id: number; text: string; categor
 TONE PROFILE:
 ${toneProfile}
 
-YOUR JOB:
+${liveContext ? liveContext + "\n" : ""}YOUR JOB:
 - Have a natural conversation with Pops — he experiences you as a friend checking in, not a clinical interview
 - Weave today's health check-in questions naturally into conversation — never read them as a list
 - Help with daily routine reminders, medication check-ins, and general wellbeing
 - Answer questions about the day, schedule, medications, or how he's feeling
+- You know what meals are coming this week and can mention them casually ("we've got your favorites lined up")
 - Parse smart home commands and confirm them (e.g. "turn on the living room light")
 - Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.
 
@@ -141,12 +202,83 @@ ADD_TASK — Pops confirms a care task, medication, or routine action was comple
 {"type":"ADD_TASK","title":"task title","quarter":"Q1","details":"brief context"}
 ---END_ACTION---
 
+GROCERY_ORDER — Ray (or Pops) asks to build, review, check, or order the weekly grocery cart. Triggers: "order groceries", "build the cart", "what's on the shopping list", "what are we eating this week", "order food":
+---ACTION---
+{"type":"GROCERY_ORDER","details":"brief context"}
+---END_ACTION---
+When you emit GROCERY_ORDER, say something like: "Let me pull up the cart now." The system will read back the full summary automatically.
+
+ADD_MEAL_TO_CART — Ray or Pops names a specific meal they want added to this week's cart:
+---ACTION---
+{"type":"ADD_MEAL_TO_CART","mealName":"exact meal name as stated"}
+---END_ACTION---
+
+APPROVE_CART — Ray says "commit", "yes", "go ahead", "place the order", "looks good", or confirms they want to lock in the grocery order:
+---ACTION---
+{"type":"APPROVE_CART","details":"approved"}
+---END_ACTION---
+
+CANCEL_CART — Ray says "cancel", "never mind", "hold off", "don't order", or wants to dismiss the cart:
+---ACTION---
+{"type":"CANCEL_CART","details":"cancelled"}
+---END_ACTION---
+
 Informational types (shown in caregiver stream, no device action):
 MED_CONFIRMED → {"type":"MED_CONFIRMED","title":"[medication] taken","details":"Pops confirmed"}
 MED_REFUSED → {"type":"MED_REFUSED","title":"[medication] skipped","details":"brief reason"}
 WELLBEING_ALERT → {"type":"WELLBEING_ALERT","title":"concern summary","details":"what was said"}
 
 Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.`;
+}
+
+function buildRaySystemPrompt(liveContext: string, cycleDay: number | null, isZombiePhase: boolean): string {
+  return `You are Jessica — br(AI)n's operations AI for Ray, Pops' caregiver and son.
+
+RAY MODE: Direct and operational. Ray is the caregiver — he needs status, decisions, and results fast. No therapy-speak. No filler. Respond like a sharp ops partner to a busy family caregiver. Max 2-3 sentences unless Ray asks for detail.
+
+${liveContext}
+
+Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.${isZombiePhase ? " ⚠️ ZOMBIE PHASE (days 1-5) — Pops is in high-symptom window. Keep all Pops-facing activities minimal and low-pressure." : ""}
+
+ACTIONS — emit these blocks invisibly after your response when Ray gives instructions. JSON must be a single line. Never show delimiters to Ray.
+
+ADD_EVENT or ADD_TASK — Ray schedules something:
+---ACTION---
+{"type":"ADD_EVENT","title":"event title","quarter":"Q1","timeLabel":"0800","details":"context"}
+---END_ACTION---
+Quarters: Q1=Morning, Q2=Afternoon, Q3=Evening, Q4=Night
+
+TOGGLE_SMART_DEVICE — Ray controls a device:
+---ACTION---
+{"type":"TOGGLE_SMART_DEVICE","device":"device_key","state":"on","details":"context"}
+---END_ACTION---
+Valid devices: living_room_echo, bedroom_echo, kitchen_echo, sonos_living, sonos_bedroom, porch_light, kitchen_light, living_room_light
+
+GROCERY_ORDER — Ray says "order groceries", "build the cart", "what's on the list", "order food":
+---ACTION---
+{"type":"GROCERY_ORDER","details":"context"}
+---END_ACTION---
+When emitting GROCERY_ORDER, say: "Pulling up the cart now." The system reads back the full summary automatically.
+
+ADD_MEAL_TO_CART — Ray names a specific meal to add:
+---ACTION---
+{"type":"ADD_MEAL_TO_CART","mealName":"meal name as stated"}
+---END_ACTION---
+
+APPROVE_CART — Ray says "commit", "go ahead", "place the order", "looks good":
+---ACTION---
+{"type":"APPROVE_CART","details":"approved"}
+---END_ACTION---
+
+CANCEL_CART — Ray says "cancel", "never mind", "hold off", "don't order":
+---ACTION---
+{"type":"CANCEL_CART","details":"cancelled"}
+---END_ACTION---
+
+Informational stream (no action needed — system logs these automatically):
+MED_CONFIRMED → {"type":"MED_CONFIRMED","title":"med taken","details":"context"}
+MED_REFUSED → {"type":"MED_REFUSED","title":"med skipped","details":"reason"}
+WELLBEING_ALERT → {"type":"WELLBEING_ALERT","title":"concern","details":"what was said"}`;
 }
 
 async function synthesizeToBase64(text: string): Promise<string | null> {
@@ -447,7 +579,7 @@ router.get("/gemini/conversations/:id/messages", async (req, res) => {
 router.post("/gemini/conversations/:id/messages", async (req, res) => {
   try {
     const conversationId = parseInt(req.params.id, 10);
-    const { content, speak } = z.object({ content: z.string(), speak: z.boolean().optional() }).parse(req.body);
+    const { content, speak, mode } = z.object({ content: z.string(), speak: z.boolean().optional(), mode: z.enum(["ray", "pops"]).optional() }).parse(req.body);
 
     const [userMsg] = await db
       .insert(messagesTable)
@@ -461,8 +593,11 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       .orderBy(asc(messagesTable.createdAt));
 
     const { cycleDay, isZombiePhase } = await getCurrentCycleInfo();
+    const liveContext = await loadLiveContext();
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
-    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase);
+    const systemPrompt = mode === "ray"
+      ? buildRaySystemPrompt(liveContext, cycleDay, isZombiePhase)
+      : buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext);
 
     const activeModel = await getActiveModel();
 
