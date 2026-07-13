@@ -10,7 +10,7 @@ import {
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const router: IRouter = Router();
 
@@ -483,8 +483,22 @@ router.patch("/shopper/cravings/:id", async (req, res) => {
   }
 });
 
-// POST /meals/remix — AI-powered meal plan remix using Gemini
-router.post("/meals/remix", async (req, res) => {
+// POST /shopper/cart/reset — reset current week's cart back to pending so meals can be changed
+router.post("/shopper/cart/reset", async (req, res) => {
+  try {
+    const cart = await getOrCreateCart();
+    await db.update(groceryCartsTable)
+      .set({ status: "pending", approvedAt: null })
+      .where(eq(groceryCartsTable.id, cart.id));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reset cart");
+    res.status(500).json({ error: "Failed to reset cart" });
+  }
+});
+
+// POST /shopper/remix — AI-powered meal plan remix using Gemini
+router.post("/shopper/remix", async (req, res) => {
   try {
     const { currentPlan, remixPrompt } = z.object({
       currentPlan: z.string().min(1),

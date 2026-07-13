@@ -1790,9 +1790,22 @@ export function ShopperTab() {
           )}
 
           {cartIsLocked && (
-            <p className="text-xs text-muted-foreground italic mt-4 pt-3 border-t border-border/30">
-              Cart is {cartStatus}. A new cart will be created next Monday.
-            </p>
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/30 gap-3 flex-wrap">
+              <p className="text-xs text-muted-foreground italic">
+                Cart is {cartStatus}.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={async () => {
+                  await fetch(`${WORKSPACE_BASE}/api/shopper/cart/reset`, { method: "POST" });
+                  refetchCart();
+                }}
+              >
+                <RefreshCw size={12} className="mr-1" /> Start Fresh
+              </Button>
+            </div>
           )}
 
           {(cart?.items ?? []).length > 0 && (
