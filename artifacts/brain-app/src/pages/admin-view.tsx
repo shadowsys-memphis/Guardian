@@ -51,6 +51,12 @@ import {
   Wand2,
   AlertCircle,
   Archive,
+  Stethoscope,
+  SlidersHorizontal,
+  MapPin,
+  Store,
+  Syringe,
+  CircleDot,
 } from "lucide-react";
 
 import {
@@ -96,7 +102,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "settings";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -129,7 +135,8 @@ export function AdminView() {
           <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
           <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
           <div className="pt-2 border-t border-border/30 mt-2">
-            <NavButton active={false} onClick={() => navigate("/admin/report")} icon={<FileText size={18} />} label="Doctor Report" />
+            <NavButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} icon={<Stethoscope size={18} />} label="Appointments" />
+            <NavButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")} icon={<SlidersHorizontal size={18} />} label="App Settings" />
           </div>
         </nav>
 
@@ -150,6 +157,8 @@ export function AdminView() {
           {activeTab === "inventory" && <InventoryTab />}
           {activeTab === "rotation" && <RotationTab />}
           {activeTab === "calendar-sync" && <CalendarSyncTab />}
+          {activeTab === "appointments" && <AppointmentsTab />}
+          {activeTab === "settings" && <AppSettingsTab />}
         </div>
       </main>
     </div>
@@ -1384,6 +1393,51 @@ function HaldolTab() {
         <p className="text-muted-foreground">Manage the 14-day medication cycle and anticipate high-symptom rest phases.</p>
       </header>
 
+      {/* 14-Segment Phase Arc */}
+      {haldol && (
+        <Card className="border-border/40">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-display uppercase tracking-widest">14-Day Cycle Arc</CardTitle>
+            <CardDescription>Days 1–5 = High Symptom (rest). Days 6–14 = Stabilization.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-1 flex-wrap">
+              {Array.from({ length: 14 }, (_, i) => {
+                const day = i + 1;
+                const isZombie = day <= 5;
+                const isCurrent = day === haldol.cycleDay;
+                return (
+                  <div
+                    key={day}
+                    className={`flex flex-col items-center gap-1 flex-1 min-w-[32px]`}
+                  >
+                    <div
+                      className={`w-full h-10 rounded-sm flex items-center justify-center text-xs font-bold transition-all border-2 ${
+                        isCurrent
+                          ? isZombie
+                            ? "bg-destructive border-destructive text-destructive-foreground shadow-lg scale-110"
+                            : "bg-success border-success text-white shadow-lg scale-110"
+                          : isZombie
+                            ? "bg-destructive/20 border-destructive/30 text-destructive/70"
+                            : "bg-success/15 border-success/25 text-success/70"
+                      }`}
+                    >
+                      {day}
+                    </div>
+                    <div className={`w-1 h-1 rounded-full ${isZombie ? "bg-destructive/50" : "bg-success/50"}`} />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-6 mt-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-destructive/30 inline-block" /> Days 1–5 High Symptom</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-success/30 inline-block" /> Days 6–14 Stabilization</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm border-2 border-primary inline-block" /> Today (Day {haldol.cycleDay})</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {haldol && (
         <div className="grid md:grid-cols-2 gap-8">
           <Card className="bg-primary/5 border-primary/30">
@@ -1458,6 +1512,9 @@ function HaldolTab() {
           </Card>
         </div>
       )}
+
+      {/* Medication Reconciliation Log */}
+      <MedicationReconciliationLog />
     </div>
   );
 }
@@ -1477,6 +1534,14 @@ export function ShopperTab() {
   const [calPushingShop, setCalPushingShop] = useState(false);
   const [urgentItems, setUrgentItems] = useState<Set<string>>(new Set());
   const [urgentPushingKey, setUrgentPushingKey] = useState<string | null>(null);
+  const [expandedMeals, setExpandedMeals] = useState<Set<number>>(new Set());
+
+  const toggleMealExpand = (id: number) =>
+    setExpandedMeals((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
 
   const handleMarkUrgent = async (item: any) => {
     const key = item.ingredientName as string;
@@ -1715,7 +1780,58 @@ export function ShopperTab() {
               style={{ width: `${budgetPct}%` }}
             />
           </div>
-          <p className="text-xs text-muted-foreground mt-1">{budgetPct}% of $150 budget used</p>
+          <p className="text-xs text-muted-foreground mt-1">{budgetPct}% of ${(budget / 100).toFixed(0)} budget used</p>
+        </CardContent>
+      </Card>
+
+      {/* Cart Status Timeline */}
+      <Card className="border-border/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-display uppercase tracking-widest">Cart Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-0">
+            {(["Draft", "Approved", "Ordered"] as const).map((step, idx) => {
+              const stepStatus = ["pending", "approved", "ordered"][idx];
+              const isDone =
+                cartStatus === "ordered"
+                  ? idx <= 2
+                  : cartStatus === "approved"
+                    ? idx <= 1
+                    : idx === 0;
+              const isCurrent =
+                (step === "Draft" && cartStatus === "pending") ||
+                (step === "Approved" && cartStatus === "approved") ||
+                (step === "Ordered" && cartStatus === "ordered");
+              const isCancelled = cartStatus === "dismissed" && step === "Draft";
+              return (
+                <div key={step} className="flex items-center flex-1">
+                  <div className="flex flex-col items-center gap-1.5 flex-1">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 text-xs font-bold transition-all ${
+                      isCancelled
+                        ? "border-muted-foreground/30 bg-muted text-muted-foreground"
+                        : isCurrent
+                          ? "border-primary bg-primary/10 text-primary"
+                          : isDone
+                            ? "border-success bg-success/10 text-success"
+                            : "border-border/30 bg-secondary/30 text-muted-foreground/40"
+                    }`}>
+                      {isDone && !isCurrent ? <Check size={14} /> : idx + 1}
+                    </div>
+                    <span className={`text-xs font-bold uppercase tracking-wide ${isCurrent ? "text-primary" : isDone ? "text-success" : "text-muted-foreground/40"}`}>
+                      {isCancelled ? "Cancelled" : step}
+                    </span>
+                  </div>
+                  {idx < 2 && (
+                    <div className={`h-0.5 flex-1 mx-1 rounded-full ${isDone && !isCurrent ? "bg-success/40" : "bg-border/30"}`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {cartStatus === "dismissed" && (
+            <p className="text-xs text-muted-foreground/60 mt-3 text-center italic">This cart was dismissed. Start fresh to begin a new order.</p>
+          )}
         </CardContent>
       </Card>
 
@@ -1742,16 +1858,29 @@ export function ShopperTab() {
                       <span className="text-xs text-primary font-bold">{fmtDollars(meal.estimatedCostCents)}</span>
                     </div>
                     {meal.description && <p className="text-xs text-muted-foreground mt-0.5">{meal.description}</p>}
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {(meal.ingredients ?? []).slice(0, 4).map((ing: any) => (
-                        <span key={ing.id} className="text-xs px-1.5 py-0.5 bg-primary/10 border border-primary/20 rounded-sm text-primary/80">
-                          {ing.name}
-                        </span>
-                      ))}
-                      {(meal.ingredients ?? []).length > 4 && (
-                        <span className="text-xs text-muted-foreground">+{(meal.ingredients ?? []).length - 4} more</span>
-                      )}
-                    </div>
+                    {(meal.ingredients ?? []).length > 0 && (
+                      <div className="mt-1.5">
+                        <button
+                          onClick={() => toggleMealExpand(meal.id)}
+                          className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary font-bold uppercase tracking-wide"
+                        >
+                          {expandedMeals.has(meal.id) ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          {(meal.ingredients ?? []).length} ingredient{(meal.ingredients ?? []).length !== 1 ? "s" : ""}
+                        </button>
+                        {expandedMeals.has(meal.id) && (
+                          <div className="mt-1.5 space-y-1 pl-2 border-l-2 border-primary/20">
+                            {(meal.ingredients ?? []).map((ing: any) => (
+                              <div key={ing.id} className="flex items-center justify-between text-xs">
+                                <span className="text-foreground/80">{ing.name} <span className="text-muted-foreground">× {ing.quantity} {ing.unit}</span></span>
+                                {ing.estimatedCostCents > 0 && (
+                                  <span className="text-muted-foreground ml-2 shrink-0">${(ing.estimatedCostCents / 100).toFixed(2)}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {!cartIsLocked && (
                     <Button
@@ -3193,6 +3322,543 @@ function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: Historica
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MedicationReconciliationLog() {
+  const { toast } = useToast();
+  const [adjustments, setAdjustments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    adjustmentDate: new Date().toISOString().split("T")[0],
+    medication: "Haldol Decanoate",
+    previousDose: "",
+    newDose: "",
+    reason: "",
+    loggedBy: "Ray",
+    cycleResetDate: "",
+  });
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/haldol/adjustments`);
+      if (res.ok) setAdjustments(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/haldol/adjustments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      toast({ title: "Adjustment logged", description: form.cycleResetDate ? "Cycle reset to new injection date." : "Recorded without cycle reset." });
+      setForm({ adjustmentDate: new Date().toISOString().split("T")[0], medication: "Haldol Decanoate", previousDose: "", newDose: "", reason: "", loggedBy: "Ray", cycleResetDate: "" });
+      setShowForm(false);
+      load();
+    } catch {
+      toast({ title: "Failed to log adjustment", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+              <Syringe size={14} /> Medication Reconciliation Log
+            </CardTitle>
+            <CardDescription>Track dose changes and their clinical rationale.</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setShowForm(!showForm)} className="gap-1.5">
+            <Plus size={14} /> Log Adjustment
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {showForm && (
+          <form onSubmit={handleSave} className="space-y-3 p-4 bg-secondary/20 rounded-sm border border-border/40">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Date</label>
+                <Input type="date" value={form.adjustmentDate} onChange={(e) => setForm({ ...form, adjustmentDate: e.target.value })} required />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Medication</label>
+                <Input value={form.medication} onChange={(e) => setForm({ ...form, medication: e.target.value })} required />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Previous Dose</label>
+                <Input value={form.previousDose} onChange={(e) => setForm({ ...form, previousDose: e.target.value })} placeholder="e.g. 100mg" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">New Dose *</label>
+                <Input value={form.newDose} onChange={(e) => setForm({ ...form, newDose: e.target.value })} placeholder="e.g. 150mg" required />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Reason / Clinical Notes</label>
+              <Input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. Increased hallucinations, psychiatrist ordered increase" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Logged By</label>
+                <Input value={form.loggedBy} onChange={(e) => setForm({ ...form, loggedBy: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Cycle Reset Date (optional)</label>
+                <Input type="date" value={form.cycleResetDate} onChange={(e) => setForm({ ...form, cycleResetDate: e.target.value })} />
+                <p className="text-[10px] text-muted-foreground">If filled, resets the Haldol cycle counter to this injection date.</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Log Adjustment"}</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+            </div>
+          </form>
+        )}
+
+        {loading ? (
+          <p className="text-xs text-muted-foreground text-center py-4">Loading…</p>
+        ) : adjustments.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-4 italic">No medication adjustments recorded.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/30">
+                  <th className="text-left py-2 font-bold uppercase tracking-widest text-muted-foreground pr-4">Date</th>
+                  <th className="text-left py-2 font-bold uppercase tracking-widest text-muted-foreground pr-4">Medication</th>
+                  <th className="text-left py-2 font-bold uppercase tracking-widest text-muted-foreground pr-4">Dose Change</th>
+                  <th className="text-left py-2 font-bold uppercase tracking-widest text-muted-foreground pr-4">Reason</th>
+                  <th className="text-left py-2 font-bold uppercase tracking-widest text-muted-foreground">By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adjustments.map((a: any) => (
+                  <tr key={a.id} className="border-b border-border/20 hover:bg-secondary/20">
+                    <td className="py-2 pr-4 text-foreground/80">{a.adjustmentDate}</td>
+                    <td className="py-2 pr-4 font-semibold">{a.medication}</td>
+                    <td className="py-2 pr-4">
+                      <span className="text-muted-foreground">{a.previousDose ?? "?"}</span>
+                      <span className="mx-1.5 text-muted-foreground/40">→</span>
+                      <span className="text-primary font-bold">{a.newDose}</span>
+                    </td>
+                    <td className="py-2 pr-4 text-muted-foreground max-w-[200px] truncate">{a.reason ?? "—"}</td>
+                    <td className="py-2 text-muted-foreground">{a.loggedBy}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AppointmentsTab() {
+  const { toast } = useToast();
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [report, setReport] = useState<string | null>(null);
+  const emptyForm = { appointmentDate: "", appointmentTime: "09:00", provider: "", location: "", type: "primary_care", notes: "" };
+  const [form, setForm] = useState(emptyForm);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/appointments`);
+      if (res.ok) setAppointments(await res.json());
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const url = editingId ? `${WORKSPACE_BASE}/api/appointments/${editingId}` : `${WORKSPACE_BASE}/api/appointments`;
+      const method = editingId ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      toast({ title: editingId ? "Appointment updated" : "Appointment added" });
+      setForm(emptyForm);
+      setShowForm(false);
+      setEditingId(null);
+      load();
+    } catch {
+      toast({ title: "Failed to save appointment", variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await fetch(`${WORKSPACE_BASE}/api/appointments/${id}`, { method: "DELETE" });
+      toast({ title: "Appointment removed" });
+      load();
+    } catch {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    }
+  };
+
+  const handleEdit = (appt: any) => {
+    setForm({ appointmentDate: appt.appointmentDate, appointmentTime: appt.appointmentTime, provider: appt.provider, location: appt.location ?? "", type: appt.type, notes: appt.notes ?? "" });
+    setEditingId(appt.id);
+    setShowForm(true);
+  };
+
+  const handleExportReport = async () => {
+    setReportLoading(true);
+    setReport(null);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/reports/clinical`);
+      const data = await res.json();
+      setReport(data.report);
+    } catch {
+      toast({ title: "Failed to generate report", variant: "destructive" });
+    } finally { setReportLoading(false); }
+  };
+
+  const handleDownloadReport = () => {
+    if (!report) return;
+    const blob = new Blob([report], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `clinical-report-${new Date().toISOString().split("T")[0]}.txt`;
+    a.click();
+  };
+
+  const TYPE_LABELS: Record<string, string> = {
+    primary_care: "Primary Care",
+    psychiatry: "Psychiatry",
+    cardiology: "Cardiology",
+    neurology: "Neurology",
+    va_appointment: "VA Appointment",
+    lab_work: "Lab Work",
+    other: "Other",
+  };
+
+  return (
+    <div className="space-y-6">
+      <header className="mb-8 border-b border-border/50 pb-4 flex items-end justify-between flex-wrap gap-4">
+        <div>
+          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Appointments</h2>
+          <p className="text-muted-foreground">Manage doctor and clinic visits for Pops.</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={handleExportReport} disabled={reportLoading} className="gap-2">
+            <FileText size={14} /> {reportLoading ? "Generating…" : "Export Doctor Report"}
+          </Button>
+          <Button size="sm" onClick={() => { setForm(emptyForm); setEditingId(null); setShowForm(!showForm); }} className="gap-2">
+            <Plus size={14} /> Add Appointment
+          </Button>
+        </div>
+      </header>
+
+      {showForm && (
+        <Card className="border-primary/30 bg-primary/3">
+          <CardHeader>
+            <CardTitle className="text-sm font-display uppercase tracking-widest">{editingId ? "Edit Appointment" : "New Appointment"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-muted-foreground">Date *</label>
+                  <Input type="date" value={form.appointmentDate} onChange={(e) => setForm({ ...form, appointmentDate: e.target.value })} required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-muted-foreground">Time</label>
+                  <Input type="time" value={form.appointmentTime} onChange={(e) => setForm({ ...form, appointmentTime: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-muted-foreground">Provider *</label>
+                  <Input value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} placeholder="Dr. Smith / VA Clinic" required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-muted-foreground">Type</label>
+                  <select
+                    value={form.type}
+                    onChange={(e) => setForm({ ...form, type: e.target.value })}
+                    className="flex h-9 w-full rounded-sm border border-border bg-input px-3 py-1 text-sm"
+                  >
+                    {Object.entries(TYPE_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Location</label>
+                <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Address or clinic name" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  className="flex min-h-[80px] w-full rounded-sm border border-border bg-input px-3 py-2 text-sm"
+                  placeholder="Pre-visit prep, follow-up needed, questions to ask…"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={saving}>{saving ? "Saving…" : editingId ? "Update" : "Save Appointment"}</Button>
+                <Button type="button" variant="ghost" onClick={() => { setShowForm(false); setEditingId(null); }}>Cancel</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Doctor Report */}
+      {report && (
+        <Card className="border-success/30 bg-success/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+                <FileText size={14} className="text-success" /> Clinical Digest — Ready
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={handleDownloadReport} className="gap-1.5 text-xs">
+                  <Download size={12} /> Download .txt
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setReport(null)} className="h-7 w-7 p-0">
+                  <X size={12} />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono bg-secondary/20 p-4 rounded-sm border border-border/30 max-h-96 overflow-y-auto">{report}</pre>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Appointments List */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Stethoscope size={14} /> Upcoming & Recent Visits
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-xs text-muted-foreground text-center py-6">Loading…</p>
+          ) : appointments.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8 italic">No appointments on record. Add one above.</p>
+          ) : (
+            <div className="space-y-3">
+              {appointments.map((a: any) => {
+                const isPast = a.appointmentDate < new Date().toISOString().split("T")[0];
+                return (
+                  <div key={a.id} className={`flex items-start justify-between gap-4 p-4 rounded-sm border transition-colors ${isPast ? "border-border/20 bg-secondary/10 opacity-70" : "border-primary/20 bg-primary/3"}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm">{a.appointmentDate}</span>
+                        <span className="text-muted-foreground text-xs">{a.appointmentTime}</span>
+                        <span className="px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase bg-primary/10 border border-primary/20 text-primary">{TYPE_LABELS[a.type] ?? a.type}</span>
+                        {isPast && <span className="text-[10px] text-muted-foreground/60 uppercase font-bold">Past</span>}
+                      </div>
+                      <p className="font-semibold mt-1">{a.provider}</p>
+                      {a.location && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <MapPin size={10} /> {a.location}
+                        </p>
+                      )}
+                      {a.notes && <p className="text-xs text-muted-foreground/80 mt-1 italic">{a.notes}</p>}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => handleEdit(a)}>
+                        <Edit2 size={12} />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(a.id)}>
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AppSettingsTab() {
+  const { toast } = useToast();
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const { data: healthSettings } = useGetAssessmentSettings();
+  const updateHealthSettings = useUpdateAssessmentSettings();
+  const [quietForm, setQuietForm] = useState({ quietWindowStart: "22:00", quietWindowEnd: "07:00", engagementIntervalHours: 4 });
+
+  useEffect(() => {
+    if (healthSettings) {
+      setQuietForm({
+        quietWindowStart: (healthSettings as any).quietWindowStart ?? "22:00",
+        quietWindowEnd: (healthSettings as any).quietWindowEnd ?? "07:00",
+        engagementIntervalHours: (healthSettings as any).engagementIntervalHours ?? 4,
+      });
+    }
+  }, [healthSettings]);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/settings`);
+      if (res.ok) setSettings(await res.json());
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const save = async (patch: Record<string, string>) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setSettings((prev) => ({ ...prev, ...patch }));
+      toast({ title: "Settings saved" });
+    } catch {
+      toast({ title: "Failed to save settings", variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  const handleQuietSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateHealthSettings.mutate({ data: quietForm }, { onSuccess: () => toast({ title: "Quiet window saved" }) });
+  };
+
+  return (
+    <div className="space-y-6">
+      <header className="mb-8 border-b border-border/50 pb-4">
+        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">App Settings</h2>
+        <p className="text-muted-foreground">Shopper preferences, store configuration, and quiet hours.</p>
+      </header>
+
+      {/* Store Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Store size={14} /> Store Preferences
+          </CardTitle>
+          <CardDescription>Configure the grocery stores used for Pops' weekly shopping.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-1.5">
+              <MapPin size={12} /> Delivery Zip Code
+            </label>
+            <div className="flex gap-2">
+              <Input
+                defaultValue={settings.zip_code ?? ""}
+                placeholder="e.g. 92109"
+                className="max-w-[180px]"
+                id="zip-input"
+                maxLength={10}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={saving}
+                onClick={() => {
+                  const val = (document.getElementById("zip-input") as HTMLInputElement)?.value;
+                  if (val) save({ zip_code: val });
+                }}
+              >
+                Save
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Used by the Shopper agent to filter nearby store locations.</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase text-muted-foreground">Preferred Store</label>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { key: "walmart", label: "Walmart" },
+                { key: "stater_bros", label: "Stater Bros" },
+                { key: "both", label: "Both (Price Compare)" },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => save({ preferred_store: key })}
+                  disabled={saving}
+                  className={`px-4 py-2 rounded-sm border text-sm font-bold uppercase tracking-wide transition-all ${
+                    (settings.preferred_store ?? "both") === key
+                      ? "bg-primary/15 border-primary text-primary"
+                      : "border-border/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Tells Jessica which stores to prioritize when building the cart.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quiet Window */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Clock size={14} /> Quiet Window
+          </CardTitle>
+          <CardDescription>Jessica will not initiate check-ins during these hours.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleQuietSave} className="space-y-4 max-w-md">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">Start (e.g. 22:00)</label>
+                <Input value={quietForm.quietWindowStart} onChange={(e) => setQuietForm({ ...quietForm, quietWindowStart: e.target.value })} placeholder="22:00" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">End (e.g. 07:00)</label>
+                <Input value={quietForm.quietWindowEnd} onChange={(e) => setQuietForm({ ...quietForm, quietWindowEnd: e.target.value })} placeholder="07:00" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Engagement Interval (hours)</label>
+              <Input type="number" min={1} max={12} value={quietForm.engagementIntervalHours} onChange={(e) => setQuietForm({ ...quietForm, engagementIntervalHours: parseInt(e.target.value) })} className="max-w-[120px]" />
+            </div>
+            <Button type="submit" disabled={updateHealthSettings.isPending}>Save Quiet Window</Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

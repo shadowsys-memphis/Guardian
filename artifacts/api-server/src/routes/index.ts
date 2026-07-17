@@ -18,6 +18,8 @@ import inventoryRouter from "./inventory";
 import intakeRouter from "./intake";
 import billingRouter from "./billing";
 import tenantsRouter from "./tenants";
+import appointmentsRouter from "./appointments";
+import reportsRouter from "./reports";
 
 const router: IRouter = Router();
 
@@ -58,6 +60,8 @@ localRouter.use(smarthomeRouter);
 localRouter.use(healthAssessmentRouter);
 localRouter.use(shopperRouter);
 localRouter.use(rotationRouter);
+localRouter.use(appointmentsRouter);
+localRouter.use(reportsRouter);
 
 router.use(localRouter);
 

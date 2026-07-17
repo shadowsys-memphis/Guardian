@@ -241,3 +241,36 @@ export const inventoryItemsTable = pgTable("inventory_items", {
 });
 
 export type InventoryItem = typeof inventoryItemsTable.$inferSelect;
+
+export const medicalAppointmentsTable = pgTable("medical_appointments", {
+  id: serial("id").primaryKey(),
+  appointmentDate: date("appointment_date").notNull(),
+  appointmentTime: text("appointment_time").notNull().default("09:00"),
+  provider: text("provider").notNull(),
+  location: text("location"),
+  type: text("type").notNull().default("primary_care"),
+  notes: text("notes"),
+  calendarEventId: text("calendar_event_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const medicationAdjustmentsTable = pgTable("medication_adjustments", {
+  id: serial("id").primaryKey(),
+  adjustmentDate: date("adjustment_date").notNull(),
+  medication: text("medication").notNull().default("Haldol Decanoate"),
+  previousDose: text("previous_dose"),
+  newDose: text("new_dose").notNull(),
+  reason: text("reason"),
+  loggedBy: text("logged_by").notNull().default("Ray"),
+  cycleResetDate: date("cycle_reset_date"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertMedicalAppointmentSchema = createInsertSchema(medicalAppointmentsTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertMedicationAdjustmentSchema = createInsertSchema(medicationAdjustmentsTable).omit({ id: true, createdAt: true });
+
+export type MedicalAppointment = typeof medicalAppointmentsTable.$inferSelect;
+export type MedicationAdjustment = typeof medicationAdjustmentsTable.$inferSelect;
+export type InsertMedicalAppointment = z.infer<typeof insertMedicalAppointmentSchema>;
+export type InsertMedicationAdjustment = z.infer<typeof insertMedicationAdjustmentSchema>;
