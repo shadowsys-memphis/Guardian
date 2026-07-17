@@ -339,6 +339,74 @@ function HealthSummarySection() {
         )}
       </div>
 
+      <div>
+        <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest mb-3">7-Day Sparklines</h3>
+        {trends.length === 0 ? (
+          <p className="text-muted-foreground italic text-sm">No data yet — sparklines build up over daily calls.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {CATS.map((cat) => {
+              const cutoff = new Date();
+              cutoff.setDate(cutoff.getDate() - 7);
+              const cutoffStr = cutoff.toISOString().split("T")[0];
+              const spark = trends
+                .filter((t) => t.category === cat && t.date >= cutoffStr)
+                .sort((a: any, b: any) => a.date.localeCompare(b.date))
+                .map((t: any) => ({ d: t.date.slice(5), v: t.averageValue ?? 0 }));
+              const lastVal = spark[spark.length - 1]?.v;
+              const prevVal = spark[spark.length - 2]?.v;
+              const trend = lastVal !== undefined && prevVal !== undefined
+                ? lastVal > prevVal ? "↑" : lastVal < prevVal ? "↓" : "→"
+                : null;
+              const isSustained = sustainedAnomalies.includes(cat);
+              return (
+                <div key={cat} className={`border rounded-md p-3 ${isSustained ? "border-destructive/60 bg-destructive/5" : "border-border/50"}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-display uppercase tracking-widest text-muted-foreground truncate">
+                      {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
+                    </span>
+                    {trend && (
+                      <span className={`text-xs font-bold ml-1 shrink-0 ${trend === "↑" ? "text-success" : trend === "↓" ? "text-destructive" : "text-muted-foreground"}`}>
+                        {trend}
+                      </span>
+                    )}
+                  </div>
+                  {spark.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={40}>
+                      <LineChart data={spark} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                        <Line
+                          type="monotone"
+                          dataKey="v"
+                          stroke={isSustained ? "#ef4444" : "#4a9f68"}
+                          strokeWidth={1.5}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                        <YAxis domain={[0, 1]} hide />
+                        <Tooltip
+                          contentStyle={{ background: "#fafaf8", border: "1px solid #d1d5db", fontSize: 10, padding: "2px 6px" }}
+                          formatter={(v: number) => [v.toFixed(2), ""]}
+                          labelFormatter={(l) => l}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-10 flex items-center justify-center">
+                      <span className="text-xs text-muted-foreground/40 italic">no data</span>
+                    </div>
+                  )}
+                  {spark.length > 0 && (
+                    <div className="text-right text-xs text-muted-foreground mt-0.5">
+                      {lastVal !== undefined ? lastVal.toFixed(2) : "--"}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <CycleDayHeatmap trends={trends} haldolCycleDay={haldol?.cycleDay ?? null} />
 
       <div>

@@ -69,6 +69,12 @@ interface TaskCardProps {
   onEditStart: () => void;
   onEditSave: () => void;
   onEditCancel: () => void;
+  isTitleEditing: boolean;
+  titleEditValue: string;
+  onTitleEditValueChange: (v: string) => void;
+  onTitleEditStart: () => void;
+  onTitleEditSave: () => void;
+  onTitleEditCancel: () => void;
   onComplete: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -86,6 +92,12 @@ function TaskCard({
   onEditStart,
   onEditSave,
   onEditCancel,
+  isTitleEditing,
+  titleEditValue,
+  onTitleEditValueChange,
+  onTitleEditStart,
+  onTitleEditSave,
+  onTitleEditCancel,
   onComplete,
   onEdit,
   onDelete,
@@ -130,7 +142,27 @@ function TaskCard({
       </div>
 
       <div className="flex-1 min-w-0">
-        <span className="font-display text-sm tracking-wider truncate block">{task.title}</span>
+        {isTitleEditing ? (
+          <input
+            autoFocus
+            value={titleEditValue}
+            onChange={(e) => onTitleEditValueChange(e.target.value)}
+            onBlur={onTitleEditSave}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onTitleEditSave();
+              if (e.key === "Escape") onTitleEditCancel();
+            }}
+            className="w-full font-display text-sm tracking-wider bg-transparent border-b border-primary focus:outline-none text-foreground"
+          />
+        ) : (
+          <span
+            className="font-display text-sm tracking-wider truncate block cursor-pointer hover:text-primary hover:underline"
+            title="Click to edit title"
+            onClick={onTitleEditStart}
+          >
+            {task.title}
+          </span>
+        )}
       </div>
 
       <div className="shrink-0">
@@ -236,7 +268,7 @@ function QuarterDropZone({ quarter, children }: QuarterDropZoneProps) {
 
 export interface ScheduleTabDnDProps {
   schedule: ScheduleTask[] | undefined;
-  updateTask: (vars: { id: number; data: { quarter?: "Q1" | "Q2" | "Q3" | "Q4"; order?: number; timeLabel?: string } }) => void;
+  updateTask: (vars: { id: number; data: { quarter?: "Q1" | "Q2" | "Q3" | "Q4"; order?: number; timeLabel?: string; title?: string } }) => void;
   completeTask: (vars: { id: number }) => void;
   deleteTask: (vars: { id: number }) => void;
   onEdit: (task: ScheduleTask) => void;
@@ -259,6 +291,8 @@ export function ScheduleTabDnD({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingTimeId, setEditingTimeId] = useState<number | null>(null);
   const [editingTimeValue, setEditingTimeValue] = useState("");
+  const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
+  const [editingTitleValue, setEditingTitleValue] = useState("");
 
   useEffect(() => {
     if (!activeId) setItems(groupByQuarter(schedule ?? []));
@@ -349,6 +383,14 @@ export function ScheduleTabDnD({
     setEditingTimeId(null);
   };
 
+  const saveTitle = (task: ScheduleTask) => {
+    const trimmed = editingTitleValue.trim();
+    if (trimmed && trimmed !== task.title) {
+      updateTask({ id: task.id, data: { title: trimmed } });
+    }
+    setEditingTitleId(null);
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -385,9 +427,20 @@ export function ScheduleTabDnD({
                       onEditStart={() => {
                         setEditingTimeId(task.id);
                         setEditingTimeValue(task.timeLabel);
+                        setEditingTitleId(null);
                       }}
                       onEditSave={() => saveTime(task)}
                       onEditCancel={() => setEditingTimeId(null)}
+                      isTitleEditing={editingTitleId === task.id}
+                      titleEditValue={editingTitleValue}
+                      onTitleEditValueChange={setEditingTitleValue}
+                      onTitleEditStart={() => {
+                        setEditingTitleId(task.id);
+                        setEditingTitleValue(task.title);
+                        setEditingTimeId(null);
+                      }}
+                      onTitleEditSave={() => saveTitle(task)}
+                      onTitleEditCancel={() => setEditingTitleId(null)}
                       onComplete={() => completeTask({ id: task.id })}
                       onEdit={() => onEdit(task)}
                       onDelete={() => {
@@ -415,6 +468,12 @@ export function ScheduleTabDnD({
             onEditStart={() => {}}
             onEditSave={() => {}}
             onEditCancel={() => {}}
+            isTitleEditing={false}
+            titleEditValue=""
+            onTitleEditValueChange={() => {}}
+            onTitleEditStart={() => {}}
+            onTitleEditSave={() => {}}
+            onTitleEditCancel={() => {}}
             onComplete={() => {}}
             onEdit={() => {}}
             onDelete={() => {}}
