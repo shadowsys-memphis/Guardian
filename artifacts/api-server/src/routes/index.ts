@@ -20,6 +20,7 @@ import billingRouter from "./billing";
 import tenantsRouter from "./tenants";
 import appointmentsRouter from "./appointments";
 import reportsRouter from "./reports";
+import actionsRouter from "./actions";
 
 const router: IRouter = Router();
 
@@ -62,6 +63,7 @@ localRouter.use(shopperRouter);
 localRouter.use(rotationRouter);
 localRouter.use(appointmentsRouter);
 localRouter.use(reportsRouter);
+localRouter.use(actionsRouter);
 
 router.use(localRouter);
 

@@ -57,6 +57,12 @@ import {
   Store,
   Syringe,
   CircleDot,
+  Zap,
+  Volume2,
+  Lightbulb,
+  History,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 
 import {
@@ -102,7 +108,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "settings";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "settings" | "devices";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -131,6 +137,7 @@ export function AdminView() {
           <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
           <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
           <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
+          <NavButton active={activeTab === "devices"} onClick={() => setActiveTab("devices")} icon={<Zap size={18} />} label="Devices" />
           <NavButton active={activeTab === "inventory"} onClick={() => setActiveTab("inventory")} icon={<Package size={18} />} label="Inventory" />
           <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
           <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
@@ -154,6 +161,7 @@ export function AdminView() {
           {activeTab === "haldol" && <HaldolTab />}
           {activeTab === "health" && <HealthIntelligenceTab />}
           {activeTab === "shopper" && <ShopperTab />}
+          {activeTab === "devices" && <DevicesTab />}
           {activeTab === "inventory" && <InventoryTab />}
           {activeTab === "rotation" && <RotationTab />}
           {activeTab === "calendar-sync" && <CalendarSyncTab />}
@@ -2903,6 +2911,212 @@ function InventoryTab() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function DevicesTab() {
+  const [devices, setDevices] = useState<any[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(true);
+  const [toggling, setToggling] = useState<Set<string>>(new Set());
+  const [actionLogs, setActionLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [logTypeFilter, setLogTypeFilter] = useState<string>("");
+
+  const fetchDevices = async () => {
+    setDevicesLoading(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/smarthome/devices`);
+      if (res.ok) setDevices(await res.json());
+    } catch {} finally {
+      setDevicesLoading(false);
+    }
+  };
+
+  const fetchLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const url = logTypeFilter
+        ? `${WORKSPACE_BASE}/api/actions/log?limit=50&type=${encodeURIComponent(logTypeFilter)}`
+        : `${WORKSPACE_BASE}/api/actions/log?limit=50`;
+      const res = await fetch(url);
+      if (res.ok) setActionLogs(await res.json());
+    } catch {} finally {
+      setLogsLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchDevices(); fetchLogs(); }, []);
+  useEffect(() => { fetchLogs(); }, [logTypeFilter]);
+
+  const toggleDevice = async (deviceKey: string, currentIsOn: boolean) => {
+    setDevices((prev) => prev.map((d) => d.deviceKey === deviceKey ? { ...d, isOn: !currentIsOn } : d));
+    setToggling((prev) => new Set([...prev, deviceKey]));
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/smarthome/devices/${deviceKey}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isOn: !currentIsOn }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      fetchLogs();
+    } catch {
+      setDevices((prev) => prev.map((d) => d.deviceKey === deviceKey ? { ...d, isOn: currentIsOn } : d));
+    } finally {
+      setToggling((prev) => { const next = new Set(prev); next.delete(deviceKey); return next; });
+    }
+  };
+
+  const getDeviceIcon = (deviceKey: string, type: string) => {
+    if (type === "light" || deviceKey.includes("light")) return <Lightbulb size={22} />;
+    if (type === "echo" || deviceKey.includes("echo")) return <Zap size={22} />;
+    if (type === "sonos" || deviceKey.includes("sonos")) return <Volume2 size={22} />;
+    return <CircleDot size={22} />;
+  };
+
+  const LOG_TYPE_OPTIONS = [
+    "", "QUICK_ACTION", "TOGGLE_SMART_DEVICE", "ADD_EVENT", "ADD_TASK",
+    "GROCERY_ORDER", "ADD_MEAL_TO_CART", "APPROVE_CART", "CANCEL_CART",
+    "SCHEDULE_APPOINTMENT", "MED_CONFIRMED", "MED_REFUSED", "WELLBEING_ALERT", "COMMAND",
+  ];
+  const LOG_TYPE_LABELS: Record<string, string> = {
+    "": "All Types", QUICK_ACTION: "Quick Action", TOGGLE_SMART_DEVICE: "Device Toggle",
+    ADD_EVENT: "Event Added", ADD_TASK: "Task Added", GROCERY_ORDER: "Grocery Order",
+    ADD_MEAL_TO_CART: "Meal Added", APPROVE_CART: "Cart Approved", CANCEL_CART: "Cart Cancelled",
+    SCHEDULE_APPOINTMENT: "Appointment", MED_CONFIRMED: "Med Confirmed", MED_REFUSED: "Med Refused",
+    WELLBEING_ALERT: "Wellbeing Alert", COMMAND: "Command",
+  };
+
+  return (
+    <div className="space-y-8">
+      <header className="border-b border-border/50 pb-4">
+        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Devices</h2>
+        <p className="text-muted-foreground text-sm mt-1">Smart home control grid and Jessica action dispatch history.</p>
+      </header>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-display text-muted-foreground uppercase tracking-widest">Smart Home Grid</h3>
+          <button
+            onClick={fetchDevices}
+            disabled={devicesLoading}
+            className="flex items-center gap-1.5 text-xs font-display uppercase tracking-widest text-muted-foreground hover:text-foreground disabled:opacity-40"
+          >
+            <RefreshCw size={12} className={devicesLoading ? "animate-spin" : ""} /> Refresh
+          </button>
+        </div>
+        {devicesLoading ? (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm italic">
+            <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /> Loading devices…
+          </div>
+        ) : devices.length === 0 ? (
+          <p className="text-muted-foreground italic text-sm">No devices found. Devices are auto-seeded on first API call.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {devices.map((device) => {
+              const isToggling = toggling.has(device.deviceKey);
+              return (
+                <button
+                  key={device.deviceKey}
+                  onClick={() => !isToggling && toggleDevice(device.deviceKey, device.isOn)}
+                  disabled={isToggling}
+                  className={`relative flex flex-col items-center justify-center gap-2 p-4 rounded-sm border text-center transition-all duration-150 ${
+                    device.isOn
+                      ? "bg-primary/10 border-primary/40 text-primary shadow-[0_0_16px_rgba(70,159,104,0.1)]"
+                      : "bg-secondary/40 border-border text-muted-foreground"
+                  } hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait`}
+                >
+                  <div className={device.isOn ? "text-primary" : "text-muted-foreground/50"}>
+                    {getDeviceIcon(device.deviceKey, device.type)}
+                  </div>
+                  <div>
+                    <p className="text-xs font-display uppercase tracking-widest leading-tight">{device.name}</p>
+                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">{device.room}</p>
+                  </div>
+                  <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest ${device.isOn ? "text-primary" : "text-muted-foreground/40"}`}>
+                    {device.isOn ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                    {device.isOn ? "On" : "Off"}
+                  </div>
+                  {device.volume !== null && device.volume !== undefined && (
+                    <p className="text-[9px] text-muted-foreground/40 font-display uppercase tracking-widest">Vol {device.volume}</p>
+                  )}
+                  {isToggling && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/60 rounded-sm">
+                      <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-sm font-display text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+            <History size={14} /> Action History <span className="text-muted-foreground/40 font-normal normal-case tracking-normal">— last 50</span>
+          </h3>
+          <div className="flex items-center gap-2">
+            <select
+              value={logTypeFilter}
+              onChange={(e) => setLogTypeFilter(e.target.value)}
+              className="text-xs font-display uppercase tracking-widest border border-border rounded-sm px-2 py-1 bg-background text-muted-foreground focus:outline-none"
+            >
+              {LOG_TYPE_OPTIONS.map((t) => (
+                <option key={t} value={t}>{LOG_TYPE_LABELS[t] ?? t}</option>
+              ))}
+            </select>
+            <button
+              onClick={fetchLogs}
+              disabled={logsLoading}
+              className="flex items-center gap-1 text-xs font-display uppercase tracking-widest text-muted-foreground hover:text-foreground disabled:opacity-40"
+            >
+              <RefreshCw size={12} className={logsLoading ? "animate-spin" : ""} />
+            </button>
+          </div>
+        </div>
+        {logsLoading ? (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm italic">
+            <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /> Loading…
+          </div>
+        ) : actionLogs.length === 0 ? (
+          <p className="text-muted-foreground italic text-sm">
+            No dispatches recorded yet. Actions appear here when Jessica or Quick Actions send commands.
+          </p>
+        ) : (
+          <div className="border border-border rounded-sm overflow-hidden">
+            <div className="grid grid-cols-[auto_1fr_auto] gap-x-4 px-4 py-2 bg-secondary/40 text-xs font-display uppercase tracking-widest text-muted-foreground border-b border-border/50">
+              <span>Time</span><span>Action</span><span>Status</span>
+            </div>
+            <div className="divide-y divide-border/30 max-h-96 overflow-y-auto">
+              {actionLogs.map((log) => (
+                <div key={log.id} className="grid grid-cols-[auto_1fr_auto] gap-x-4 px-4 py-2.5 text-xs hover:bg-secondary/20 items-center">
+                  <span className="text-muted-foreground/70 font-display whitespace-nowrap tabular-nums">
+                    {format(new Date(log.createdAt), "MMM d HH:mm")}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="font-display uppercase tracking-widest text-foreground/80 text-[11px]">
+                      {(LOG_TYPE_LABELS[log.type] ?? log.type.replace(/_/g, " "))}
+                    </span>
+                    {log.payload?.device && (
+                      <span className="ml-1.5 text-muted-foreground/50 text-[10px]">
+                        · {String(log.payload.device).replace(/_/g, " ")}
+                      </span>
+                    )}
+                    {log.payload?.label && (
+                      <span className="ml-1.5 text-muted-foreground/50 text-[10px]">· {log.payload.label}</span>
+                    )}
+                  </div>
+                  <span className={`font-display text-[10px] uppercase tracking-widest whitespace-nowrap ${log.result?.ok === false ? "text-destructive" : "text-success"}`}>
+                    {log.result?.ok === false ? "✕ err" : "✓ ok"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -290,3 +290,15 @@ export const cartFulfillmentsTable = pgTable("cart_fulfillments", {
 });
 
 export type CartFulfillment = typeof cartFulfillmentsTable.$inferSelect;
+
+export const actionLogsTable = pgTable("action_logs", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull(),
+  payload: text("payload").notNull().default("{}"),
+  result: text("result").notNull().default("{}"),
+  conversationId: integer("conversation_id"),
+  dispatchedBy: text("dispatched_by").notNull().default("jessica"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type ActionLog = typeof actionLogsTable.$inferSelect;

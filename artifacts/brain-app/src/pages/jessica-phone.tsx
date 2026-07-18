@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Send, Trash2, Zap, ChevronRight, Camera, ChevronDown, X, CheckCircle, AlertCircle } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Send, Trash2, Zap, ChevronRight, Camera, ChevronDown, ChevronUp, X, CheckCircle, AlertCircle, Calendar, ShoppingCart, Lightbulb, Music } from "lucide-react";
 import { format } from "date-fns";
 import { useGetAiModel, getGetAiModelQueryKey, useGetAppState, getGetAppStateQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
@@ -134,6 +134,7 @@ export function JessicaPhone() {
     items: Array<{ itemName: string; priceCents: number; quantity: number; status: string }>;
   } | null>(null);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const visionInputRef = useRef<HTMLInputElement>(null);
@@ -533,29 +534,61 @@ export function JessicaPhone() {
           setMessages((prev) => [...prev, confirmMsg]);
           speak(`Got it — appointment with ${apt.provider} on ${apt.appointmentDate} has been logged.`);
         }
+        // Fire-and-forget action log for every successful dispatch
+        fetch(`${BASE_URL}/api/actions/log`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: action.type, payload: action.payload, result: { ok: true }, conversationId, dispatchedBy: mode }),
+        }).catch(() => {});
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setActionStream((prev) =>
           prev.map((a, idx) => (idx === prev.length - 1 ? { ...a, error: msg } : a))
         );
         toast({ title: "Action dispatch failed", description: `${action.type}: ${msg}`, variant: "destructive" });
+        // Log failed dispatch
+        fetch(`${BASE_URL}/api/actions/log`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: action.type, payload: action.payload, result: { ok: false, error: msg }, conversationId, dispatchedBy: mode }),
+        }).catch(() => {});
       }
     }
   };
 
-  const ACTION_TYPE_COLORS: Record<string, string> = {
-    ADD_EVENT: "text-primary border-primary/30",
-    TOGGLE_SMART_DEVICE: "text-primary border-primary/30",
-    ADD_TASK: "text-success border-success/30",
-    MED_CONFIRMED: "text-success border-success/30",
-    MED_REFUSED: "text-destructive border-destructive/30",
-    WELLBEING_ALERT: "text-accent border-accent/30",
-    GROCERY_ORDER: "text-warning border-warning/30",
-    ADD_MEAL_TO_CART: "text-warning border-warning/30",
-    APPROVE_CART: "text-success border-success/30",
-    CANCEL_CART: "text-destructive border-destructive/30",
-    SCHEDULE_APPOINTMENT: "text-primary border-primary/30",
-    COMMAND: "text-muted-foreground border-border",
+  const ACTION_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+    ADD_EVENT: { label: "Event Added", icon: <Calendar size={10} />, color: "text-primary border-primary/30" },
+    ADD_TASK: { label: "Task Added", icon: <CheckCircle size={10} />, color: "text-success border-success/30" },
+    TOGGLE_SMART_DEVICE: { label: "Device", icon: <Zap size={10} />, color: "text-primary border-primary/30" },
+    GROCERY_ORDER: { label: "Grocery Order", icon: <ShoppingCart size={10} />, color: "text-accent border-accent/30" },
+    ADD_MEAL_TO_CART: { label: "Meal Added", icon: <ShoppingCart size={10} />, color: "text-accent border-accent/30" },
+    APPROVE_CART: { label: "Cart Approved", icon: <CheckCircle size={10} />, color: "text-success border-success/30" },
+    CANCEL_CART: { label: "Cart Cancelled", icon: <X size={10} />, color: "text-destructive border-destructive/30" },
+    MED_CONFIRMED: { label: "Med Confirmed", icon: <CheckCircle size={10} />, color: "text-success border-success/30" },
+    MED_REFUSED: { label: "Med Refused", icon: <AlertCircle size={10} />, color: "text-destructive border-destructive/30" },
+    WELLBEING_ALERT: { label: "Wellbeing Alert", icon: <AlertCircle size={10} />, color: "text-accent border-accent/30" },
+    SCHEDULE_APPOINTMENT: { label: "Appointment", icon: <Calendar size={10} />, color: "text-primary border-primary/30" },
+    QUICK_ACTION: { label: "Quick Action", icon: <Zap size={10} />, color: "text-primary border-primary/30" },
+    COMMAND: { label: "Command", icon: <ChevronRight size={10} />, color: "text-muted-foreground border-border" },
+  };
+
+  const runQuickAction = async (deviceKey: string, update: Record<string, unknown>, label: string) => {
+    try {
+      await fetch(`${BASE_URL}/api/smarthome/devices/${deviceKey}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(update),
+      });
+      fetch(`${BASE_URL}/api/actions/log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "QUICK_ACTION", payload: { device: deviceKey, ...update, label }, result: { ok: true }, conversationId, dispatchedBy: mode }),
+      }).catch(() => {});
+      setActionStream((prev) => [...prev, { type: "QUICK_ACTION", payload: { device: deviceKey, label }, raw: label }]);
+      toast({ title: label });
+    } catch {
+      toast({ title: "Quick action failed", variant: "destructive" });
+    }
   };
 
   const handleVisionIntake = (file: File) => {
@@ -875,17 +908,32 @@ export function JessicaPhone() {
             </button>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {actionStream.map((action, i) => (
-              <div
-                key={i}
-                title={action.error ?? action.type}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-sm border text-xs font-display ${action.error ? "text-destructive border-destructive/40 line-through opacity-60" : (ACTION_TYPE_COLORS[action.type] ?? ACTION_TYPE_COLORS.COMMAND)}`}
-              >
-                <ChevronRight size={10} />
-                {action.type}
-                {action.error && <span className="ml-1 text-[9px] opacity-70">✕</span>}
-              </div>
-            ))}
+            {(() => {
+              const grouped: Array<{ type: string; count: number; error?: string }> = [];
+              for (const action of actionStream) {
+                const last = grouped[grouped.length - 1];
+                if (last && last.type === action.type && !last.error && !action.error) {
+                  last.count++;
+                } else {
+                  grouped.push({ type: action.type, count: 1, error: action.error });
+                }
+              }
+              return grouped.map((item, i) => {
+                const meta = ACTION_META[item.type] ?? ACTION_META.COMMAND;
+                return (
+                  <div
+                    key={i}
+                    title={item.error ?? item.type}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-sm border text-xs font-display ${item.error ? "text-destructive border-destructive/40 line-through opacity-60" : meta.color}`}
+                  >
+                    {meta.icon}
+                    <span>{meta.label}</span>
+                    {item.count > 1 && <span className="ml-0.5 font-bold text-[9px] opacity-70">×{item.count}</span>}
+                    {item.error && <span className="ml-1 text-[9px] opacity-70">✕</span>}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
       )}
@@ -1081,6 +1129,41 @@ export function JessicaPhone() {
       )}
 
       <div className="bg-card border-t border-border shrink-0">
+        {mode !== "pops" && (
+          <div className="border-b border-border/30">
+            <button
+              onClick={() => setQuickActionsOpen((v) => !v)}
+              className="w-full flex items-center gap-2 px-4 sm:px-6 py-2 text-xs font-display uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Zap size={12} className="text-primary/60" />
+              Quick Actions
+              {quickActionsOpen ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />}
+            </button>
+            {quickActionsOpen && (
+              <div className="px-4 sm:px-6 pb-3 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {([
+                  { label: "LR Light On",    icon: <Lightbulb size={11} />, fn: () => runQuickAction("living_room_light", { isOn: true },   "Living Room Light On") },
+                  { label: "LR Light Off",   icon: <Lightbulb size={11} />, fn: () => runQuickAction("living_room_light", { isOn: false },  "Living Room Light Off") },
+                  { label: "Porch Light",    icon: <Lightbulb size={11} />, fn: () => runQuickAction("porch_light",       { isOn: true },   "Porch Light On") },
+                  { label: "Kitchen Light",  icon: <Lightbulb size={11} />, fn: () => runQuickAction("kitchen_light",     { isOn: true },   "Kitchen Light On") },
+                  { label: "Mute Sonos",     icon: <VolumeX size={11} />,   fn: () => runQuickAction("sonos_living",      { volume: 0 },    "Mute Sonos") },
+                  { label: "Calm Music",     icon: <Music size={11} />,     fn: () => runQuickAction("sonos_living",      { isOn: true, volume: 20 }, "Play Calm Music") },
+                  { label: "Echo Off",       icon: <Volume2 size={11} />,   fn: () => runQuickAction("living_room_echo",  { isOn: false },  "Living Room Echo Off") },
+                  { label: "All Lights Off", icon: <Zap size={11} />,       fn: async () => { for (const k of ["living_room_light","kitchen_light","porch_light"]) await runQuickAction(k,{isOn:false},`${k.replace(/_/g," ")} Off`); } },
+                ] as Array<{ label: string; icon: React.ReactNode; fn: () => void }>).map((qa) => (
+                  <button
+                    key={qa.label}
+                    onClick={qa.fn}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-display uppercase tracking-wide rounded-sm border border-border/40 text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
+                  >
+                    {qa.icon}
+                    {qa.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {mode !== "pops" && (
           <div className="px-4 sm:px-6 pt-3 pb-1 flex flex-wrap gap-1.5">
             {SPEECH_PRESETS_RAY.map((preset) => (
