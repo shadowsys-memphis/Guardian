@@ -574,11 +574,12 @@ export function JessicaPhone() {
 
   const runQuickAction = async (deviceKey: string, update: Record<string, unknown>, label: string) => {
     try {
-      await fetch(`${BASE_URL}/api/smarthome/devices/${deviceKey}`, {
+      const res = await fetch(`${BASE_URL}/api/smarthome/devices/${deviceKey}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(update),
       });
+      if (!res.ok) throw new Error(`Device update failed (${res.status})`);
       fetch(`${BASE_URL}/api/actions/log`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -586,8 +587,43 @@ export function JessicaPhone() {
       }).catch(() => {});
       setActionStream((prev) => [...prev, { type: "QUICK_ACTION", payload: { device: deviceKey, label }, raw: label }]);
       toast({ title: label });
-    } catch {
-      toast({ title: "Quick action failed", variant: "destructive" });
+    } catch (err) {
+      fetch(`${BASE_URL}/api/actions/log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "QUICK_ACTION", payload: { device: deviceKey, label }, result: { ok: false, error: String(err) }, conversationId, dispatchedBy: mode }),
+      }).catch(() => {});
+      toast({ title: "Quick action failed", description: label, variant: "destructive" });
+    }
+  };
+
+  const setQuietMode = async () => {
+    try {
+      const now = new Date();
+      const padT = (n: number) => String(n).padStart(2, "0");
+      const start = `${padT(now.getHours())}:${padT(now.getMinutes())}`;
+      const endDate = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+      const end = `${padT(endDate.getHours())}:${padT(endDate.getMinutes())}`;
+      const res = await fetch(`${BASE_URL}/api/health-assessment/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quietWindowStart: start, quietWindowEnd: end }),
+      });
+      if (!res.ok) throw new Error(`Settings update failed (${res.status})`);
+      fetch(`${BASE_URL}/api/actions/log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "QUICK_ACTION", payload: { label: "Set Quiet Mode", until: end }, result: { ok: true }, conversationId, dispatchedBy: mode }),
+      }).catch(() => {});
+      setActionStream((prev) => [...prev, { type: "QUICK_ACTION", payload: { label: "Set Quiet Mode" }, raw: "Set Quiet Mode" }]);
+      toast({ title: "Quiet mode set", description: `Jessica quiet until ${end}` });
+    } catch (err) {
+      fetch(`${BASE_URL}/api/actions/log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "QUICK_ACTION", payload: { label: "Set Quiet Mode" }, result: { ok: false, error: String(err) }, conversationId, dispatchedBy: mode }),
+      }).catch(() => {});
+      toast({ title: "Could not set quiet mode", variant: "destructive" });
     }
   };
 
@@ -1148,7 +1184,7 @@ export function JessicaPhone() {
                   { label: "Kitchen Light",  icon: <Lightbulb size={11} />, fn: () => runQuickAction("kitchen_light",     { isOn: true },   "Kitchen Light On") },
                   { label: "Mute Sonos",     icon: <VolumeX size={11} />,   fn: () => runQuickAction("sonos_living",      { volume: 0 },    "Mute Sonos") },
                   { label: "Calm Music",     icon: <Music size={11} />,     fn: () => runQuickAction("sonos_living",      { isOn: true, volume: 20 }, "Play Calm Music") },
-                  { label: "Echo Off",       icon: <Volume2 size={11} />,   fn: () => runQuickAction("living_room_echo",  { isOn: false },  "Living Room Echo Off") },
+                  { label: "Set Quiet Mode", icon: <VolumeX size={11} />,   fn: () => setQuietMode() },
                   { label: "All Lights Off", icon: <Zap size={11} />,       fn: async () => { for (const k of ["living_room_light","kitchen_light","porch_light"]) await runQuickAction(k,{isOn:false},`${k.replace(/_/g," ")} Off`); } },
                 ] as Array<{ label: string; icon: React.ReactNode; fn: () => void }>).map((qa) => (
                   <button
