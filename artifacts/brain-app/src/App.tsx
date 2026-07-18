@@ -1,21 +1,41 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { PopsView } from "@/pages/pops-view";
-import { AdminView } from "@/pages/admin-view";
-import { JessicaView } from "@/pages/jessica-view";
-import { JessicaPhone } from "@/pages/jessica-phone";
-import { ShopperView } from "@/pages/shopper-view";
-import { DoctorReport } from "@/pages/doctor-report";
 import { GuardianPage } from "@/pages/guardian";
 import { GuardianSuccessPage } from "@/pages/guardian-success";
-import { MySubscriptionPage } from "@/pages/my-subscription";
 import { VaultGate } from "@/pages/vault-gate";
-import { SettingsView } from "@/pages/settings-view";
 import { VaultProvider, useVault } from "@/lib/vault-context";
 import { Home, Phone, ShoppingCart, ShieldAlert, CreditCard } from "lucide-react";
+
+const PopsView = lazy(() =>
+  import("@/pages/pops-view").then((m) => ({ default: m.PopsView }))
+);
+const AdminView = lazy(() =>
+  import("@/pages/admin-view").then((m) => ({ default: m.AdminView }))
+);
+const JessicaView = lazy(() =>
+  import("@/pages/jessica-view").then((m) => ({ default: m.JessicaView }))
+);
+const JessicaPhone = lazy(() =>
+  import("@/pages/jessica-phone").then((m) => ({ default: m.JessicaPhone }))
+);
+const ShopperView = lazy(() =>
+  import("@/pages/shopper-view").then((m) => ({ default: m.ShopperView }))
+);
+const DoctorReport = lazy(() =>
+  import("@/pages/doctor-report").then((m) => ({ default: m.DoctorReport }))
+);
+const MySubscriptionPage = lazy(() =>
+  import("@/pages/my-subscription").then((m) => ({
+    default: m.MySubscriptionPage,
+  }))
+);
+const SettingsView = lazy(() =>
+  import("@/pages/settings-view").then((m) => ({ default: m.SettingsView }))
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,20 +87,22 @@ function PrivateWorkspace() {
 
   return (
     <div className="pb-16">
-      <Switch>
-        <Route path="/">
-          <Redirect to="/pops" />
-        </Route>
-        <Route path="/pops" component={PopsView} />
-        <Route path="/jessica" component={JessicaPhone} />
-        <Route path="/shopper" component={ShopperView} />
-        <Route path="/admin" component={AdminView} />
-        <Route path="/admin/report" component={DoctorReport} />
-        <Route path="/scripts" component={JessicaView} />
-        <Route path="/my-subscription" component={MySubscriptionPage} />
-        <Route path="/settings" component={SettingsView} />
-        <Route component={NotFound} />
-      </Switch>
+      <Suspense fallback={null}>
+        <Switch>
+          <Route path="/">
+            <Redirect to="/pops" />
+          </Route>
+          <Route path="/pops" component={PopsView} />
+          <Route path="/jessica" component={JessicaPhone} />
+          <Route path="/shopper" component={ShopperView} />
+          <Route path="/admin" component={AdminView} />
+          <Route path="/admin/report" component={DoctorReport} />
+          <Route path="/scripts" component={JessicaView} />
+          <Route path="/my-subscription" component={MySubscriptionPage} />
+          <Route path="/settings" component={SettingsView} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
       <BottomNav />
     </div>
   );
