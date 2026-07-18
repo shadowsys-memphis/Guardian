@@ -122,6 +122,16 @@ export function JessicaPhone() {
     summary: string;
   } | null>(null);
   const [visionCommitted, setVisionCommitted] = useState<Set<string>>(new Set());
+  const [fulfillmentResult, setFulfillmentResult] = useState<{
+    store: string;
+    checkoutUrl: string;
+    totalEstimatedCents: number;
+    budgetCents: number;
+    overBudgetCount: number;
+    status: string;
+    items: Array<{ itemName: string; priceCents: number; quantity: number; status: string }>;
+  } | null>(null);
+  const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const visionInputRef = useRef<HTMLInputElement>(null);
@@ -262,6 +272,8 @@ export function JessicaPhone() {
       setActionStream([]);
       setHealthDataCount(0);
       setAwaitingCartApproval(false);
+      setFulfillmentResult(null);
+      setFulfillmentLoading(false);
     }, 2000);
   };
 
@@ -419,7 +431,11 @@ export function JessicaPhone() {
             summary = "The cart is empty right now — no meals loaded for this week. Tell me which meals you want and I'll add them, or say 'add the standard meals' to load all five.";
           } else {
             const mealList = meals.map((m: any) => m.name).join(", ");
-            summary = `Cart's ready — ${meals.length} meal${meals.length !== 1 ? "s" : ""}: ${mealList}. That's ${items.length} item${items.length !== 1 ? "s" : ""}, estimated $${total.toFixed(2)} of a $${budget.toFixed(2)} budget. Say "commit" to lock it in or "cancel" to dismiss.`;
+            if (mode === "pops") {
+              summary = "I've put the list together and let Ray know — he'll take it from here.";
+            } else {
+              summary = `Cart's ready — ${meals.length} meal${meals.length !== 1 ? "s" : ""}: ${mealList}. That's ${items.length} item${items.length !== 1 ? "s" : ""}, estimated $${total.toFixed(2)} of a $${budget.toFixed(2)} budget. Say "commit" to lock it in or "cancel" to dismiss.`;
+            }
           }
           const cartMsg: Message = {
             id: `cart-summary-${Date.now()}`,
@@ -429,7 +445,17 @@ export function JessicaPhone() {
           };
           setMessages((prev) => [...prev, cartMsg]);
           speak(summary);
-          if (meals.length > 0) setAwaitingCartApproval(true);
+          if (meals.length > 0 && mode !== "pops") setAwaitingCartApproval(true);
+          if (meals.length > 0) {
+            setFulfillmentLoading(true);
+            fetch(`${BASE_URL}/api/shopper/fulfill`, { method: "POST" })
+              .then((r) => r.json())
+              .then((data) => {
+                if (data && !data.error) setFulfillmentResult(data);
+              })
+              .catch(() => {})
+              .finally(() => setFulfillmentLoading(false));
+          }
 
         } else if (action.type === "ADD_MEAL_TO_CART") {
           const mealName = (action.payload as any).mealName as string;
@@ -764,6 +790,40 @@ export function JessicaPhone() {
           <button onClick={() => setDeviceCommandResult(null)} className="ml-auto text-muted-foreground hover:text-foreground">
             <Trash2 size={14} />
           </button>
+        </div>
+      )}
+
+      {(fulfillmentLoading || fulfillmentResult) && (
+        <div className="bg-primary/5 border-b border-primary/20 px-6 py-3 shrink-0">
+          {fulfillmentLoading && (
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-primary/60 animate-pulse" />
+              <p className="text-xs font-display text-primary uppercase tracking-widest">Agent building cart…</p>
+            </div>
+          )}
+          {!fulfillmentLoading && fulfillmentResult && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-display text-primary uppercase tracking-widest">
+                  {fulfillmentResult.store === "stater_bros" ? "Instacart" : "Walmart"} Cart Ready
+                </p>
+                <span className="text-xs text-muted-foreground">
+                  ${(fulfillmentResult.totalEstimatedCents / 100).toFixed(2)} est.
+                  {fulfillmentResult.overBudgetCount > 0 && (
+                    <span className="text-accent ml-1">· {fulfillmentResult.overBudgetCount} over budget</span>
+                  )}
+                </span>
+              </div>
+              <a
+                href={fulfillmentResult.checkoutUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-sm font-display text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors"
+              >
+                Open {fulfillmentResult.store === "stater_bros" ? "Instacart" : "Walmart"} Cart →
+              </a>
+            </div>
+          )}
         </div>
       )}
 

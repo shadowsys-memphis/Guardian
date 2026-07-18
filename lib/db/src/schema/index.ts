@@ -274,3 +274,17 @@ export type MedicalAppointment = typeof medicalAppointmentsTable.$inferSelect;
 export type MedicationAdjustment = typeof medicationAdjustmentsTable.$inferSelect;
 export type InsertMedicalAppointment = z.infer<typeof insertMedicalAppointmentSchema>;
 export type InsertMedicationAdjustment = z.infer<typeof insertMedicationAdjustmentSchema>;
+
+export const cartFulfillmentsTable = pgTable("cart_fulfillments", {
+  id: serial("id").primaryKey(),
+  cartId: integer("cart_id").notNull(),
+  store: text("store").notNull().default("walmart"),
+  checkoutUrl: text("checkout_url"),
+  totalEstimatedCents: integer("total_estimated_cents").notNull().default(0),
+  itemsJson: text("items_json").notNull().default("[]"),
+  overBudgetCount: integer("over_budget_count").notNull().default(0),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type CartFulfillment = typeof cartFulfillmentsTable.$inferSelect;

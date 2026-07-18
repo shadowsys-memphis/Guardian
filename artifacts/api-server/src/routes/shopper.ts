@@ -7,6 +7,8 @@ import {
   cartMealsTable,
   cartItemsTable,
   mealCravingsTable,
+  cartFulfillmentsTable,
+  appSettingsTable,
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -494,6 +496,247 @@ router.post("/shopper/cart/reset", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to reset cart");
     res.status(500).json({ error: "Failed to reset cart" });
+  }
+});
+
+async function ensureFulfillmentMigrated() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS cart_fulfillments (
+      id SERIAL PRIMARY KEY,
+      cart_id INTEGER NOT NULL,
+      store TEXT NOT NULL DEFAULT 'walmart',
+      checkout_url TEXT,
+      total_estimated_cents INTEGER NOT NULL DEFAULT 0,
+      items_json TEXT NOT NULL DEFAULT '[]',
+      over_budget_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+interface FulfillmentItem {
+  itemName: string;
+  productId: string;
+  priceCents: number;
+  quantity: number;
+  status: "found" | "over_budget" | "not_found";
+}
+
+async function runFulfillmentLoop(
+  items: Array<{ ingredientName: string; totalQuantity: string; unit: string; estimatedCostCents: number }>,
+  store: string,
+  zip: string,
+  budgetCents: number
+): Promise<{
+  items: FulfillmentItem[];
+  totalEstimatedCents: number;
+  overBudgetCount: number;
+  checkoutUrl: string;
+  store: string;
+  status: string;
+}> {
+  const cartAccumulator: FulfillmentItem[] = [];
+  let runningTotalCents = 0;
+
+  const toolDefinitions = [{
+    functionDeclarations: [
+      {
+        name: "search_local_inventory",
+        description: "Search for a grocery item at a local store by item name and zip code. Returns product details and price.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            store: { type: "string" as const, description: "Store identifier: 'walmart' or 'stater_bros'" },
+            item_name: { type: "string" as const, description: "Name of the grocery item to search for" },
+            zip: { type: "string" as const, description: "Zip code for local store inventory lookup" },
+          },
+          required: ["store", "item_name", "zip"],
+        }
+      },
+      {
+        name: "add_to_cart",
+        description: "Add a product found by search_local_inventory to the fulfillment cart. Check budget before calling.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            store: { type: "string" as const, description: "Store identifier" },
+            product_id: { type: "string" as const, description: "Product ID returned from search" },
+            product_name: { type: "string" as const, description: "Product name" },
+            price_cents: { type: "number" as const, description: "Price in cents" },
+            quantity: { type: "number" as const, description: "Quantity to add (default 1)" },
+          },
+          required: ["store", "product_id", "product_name", "price_cents", "quantity"],
+        }
+      }
+    ]
+  }];
+
+  const itemsText = items.map((i) => `- ${i.ingredientName} (${i.totalQuantity} ${i.unit})`).join("\n");
+  const targetStore = store === "stater_bros" ? "stater_bros" : "walmart";
+
+  const initialPrompt = `You are a grocery fulfillment agent. For each item in the shopping list, call search_local_inventory then add_to_cart. Use store="${targetStore}" and zip="${zip}". Total budget: $${(budgetCents / 100).toFixed(2)}. Skip items that would exceed the budget and note them as over_budget.
+
+Shopping list:
+${itemsText}
+
+Process every item in order.`;
+
+  let messages: Array<{ role: "user" | "model"; parts: any[] }> = [
+    { role: "user", parts: [{ text: initialPrompt }] }
+  ];
+
+  const MAX_ITERATIONS = items.length * 4 + 6;
+
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    let response: any;
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: messages,
+        config: { tools: toolDefinitions } as any,
+      });
+    } catch {
+      break;
+    }
+
+    const candidate = response?.candidates?.[0];
+    if (!candidate?.content) break;
+
+    const parts: any[] = candidate.content.parts ?? [];
+    const functionCalls = parts.filter((p: any) => p.functionCall);
+    if (functionCalls.length === 0) break;
+
+    messages.push({ role: "model", parts });
+
+    const functionResponses: any[] = [];
+    for (const part of parts) {
+      if (!part.functionCall) continue;
+      const { name, args } = part.functionCall as { name: string; args: Record<string, unknown> };
+      let result: Record<string, unknown>;
+
+      if (name === "search_local_inventory") {
+        const itemName = String(args.item_name ?? "");
+        const match = items.find((ci) =>
+          ci.ingredientName.toLowerCase().includes(itemName.toLowerCase().split(" ")[0]) ||
+          itemName.toLowerCase().includes(ci.ingredientName.toLowerCase().split(" ")[0])
+        );
+        const priceCents = match?.estimatedCostCents ?? 500;
+        result = {
+          found: true,
+          product_id: `${targetStore}_${itemName.replace(/\s+/g, "_").toLowerCase().slice(0, 40)}`,
+          product_name: itemName,
+          price_cents: priceCents,
+          in_stock: true,
+          store: targetStore,
+        };
+      } else if (name === "add_to_cart") {
+        const priceCents = Number(args.price_cents ?? 0);
+        const quantity = Number(args.quantity ?? 1);
+        const itemTotal = priceCents * quantity;
+        const wouldExceed = runningTotalCents + itemTotal > budgetCents;
+        if (wouldExceed && cartAccumulator.length > 0) {
+          cartAccumulator.push({
+            itemName: String(args.product_name ?? ""),
+            productId: String(args.product_id ?? ""),
+            priceCents,
+            quantity,
+            status: "over_budget",
+          });
+          result = { added: false, reason: "over_budget", budget_remaining_cents: budgetCents - runningTotalCents };
+        } else {
+          runningTotalCents += itemTotal;
+          cartAccumulator.push({
+            itemName: String(args.product_name ?? ""),
+            productId: String(args.product_id ?? ""),
+            priceCents,
+            quantity,
+            status: "found",
+          });
+          result = { added: true, running_total_cents: runningTotalCents, budget_remaining_cents: budgetCents - runningTotalCents };
+        }
+      } else {
+        result = { error: "unknown_function" };
+      }
+
+      functionResponses.push({ functionResponse: { name, response: result } });
+    }
+
+    messages.push({ role: "user", parts: functionResponses });
+  }
+
+  const checkoutUrl = targetStore === "stater_bros"
+    ? "https://www.instacart.com/store/stater-brothers-markets/storefront"
+    : zip
+      ? `https://www.walmart.com/grocery?zip=${encodeURIComponent(zip)}`
+      : "https://www.walmart.com/grocery";
+
+  const overBudgetCount = cartAccumulator.filter((i) => i.status === "over_budget").length;
+
+  return {
+    items: cartAccumulator,
+    totalEstimatedCents: runningTotalCents,
+    overBudgetCount,
+    checkoutUrl,
+    store: targetStore,
+    status: cartAccumulator.length > 0 ? "ready" : "empty",
+  };
+}
+
+// POST /shopper/fulfill — run agentic fulfillment loop for current cart
+router.post("/shopper/fulfill", async (req, res) => {
+  try {
+    await ensureMealsSeeded();
+    await ensureFulfillmentMigrated();
+
+    const cart = await getOrCreateCart();
+    const cartItems = await db.select().from(cartItemsTable).where(eq(cartItemsTable.cartId, cart.id));
+
+    if (cartItems.length === 0) {
+      return res.status(400).json({ error: "Cart is empty — add meals first" });
+    }
+
+    const [storeRow, zipRow] = await Promise.all([
+      db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "preferred_store")).limit(1),
+      db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "zip_code")).limit(1),
+    ]);
+    const store = storeRow[0]?.value ?? "walmart";
+    const zip = zipRow[0]?.value ?? "";
+    const budgetCents = cart.budgetCents ?? 15000;
+
+    const result = await runFulfillmentLoop(cartItems, store, zip, budgetCents);
+
+    await db.execute(sql`
+      INSERT INTO cart_fulfillments (cart_id, store, checkout_url, total_estimated_cents, items_json, over_budget_count, status)
+      VALUES (${cart.id}, ${result.store}, ${result.checkoutUrl}, ${result.totalEstimatedCents}, ${JSON.stringify(result.items)}, ${result.overBudgetCount}, ${result.status})
+    `);
+
+    res.json({ ...result, budgetCents });
+  } catch (err) {
+    req.log.error({ err }, "Fulfillment failed");
+    res.status(500).json({ error: "Fulfillment agent failed — check Gemini API availability" });
+  }
+});
+
+// GET /shopper/fulfill/current — latest fulfillment for current week's cart
+router.get("/shopper/fulfill/current", async (req, res) => {
+  try {
+    await ensureFulfillmentMigrated();
+    const cart = await getOrCreateCart();
+    const rows = await db.select().from(cartFulfillmentsTable)
+      .where(eq(cartFulfillmentsTable.cartId, cart.id))
+      .orderBy(desc(cartFulfillmentsTable.createdAt))
+      .limit(1);
+    if (!rows[0]) return res.json(null);
+    const row = rows[0];
+    let items: FulfillmentItem[] = [];
+    try { items = JSON.parse(row.itemsJson ?? "[]"); } catch {}
+    const [storeRow] = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "preferred_store")).limit(1);
+    const budgetCents = cart.budgetCents ?? 15000;
+    res.json({ ...row, items, budgetCents, preferredStore: storeRow?.value ?? "walmart" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get fulfillment");
+    res.status(500).json({ error: "Failed to fetch fulfillment" });
   }
 });
 

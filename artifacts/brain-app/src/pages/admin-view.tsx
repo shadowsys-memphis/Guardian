@@ -1742,6 +1742,33 @@ export function ShopperTab() {
   const [urgentItems, setUrgentItems] = useState<Set<string>>(new Set());
   const [urgentPushingKey, setUrgentPushingKey] = useState<string | null>(null);
   const [expandedMeals, setExpandedMeals] = useState<Set<number>>(new Set());
+  const [fulfillment, setFulfillment] = useState<{
+    store: string;
+    checkoutUrl: string;
+    totalEstimatedCents: number;
+    budgetCents: number;
+    overBudgetCount: number;
+    status: string;
+    createdAt: string;
+    items: Array<{ itemName: string; priceCents: number; quantity: number; status: string }>;
+  } | null>(null);
+  const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
+  const [fulfillmentFetching, setFulfillmentFetching] = useState(true);
+
+  useEffect(() => {
+    const fetchFulfillment = async () => {
+      try {
+        const res = await fetch(`${WORKSPACE_BASE}/api/shopper/fulfill/current`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data) setFulfillment(data);
+        }
+      } catch {} finally {
+        setFulfillmentFetching(false);
+      }
+    };
+    fetchFulfillment();
+  }, []);
 
   const toggleMealExpand = (id: number) =>
     setExpandedMeals((prev) => {
@@ -2038,6 +2065,96 @@ export function ShopperTab() {
           </div>
           {cartStatus === "dismissed" && (
             <p className="text-xs text-muted-foreground/60 mt-3 text-center italic">This cart was dismissed. Start fresh to begin a new order.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Fulfillment Panel */}
+      <Card className="border-border/40">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+              <ShoppingCart size={16} /> Agentic Fulfillment
+            </CardTitle>
+            <button
+              onClick={async () => {
+                setFulfillmentLoading(true);
+                try {
+                  const res = await fetch(`${WORKSPACE_BASE}/api/shopper/fulfill`, { method: "POST" });
+                  const data = await res.json();
+                  if (data && !data.error) {
+                    setFulfillment(data);
+                    toast({ title: "Fulfillment complete", description: `${data.items?.length ?? 0} items queued for ${data.store === "stater_bros" ? "Instacart" : "Walmart"}.` });
+                  } else {
+                    toast({ title: "Fulfillment failed", description: data.error ?? "Unknown error", variant: "destructive" });
+                  }
+                } catch {
+                  toast({ title: "Fulfillment failed", description: "Network error", variant: "destructive" });
+                } finally {
+                  setFulfillmentLoading(false);
+                }
+              }}
+              disabled={fulfillmentLoading}
+              className="px-4 py-1.5 bg-primary text-primary-foreground rounded-sm font-display text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {fulfillmentLoading ? "Running Agent…" : "Run Fulfillment"}
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {fulfillmentFetching ? (
+            <p className="text-xs text-muted-foreground italic">Loading…</p>
+          ) : !fulfillment ? (
+            <p className="text-xs text-muted-foreground italic">No fulfillment run yet — click "Run Fulfillment" or say "grocery order" to Jessica.</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    {fulfillment.store === "stater_bros" ? "Instacart / Stater Bros" : "Walmart Grocery"}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-sm text-xs font-bold uppercase ${fulfillment.status === "ready" ? "bg-success/10 border border-success/40 text-success" : "bg-muted border border-border text-muted-foreground"}`}>
+                    {fulfillment.status}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-foreground">${(fulfillment.totalEstimatedCents / 100).toFixed(2)}</span>
+                  <span className="text-xs text-muted-foreground ml-1">est.</span>
+                  {fulfillment.overBudgetCount > 0 && (
+                    <span className="ml-2 text-xs text-accent font-bold">{fulfillment.overBudgetCount} over budget</span>
+                  )}
+                </div>
+              </div>
+
+              {(fulfillment.items ?? []).length > 0 && (
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                  {(fulfillment.items ?? []).map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-border/20 last:border-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.status === "found" ? "bg-success" : item.status === "over_budget" ? "bg-accent" : "bg-muted-foreground/40"}`} />
+                        <span className={`${item.status === "over_budget" ? "text-muted-foreground/60 line-through" : "text-foreground"}`}>{item.itemName}</span>
+                        {item.status === "over_budget" && <span className="text-accent text-[10px] font-bold uppercase">over budget</span>}
+                      </div>
+                      <span className="text-muted-foreground shrink-0 ml-2">${(item.priceCents / 100).toFixed(2)} × {item.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {fulfillment.checkoutUrl && (
+                <a
+                  href={fulfillment.checkoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-sm font-display text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors"
+                >
+                  Open {fulfillment.store === "stater_bros" ? "Instacart" : "Walmart"} Cart →
+                </a>
+              )}
+              {fulfillment.createdAt && (
+                <p className="text-[10px] text-muted-foreground/50">Last run: {new Date(fulfillment.createdAt).toLocaleString()}</p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
