@@ -27,6 +27,22 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
       passphrase: z.string().min(1),
     }).parse(req.body);
 
+    // 0. Check local_passphrase_hash in DB (set via change-passphrase endpoint)
+    try {
+      const localHashResult = await pool.query(
+        `SELECT value FROM app_settings WHERE key = 'local_passphrase_hash' LIMIT 1`
+      );
+      if (localHashResult.rows.length > 0) {
+        const match = await bcrypt.compare(body.passphrase, localHashResult.rows[0].value as string);
+        if (match) {
+          res.json({ token: makeLocalToken(), type: "local", plan: "local", status: "active" });
+          return;
+        }
+        // Hash found but doesn't match — don't fall through to legacy mode
+        // (still check VAULT_PASSPHRASE and tenant DB below)
+      }
+    } catch {}
+
     const vaultPassphrase = process.env["VAULT_PASSPHRASE"];
 
     // 1. VAULT_PASSPHRASE configured — require exact match for Ray's local workspace

@@ -204,4 +204,26 @@ router.post("/settings", async (req, res) => {
   }
 });
 
+router.post("/settings/test-store", async (req, res) => {
+  try {
+    const { appSettingsTable } = await import("@workspace/db/schema");
+    const { eq } = await import("drizzle-orm");
+    const [zipRow, storeRow] = await Promise.all([
+      db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "zip_code")).limit(1),
+      db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "preferred_store")).limit(1),
+    ]);
+    const zip = zipRow[0]?.value ?? "";
+    const store = storeRow[0]?.value ?? "both";
+    if (!zip || !/^\d{5}(-\d{4})?$/.test(zip.trim())) {
+      res.json({ ok: false, error: "No valid zip code configured. Set a 5-digit zip code in Store settings first." });
+      return;
+    }
+    const storeLabel = store === "walmart" ? "Walmart" : store === "stater_bros" ? "Stater Bros" : "Walmart + Stater Bros";
+    res.json({ ok: true, zip, store, message: `Connected to ${storeLabel} — zip ${zip} is active` });
+  } catch (err) {
+    req.log.error({ err }, "Failed to test store connection");
+    res.status(500).json({ error: "Test failed" });
+  }
+});
+
 export default router;

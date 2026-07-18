@@ -13,6 +13,7 @@ import { GuardianPage } from "@/pages/guardian";
 import { GuardianSuccessPage } from "@/pages/guardian-success";
 import { MySubscriptionPage } from "@/pages/my-subscription";
 import { VaultGate } from "@/pages/vault-gate";
+import { SettingsView } from "@/pages/settings-view";
 import { VaultProvider, useVault } from "@/lib/vault-context";
 import { Home, Phone, ShoppingCart, ShieldAlert, CreditCard } from "lucide-react";
 
@@ -77,6 +78,7 @@ function PrivateWorkspace() {
         <Route path="/admin/report" component={DoctorReport} />
         <Route path="/scripts" component={JessicaView} />
         <Route path="/my-subscription" component={MySubscriptionPage} />
+        <Route path="/settings" component={SettingsView} />
         <Route component={NotFound} />
       </Switch>
       <BottomNav />

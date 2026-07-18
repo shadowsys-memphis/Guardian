@@ -21,6 +21,8 @@ import tenantsRouter from "./tenants";
 import appointmentsRouter from "./appointments";
 import reportsRouter from "./reports";
 import actionsRouter from "./actions";
+import medicationsRouter from "./medications";
+import authRouter from "./auth";
 
 const router: IRouter = Router();
 
@@ -64,6 +66,8 @@ localRouter.use(rotationRouter);
 localRouter.use(appointmentsRouter);
 localRouter.use(reportsRouter);
 localRouter.use(actionsRouter);
+localRouter.use(medicationsRouter);
+localRouter.use(authRouter);
 
 router.use(localRouter);
 

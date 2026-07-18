@@ -302,3 +302,18 @@ export const actionLogsTable = pgTable("action_logs", {
 });
 
 export type ActionLog = typeof actionLogsTable.$inferSelect;
+
+export const medicationsTable = pgTable("medications", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  dose: text("dose").notNull(),
+  frequency: text("frequency").notNull().default("daily"),
+  timeOfDay: text("time_of_day").notNull().default("morning"),
+  active: boolean("active").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertMedicationSchema = createInsertSchema(medicationsTable).omit({ id: true, createdAt: true });
+export type Medication = typeof medicationsTable.$inferSelect;
+export type InsertMedication = z.infer<typeof insertMedicationSchema>;

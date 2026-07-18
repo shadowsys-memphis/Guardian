@@ -143,7 +143,7 @@ export function AdminView() {
           <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
           <div className="pt-2 border-t border-border/30 mt-2">
             <NavButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} icon={<Stethoscope size={18} />} label="Appointments" />
-            <NavButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")} icon={<SlidersHorizontal size={18} />} label="App Settings" />
+            <NavButton active={false} onClick={() => navigate("/settings")} icon={<SlidersHorizontal size={18} />} label="Settings" />
           </div>
         </nav>
 
