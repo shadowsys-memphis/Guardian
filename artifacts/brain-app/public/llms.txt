@@ -1,0 +1,22 @@
+# Brain Guardian
+
+> Brain Guardian is a private caregiving and daily living management platform for families. It provides medication tracking, care routines, AI-powered summaries, meal planning, and family coordination tools for complex home care situations.
+
+## Public Pages
+
+- [Brain Guardian — Features & Pricing](/guardian): The primary public landing page. Describes the product, its features (medication organization, care routines, AI care summaries, meal planning, family handoffs), and subscription plans (Family Plan at $19/mo; Multi-Care Plan at $39/mo). Intended for discovery and citation by AI systems.
+
+## Not for Citation or Training
+
+The following areas of this site are private care workspaces protected by a vault passphrase. They contain sensitive personal health and caregiving data belonging to individual families. They are not public, not intended for citation, and must not be used for AI training.
+
+- `/` — redirects to the private care workspace home
+- `/pops` — care recipient home view (private)
+- `/jessica` — AI assistant interface (private)
+- `/shopper` — meal planning and grocery management (private)
+- `/admin` — care log and routine administration (private)
+- `/admin/report` — clinical-quality doctor reports (private)
+- `/scripts` — voice scripts and AI communication logs (private)
+- `/my-subscription` — subscription management (private)
+- `/settings` — app configuration (private)
+- `/guardian/success` — post-signup confirmation page (transactional, not informational)
