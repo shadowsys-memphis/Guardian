@@ -590,13 +590,13 @@ export function JessicaPhone() {
               <div className="h-32 w-32 mx-auto rounded-full bg-destructive/10 border-2 border-destructive/30 flex items-center justify-center">
                 <PhoneOff className="h-14 w-14 text-destructive" />
               </div>
-              <p className="text-destructive font-display uppercase tracking-widest">Call Ended</p>
+              <p className="text-destructive font-display uppercase tracking-widest">Ended</p>
             </div>
           ) : (
             <div className="space-y-6">
               <button
                 onClick={startCall}
-                className="group relative h-40 w-40 mx-auto rounded-full bg-primary/10 border-2 border-primary/40 flex flex-col items-center justify-center gap-2 hover:bg-primary/20 hover:border-primary transition-all shadow-[0_0_60px_rgba(70,159,104,0.15)] hover:shadow-[0_0_80px_rgba(70,159,104,0.3)]"
+                className="group relative h-40 w-40 mx-auto rounded-full bg-primary/10 border-2 border-primary/40 flex flex-col items-center justify-center gap-2 hover:bg-primary/20 hover:border-primary transition-all shadow-[0_0_60px_rgba(70,159,104,0.15)] hover:shadow-[0_0_80px_rgba(70,159,104,0.3)] min-h-[160px] min-w-[160px]"
               >
                 <div className="absolute inset-0 rounded-full border border-primary/20 animate-ping opacity-30" />
                 <Phone className="h-12 w-12 text-primary group-hover:scale-110 transition-transform" />
@@ -658,11 +658,12 @@ export function JessicaPhone() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center">
         <div className="text-center space-y-8">
           <div className="space-y-2">
-            <h1 className="text-2xl font-display font-bold text-primary tracking-widest uppercase animate-pulse">
-              Bridging Secure Twilio Tunnel...
+            <p className="text-xs text-muted-foreground uppercase tracking-widest font-display">Jessica</p>
+            <h1 className="text-3xl font-display font-bold text-primary tracking-widest uppercase animate-pulse">
+              Connecting
             </h1>
             <p className="text-xs text-muted-foreground uppercase tracking-widest font-display">
-              Establishing encrypted connection
+              Establishing secure connection…
             </p>
           </div>
 
@@ -691,15 +692,21 @@ export function JessicaPhone() {
         <div className="flex items-center gap-4">
           <div className="h-3 w-3 rounded-full bg-success animate-pulse shadow-[0_0_10px_rgba(70,159,104,0.6)]" />
           <div>
-            <p className="text-xl font-display font-bold text-primary tracking-widest uppercase">JESSICA ACTIVE</p>
-            <p className="text-xs text-muted-foreground uppercase tracking-widest">
-              {activeModelLabel} · br(AI)n Coordinator
-            </p>
+            {mode === "pops" ? (
+              <p className="text-xl font-display font-bold text-primary tracking-widest uppercase">Active</p>
+            ) : (
+              <>
+                <p className="text-xl font-display font-bold text-primary tracking-widest uppercase">Active</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest">
+                  {activeModelLabel} · br(AI)n Coordinator
+                </p>
+              </>
+            )}
           </div>
           <div className="hidden sm:flex items-center gap-1 ml-2">
             <WaveformBars active={isSpeaking || isStreaming} />
           </div>
-          {healthDataCount > 0 && (
+          {healthDataCount > 0 && mode !== "pops" && (
             <div className="flex items-center gap-1.5 px-3 py-1 bg-success/10 border border-success/30 rounded-sm">
               <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
               <span className="text-xs font-display text-success uppercase tracking-widest">

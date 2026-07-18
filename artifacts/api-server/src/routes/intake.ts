@@ -102,7 +102,30 @@ router.post("/intake/vision", async (req, res) => {
     const raw = (result as any).text ?? "";
     const jsonStr = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
     const parsed = JSON.parse(jsonStr);
-    res.json(parsed);
+
+    const normalized = {
+      summary: typeof parsed.summary === "string" ? parsed.summary : "",
+      instructions: Array.isArray(parsed.instructions) ? parsed.instructions.filter((x: unknown) => typeof x === "string") : [],
+      medicationChanges: Array.isArray(parsed.medicationChanges)
+        ? parsed.medicationChanges.map((mc: any) => ({
+            medication: typeof mc?.medication === "string" ? mc.medication : "",
+            change: typeof mc?.change === "string" ? mc.change : "",
+            dose: typeof mc?.dose === "string" ? mc.dose : null,
+          }))
+        : [],
+      tasks: Array.isArray(parsed.tasks) ? parsed.tasks.filter((x: unknown) => typeof x === "string") : [],
+      appointment: parsed.appointment && typeof parsed.appointment === "object"
+        ? {
+            date: typeof parsed.appointment.date === "string" ? parsed.appointment.date : null,
+            time: typeof parsed.appointment.time === "string" ? parsed.appointment.time : null,
+            provider: typeof parsed.appointment.provider === "string" ? parsed.appointment.provider : null,
+            apptType: typeof parsed.appointment.apptType === "string" ? parsed.appointment.apptType : "primary_care",
+            notes: typeof parsed.appointment.notes === "string" ? parsed.appointment.notes : "",
+          }
+        : null,
+    };
+
+    res.json(normalized);
   } catch (err) {
     req.log.error({ err }, "Failed to process vision intake");
     res.status(500).json({ error: "Vision intake failed — ensure Gemini API is available and the image is a valid base64 JPEG/PNG." });
