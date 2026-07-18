@@ -340,7 +340,8 @@ router.get("/billing/subscribers", requireLocalSession, async (req: Request, res
     const result = await pool.query(
       `SELECT id, name, email, plan, status, stripe_customer_id,
               trial_ends_at, current_period_end, setup_completed_at,
-              created_at, updated_at
+              created_at, updated_at,
+              updated_at AS last_active_at
        FROM tenants
        ORDER BY created_at DESC`
     );

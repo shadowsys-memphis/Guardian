@@ -106,6 +106,17 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
+import { useVault } from "@/lib/vault-context";
+
+function decodeJwtType(token: string | null): "local" | "tenant" | null {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.type === "local" ? "local" : "tenant";
+  } catch {
+    return null;
+  }
+}
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
 type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "settings" | "devices" | "subscribers";
@@ -115,6 +126,8 @@ const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [, navigate] = useLocation();
+  const { sessionToken } = useVault();
+  const isLocal = decodeJwtType(sessionToken) === "local";
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
@@ -143,7 +156,7 @@ export function AdminView() {
           <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
           <div className="pt-2 border-t border-border/30 mt-2">
             <NavButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} icon={<Stethoscope size={18} />} label="Appointments" />
-            <NavButton active={activeTab === "subscribers"} onClick={() => setActiveTab("subscribers")} icon={<ShieldAlert size={18} />} label="Subscribers" />
+            {isLocal && <NavButton active={activeTab === "subscribers"} onClick={() => setActiveTab("subscribers")} icon={<ShieldAlert size={18} />} label="Subscribers" />}
             <NavButton active={false} onClick={() => navigate("/settings")} icon={<SlidersHorizontal size={18} />} label="Settings" />
           </div>
         </nav>
@@ -167,7 +180,7 @@ export function AdminView() {
           {activeTab === "rotation" && <RotationTab />}
           {activeTab === "calendar-sync" && <CalendarSyncTab />}
           {activeTab === "appointments" && <AppointmentsTab />}
-          {activeTab === "subscribers" && <SubscribersTab />}
+          {activeTab === "subscribers" && isLocal && <SubscribersTab />}
           {activeTab === "settings" && <AppSettingsTab />}
         </div>
       </main>
@@ -4432,6 +4445,7 @@ interface SubscriberRow {
   setup_completed_at: string | null;
   created_at: string;
   updated_at: string;
+  last_active_at: string | null;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -4540,6 +4554,7 @@ function SubscribersTab() {
                     <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Status</th>
                     <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Trial / Renewal</th>
                     <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Joined</th>
+                    <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Last Active</th>
                     <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Setup</th>
                   </tr>
                 </thead>
@@ -4568,6 +4583,7 @@ function SubscribersTab() {
                             : "—"}
                       </td>
                       <td className="py-3 px-3 text-xs text-muted-foreground">{fmt(sub.created_at)}</td>
+                      <td className="py-3 px-3 text-xs text-muted-foreground">{sub.last_active_at ? fmt(sub.last_active_at) : "—"}</td>
                       <td className="py-3 px-3">
                         {sub.setup_completed_at
                           ? <span className="text-xs text-emerald-500 font-bold">✓ Done</span>
