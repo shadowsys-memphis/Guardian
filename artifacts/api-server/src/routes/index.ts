@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { requireAnySession, requireLocalSession } from "../middlewares/tenant-auth";
+import { requireAnySession, requireLocalSession, requireActiveSubscription } from "../middlewares/tenant-auth";
 
 import healthRouter from "./health";
 import stateRouter from "./state";
@@ -41,6 +41,7 @@ router.use(billingRouter);   // billing public: /billing/checkout, /billing/webh
 // tenant sessions: tenantId = session.sub (paying subscriber's UUID)
 const coreRouter: IRouter = Router();
 coreRouter.use(requireAnySession);
+coreRouter.use(requireActiveSubscription);
 coreRouter.use(stateRouter);
 coreRouter.use(scheduleRouter);
 coreRouter.use(symptomsRouter);

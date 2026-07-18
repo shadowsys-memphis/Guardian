@@ -108,7 +108,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/hooks/use-toast";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "settings" | "devices";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "settings" | "devices" | "subscribers";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -143,6 +143,7 @@ export function AdminView() {
           <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
           <div className="pt-2 border-t border-border/30 mt-2">
             <NavButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} icon={<Stethoscope size={18} />} label="Appointments" />
+            <NavButton active={activeTab === "subscribers"} onClick={() => setActiveTab("subscribers")} icon={<ShieldAlert size={18} />} label="Subscribers" />
             <NavButton active={false} onClick={() => navigate("/settings")} icon={<SlidersHorizontal size={18} />} label="Settings" />
           </div>
         </nav>
@@ -166,6 +167,7 @@ export function AdminView() {
           {activeTab === "rotation" && <RotationTab />}
           {activeTab === "calendar-sync" && <CalendarSyncTab />}
           {activeTab === "appointments" && <AppointmentsTab />}
+          {activeTab === "subscribers" && <SubscribersTab />}
           {activeTab === "settings" && <AppSettingsTab />}
         </div>
       </main>
@@ -4413,6 +4415,172 @@ function AppSettingsTab() {
           </form>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ─── Subscribers Tab ──────────────────────────────────────────────────────────
+interface SubscriberRow {
+  id: string;
+  name: string;
+  email: string;
+  plan: string;
+  status: string;
+  stripe_customer_id: string | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+  setup_completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const PLAN_LABELS: Record<string, string> = {
+  family: "Family",
+  multi_care: "Multi-Care",
+};
+
+const STATUS_VARIANT: Record<string, string> = {
+  trialing: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  past_due: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  cancelled: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+  pending_checkout: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+};
+
+function fmt(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function SubscribersTab() {
+  const [subscribers, setSubscribers] = useState<SubscriberRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${WORKSPACE_BASE}/api/billing/subscribers`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data)) throw new Error(data.error ?? "Failed to load");
+        setSubscribers(data);
+      })
+      .catch((err) => setError(err.message ?? "Failed to load subscribers"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const activeCount = subscribers.filter((s) => ["active", "trialing"].includes(s.status)).length;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-display font-bold uppercase tracking-widest text-primary">Subscribers</h2>
+        <p className="text-muted-foreground text-sm mt-1">Brain Guardian paying tenants — visible to Ray only.</p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-widest font-display">Total</p>
+            <p className="text-3xl font-bold text-foreground mt-1">{loading ? "—" : subscribers.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-widest font-display">Active / Trial</p>
+            <p className="text-3xl font-bold text-emerald-500 mt-1">{loading ? "—" : activeCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-widest font-display">MRR (est.)</p>
+            <p className="text-3xl font-bold text-foreground mt-1">
+              {loading ? "—" : `$${subscribers.filter((s) => s.status === "active").reduce((sum, s) => sum + (s.plan === "multi_care" ? 39 : 19), 0)}`}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {loading && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground text-sm animate-pulse font-display uppercase tracking-widest">Loading subscribers…</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-destructive text-sm font-display">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !error && subscribers.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center space-y-2">
+            <p className="text-muted-foreground font-display uppercase tracking-widest text-sm">No subscribers yet</p>
+            <p className="text-xs text-muted-foreground">Share the Brain Guardian landing page to get your first subscribers.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !error && subscribers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-display uppercase tracking-widest">All Tenants</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Name / Email</th>
+                    <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Plan</th>
+                    <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Status</th>
+                    <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Trial / Renewal</th>
+                    <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Joined</th>
+                    <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-widest text-muted-foreground font-display">Setup</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subscribers.map((sub) => (
+                    <tr key={sub.id} className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-3">
+                        <p className="font-medium text-foreground">{sub.name || "—"}</p>
+                        <p className="text-xs text-muted-foreground">{sub.email}</p>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="text-xs font-display font-bold uppercase tracking-wider text-foreground">
+                          {PLAN_LABELS[sub.plan] ?? sub.plan}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-bold uppercase tracking-wider ${STATUS_VARIANT[sub.status] ?? "bg-zinc-500/15 text-zinc-400 border-zinc-500/30"}`}>
+                          {sub.status.replace("_", " ")}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-xs text-muted-foreground">
+                        {sub.status === "trialing" && sub.trial_ends_at
+                          ? `Trial ends ${fmt(sub.trial_ends_at)}`
+                          : sub.current_period_end
+                            ? `Renews ${fmt(sub.current_period_end)}`
+                            : "—"}
+                      </td>
+                      <td className="py-3 px-3 text-xs text-muted-foreground">{fmt(sub.created_at)}</td>
+                      <td className="py-3 px-3">
+                        {sub.setup_completed_at
+                          ? <span className="text-xs text-emerald-500 font-bold">✓ Done</span>
+                          : <span className="text-xs text-muted-foreground">Pending</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

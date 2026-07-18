@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { randomBytes, createHash } from "crypto";
 import { pool } from "@workspace/db";
-import { requireAnySession } from "../middlewares/tenant-auth";
+import { requireAnySession, requireLocalSession } from "../middlewares/tenant-auth";
 
 const router: IRouter = Router();
 
@@ -328,6 +328,26 @@ router.post("/billing/customer-portal", requireAnySession, async (req: Request, 
   } catch (err) {
     req.log.error({ err }, "Failed to create customer portal session");
     res.status(500).json({ error: "Failed to open billing portal" });
+  }
+});
+
+/**
+ * GET /billing/subscribers — Ray's admin-panel view of all tenants.
+ * Local-only. Returns all tenant rows ordered by created_at desc.
+ */
+router.get("/billing/subscribers", requireLocalSession, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, plan, status, stripe_customer_id,
+              trial_ends_at, current_period_end, setup_completed_at,
+              created_at, updated_at
+       FROM tenants
+       ORDER BY created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list subscribers");
+    res.status(500).json({ error: "Failed to list subscribers" });
   }
 });
 

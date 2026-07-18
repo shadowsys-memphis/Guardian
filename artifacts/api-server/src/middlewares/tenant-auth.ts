@@ -76,3 +76,22 @@ export function requireLocalSession(req: Request, res: Response, next: NextFunct
 export function requireTenantSession(req: Request, res: Response, next: NextFunction): void {
   return requireAnySession(req, res, next);
 }
+
+/**
+ * Feature gating — must run AFTER requireAnySession (which sets req.tenantSession).
+ * Local (Ray) always passes. Tenant sessions must have status active or trialing;
+ * past_due, cancelled, and pending_checkout sessions receive 402.
+ */
+export function requireActiveSubscription(req: Request, res: Response, next: NextFunction): void {
+  const session = (req as any).tenantSession as TenantSession | undefined;
+  if (!session) {
+    res.status(401).json({ error: "Not authenticated." });
+    return;
+  }
+  if (session.type === "local") { next(); return; }
+  if (["active", "trialing"].includes(session.status)) { next(); return; }
+  res.status(402).json({
+    error: "Subscription required. Your plan is not active.",
+    status: session.status,
+  });
+}
