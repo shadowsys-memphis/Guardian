@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { pool } from "@workspace/db";
 
 export interface TenantSession {
   sub: string;
@@ -79,8 +80,9 @@ export function requireTenantSession(req: Request, res: Response, next: NextFunc
 
 /**
  * Feature gating — must run AFTER requireAnySession (which sets req.tenantSession).
- * Local (Ray) always passes. Tenant sessions must have status active or trialing;
- * past_due, cancelled, and pending_checkout sessions receive 402.
+ * Local (Ray) always passes. For tenant sessions, authoritative status is fetched
+ * from the DB on every request so Stripe webhook changes (cancellation, past_due)
+ * take effect immediately without waiting for JWT expiry.
  */
 export function requireActiveSubscription(req: Request, res: Response, next: NextFunction): void {
   const session = (req as any).tenantSession as TenantSession | undefined;
@@ -89,9 +91,25 @@ export function requireActiveSubscription(req: Request, res: Response, next: Nex
     return;
   }
   if (session.type === "local") { next(); return; }
-  if (["active", "trialing"].includes(session.status)) { next(); return; }
-  res.status(402).json({
-    error: "Subscription required. Your plan is not active.",
-    status: session.status,
-  });
+
+  pool.query<{ status: string }>(
+    "SELECT status FROM tenants WHERE id = $1",
+    [session.sub]
+  )
+    .then((result) => {
+      if (result.rows.length === 0) {
+        res.status(401).json({ error: "Subscriber account not found." });
+        return;
+      }
+      const liveStatus = result.rows[0].status;
+      if (["active", "trialing"].includes(liveStatus)) {
+        next();
+      } else {
+        res.status(402).json({
+          error: "Subscription required. Your plan is not active.",
+          status: liveStatus,
+        });
+      }
+    })
+    .catch((err) => next(err));
 }
