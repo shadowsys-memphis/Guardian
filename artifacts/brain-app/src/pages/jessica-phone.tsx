@@ -129,6 +129,8 @@ export function JessicaPhone() {
     budgetCents: number;
     overBudgetCount: number;
     status: string;
+    fallbackMode: boolean;
+    initiatedBy: string;
     items: Array<{ itemName: string; priceCents: number; quantity: number; status: string }>;
   } | null>(null);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
@@ -448,7 +450,11 @@ export function JessicaPhone() {
           if (meals.length > 0 && mode !== "pops") setAwaitingCartApproval(true);
           if (meals.length > 0) {
             setFulfillmentLoading(true);
-            fetch(`${BASE_URL}/api/shopper/fulfill`, { method: "POST" })
+            fetch(`${BASE_URL}/api/shopper/fulfill`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ initiatedBy: mode === "pops" ? "pops" : "ray" }),
+            })
               .then((r) => r.json())
               .then((data) => {
                 if (data && !data.error) setFulfillmentResult(data);

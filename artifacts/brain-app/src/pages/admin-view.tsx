@@ -1749,6 +1749,8 @@ export function ShopperTab() {
     budgetCents: number;
     overBudgetCount: number;
     status: string;
+    fallbackMode: boolean;
+    initiatedBy: string;
     createdAt: string;
     items: Array<{ itemName: string; priceCents: number; quantity: number; status: string }>;
   } | null>(null);
@@ -2109,13 +2111,19 @@ export function ShopperTab() {
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                     {fulfillment.store === "stater_bros" ? "Instacart / Stater Bros" : "Walmart Grocery"}
                   </span>
                   <span className={`px-2 py-0.5 rounded-sm text-xs font-bold uppercase ${fulfillment.status === "ready" ? "bg-success/10 border border-success/40 text-success" : "bg-muted border border-border text-muted-foreground"}`}>
                     {fulfillment.status}
                   </span>
+                  {fulfillment.fallbackMode && (
+                    <span className="px-2 py-0.5 rounded-sm text-xs font-bold uppercase bg-accent/10 border border-accent/40 text-accent">Estimated Prices</span>
+                  )}
+                  {fulfillment.initiatedBy === "pops" && (
+                    <span className="px-2 py-0.5 rounded-sm text-xs font-bold uppercase bg-primary/10 border border-primary/40 text-primary">Pops → Ray</span>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold text-foreground">${(fulfillment.totalEstimatedCents / 100).toFixed(2)}</span>

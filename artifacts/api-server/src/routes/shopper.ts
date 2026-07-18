@@ -510,9 +510,14 @@ async function ensureFulfillmentMigrated() {
       items_json TEXT NOT NULL DEFAULT '[]',
       over_budget_count INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'pending',
+      fallback_mode INTEGER NOT NULL DEFAULT 1,
+      initiated_by TEXT NOT NULL DEFAULT 'ray',
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
+  // Add new columns if table already exists from a previous run
+  await db.execute(sql`ALTER TABLE cart_fulfillments ADD COLUMN IF NOT EXISTS fallback_mode INTEGER NOT NULL DEFAULT 1`);
+  await db.execute(sql`ALTER TABLE cart_fulfillments ADD COLUMN IF NOT EXISTS initiated_by TEXT NOT NULL DEFAULT 'ray'`);
 }
 
 interface FulfillmentItem {
@@ -521,6 +526,45 @@ interface FulfillmentItem {
   priceCents: number;
   quantity: number;
   status: "found" | "over_budget" | "not_found";
+}
+
+// Search Walmart Open API when WALMART_API_KEY is present; returns null on any failure.
+async function searchWalmartItem(itemName: string, apiKey: string): Promise<{ product_id: string; product_name: string; price_cents: number } | null> {
+  try {
+    const url = `https://developer.api.walmart.com/api-proxy/service/affil/product/v2/search?query=${encodeURIComponent(itemName)}&format=json`;
+    const timestamp = Date.now();
+    const res = await fetch(url, {
+      headers: {
+        "WM_CONSUMER.ID": apiKey,
+        "WM_TIMESTAMP": String(timestamp),
+        "WM_SEC.AUTH_SIGNATURE": apiKey,
+        "Accept": "application/json",
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as any;
+    const item = data?.items?.[0] ?? data?.search?.items?.item?.[0];
+    if (!item) return null;
+    return {
+      product_id: String(item.itemId ?? item.ItemID ?? ""),
+      product_name: String(item.name ?? item.productName ?? itemName),
+      price_cents: Math.round(Number(item.salePrice ?? item.regularPrice ?? 5) * 100),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Build Walmart cart URL: use item-level add-to-cart when real product IDs are available,
+// otherwise fall back to the grocery storefront with zip pre-filled.
+function buildWalmartCheckoutUrl(foundItems: FulfillmentItem[], zip: string): string {
+  const realItems = foundItems.filter((i) => i.status === "found" && i.productId && !i.productId.startsWith("walmart_"));
+  if (realItems.length > 0) {
+    const params = realItems.map((i) => `itemId=${i.productId}&quantity=${i.quantity}`).join("&");
+    return `https://www.walmart.com/cart/add?${params}`;
+  }
+  return zip ? `https://www.walmart.com/grocery?zip=${encodeURIComponent(zip)}` : "https://www.walmart.com/grocery";
 }
 
 async function runFulfillmentLoop(
@@ -535,7 +579,14 @@ async function runFulfillmentLoop(
   checkoutUrl: string;
   store: string;
   status: string;
+  fallbackMode: boolean;
 }> {
+  const walmartKey = process.env.WALMART_API_KEY ?? "";
+  const instacartKey = process.env.INSTACART_API_KEY ?? "";
+  const targetStore = store === "stater_bros" ? "stater_bros" : "walmart";
+  const hasApiKey = targetStore === "walmart" ? !!walmartKey : !!instacartKey;
+  const fallbackMode = !hasApiKey;
+
   const cartAccumulator: FulfillmentItem[] = [];
   let runningTotalCents = 0;
 
@@ -543,7 +594,9 @@ async function runFulfillmentLoop(
     functionDeclarations: [
       {
         name: "search_local_inventory",
-        description: "Search for a grocery item at a local store by item name and zip code. Returns product details and price.",
+        description: fallbackMode
+          ? "Estimate price for a grocery item using known cart data (no live API key configured)."
+          : "Search live store inventory for a grocery item by name and zip code.",
         parameters: {
           type: "object" as const,
           properties: {
@@ -556,7 +609,7 @@ async function runFulfillmentLoop(
       },
       {
         name: "add_to_cart",
-        description: "Add a product found by search_local_inventory to the fulfillment cart. Check budget before calling.",
+        description: "Add a product to the fulfillment cart. Reject if price_cents × quantity would exceed remaining budget.",
         parameters: {
           type: "object" as const,
           properties: {
@@ -573,9 +626,14 @@ async function runFulfillmentLoop(
   }];
 
   const itemsText = items.map((i) => `- ${i.ingredientName} (${i.totalQuantity} ${i.unit})`).join("\n");
-  const targetStore = store === "stater_bros" ? "stater_bros" : "walmart";
+  const modeNote = fallbackMode
+    ? "(No live API key — using estimated prices from cart data. Fallback mode.)"
+    : "(Live inventory search enabled.)";
 
-  const initialPrompt = `You are a grocery fulfillment agent. For each item in the shopping list, call search_local_inventory then add_to_cart. Use store="${targetStore}" and zip="${zip}". Total budget: $${(budgetCents / 100).toFixed(2)}. Skip items that would exceed the budget and note them as over_budget.
+  const initialPrompt = `You are a grocery fulfillment agent. ${modeNote}
+For each item in the shopping list: call search_local_inventory, then call add_to_cart if found and within budget.
+Store: "${targetStore}", Zip: "${zip}", Budget: $${(budgetCents / 100).toFixed(2)}.
+If adding an item would exceed the remaining budget, do NOT add it — mark it over_budget.
 
 Shopping list:
 ${itemsText}
@@ -617,25 +675,39 @@ Process every item in order.`;
 
       if (name === "search_local_inventory") {
         const itemName = String(args.item_name ?? "");
-        const match = items.find((ci) =>
-          ci.ingredientName.toLowerCase().includes(itemName.toLowerCase().split(" ")[0]) ||
-          itemName.toLowerCase().includes(ci.ingredientName.toLowerCase().split(" ")[0])
-        );
-        const priceCents = match?.estimatedCostCents ?? 500;
-        result = {
-          found: true,
-          product_id: `${targetStore}_${itemName.replace(/\s+/g, "_").toLowerCase().slice(0, 40)}`,
-          product_name: itemName,
-          price_cents: priceCents,
-          in_stock: true,
-          store: targetStore,
-        };
+
+        // Attempt real Walmart API search when key is present
+        let liveResult: { product_id: string; product_name: string; price_cents: number } | null = null;
+        if (!fallbackMode && targetStore === "walmart" && walmartKey) {
+          liveResult = await searchWalmartItem(itemName, walmartKey);
+        }
+
+        if (liveResult) {
+          result = { found: true, ...liveResult, in_stock: true, store: targetStore, source: "walmart_api" };
+        } else {
+          // Fallback: match against known cart estimates
+          const match = items.find((ci) =>
+            ci.ingredientName.toLowerCase().includes(itemName.toLowerCase().split(" ")[0]) ||
+            itemName.toLowerCase().includes(ci.ingredientName.toLowerCase().split(" ")[0])
+          );
+          const priceCents = match?.estimatedCostCents ?? 500;
+          result = {
+            found: true,
+            product_id: `${targetStore}_${itemName.replace(/\s+/g, "_").toLowerCase().slice(0, 40)}`,
+            product_name: itemName,
+            price_cents: priceCents,
+            in_stock: true,
+            store: targetStore,
+            source: "estimated",
+          };
+        }
       } else if (name === "add_to_cart") {
         const priceCents = Number(args.price_cents ?? 0);
         const quantity = Number(args.quantity ?? 1);
         const itemTotal = priceCents * quantity;
         const wouldExceed = runningTotalCents + itemTotal > budgetCents;
-        if (wouldExceed && cartAccumulator.length > 0) {
+        // Fixed: flag over_budget from item 1, not only after first item succeeds
+        if (wouldExceed) {
           cartAccumulator.push({
             itemName: String(args.product_name ?? ""),
             productId: String(args.product_id ?? ""),
@@ -665,11 +737,13 @@ Process every item in order.`;
     messages.push({ role: "user", parts: functionResponses });
   }
 
-  const checkoutUrl = targetStore === "stater_bros"
-    ? "https://www.instacart.com/store/stater-brothers-markets/storefront"
-    : zip
-      ? `https://www.walmart.com/grocery?zip=${encodeURIComponent(zip)}`
-      : "https://www.walmart.com/grocery";
+  const foundItems = cartAccumulator.filter((i) => i.status === "found");
+  let checkoutUrl: string;
+  if (targetStore === "stater_bros") {
+    checkoutUrl = "https://www.instacart.com/store/stater-brothers-markets/storefront";
+  } else {
+    checkoutUrl = buildWalmartCheckoutUrl(foundItems, zip);
+  }
 
   const overBudgetCount = cartAccumulator.filter((i) => i.status === "over_budget").length;
 
@@ -680,6 +754,7 @@ Process every item in order.`;
     checkoutUrl,
     store: targetStore,
     status: cartAccumulator.length > 0 ? "ready" : "empty",
+    fallbackMode,
   };
 }
 
@@ -704,14 +779,16 @@ router.post("/shopper/fulfill", async (req, res) => {
     const zip = zipRow[0]?.value ?? "";
     const budgetCents = cart.budgetCents ?? 15000;
 
+    const initiatedBy = (req.body?.initiatedBy === "pops") ? "pops" : "ray";
+
     const result = await runFulfillmentLoop(cartItems, store, zip, budgetCents);
 
     await db.execute(sql`
-      INSERT INTO cart_fulfillments (cart_id, store, checkout_url, total_estimated_cents, items_json, over_budget_count, status)
-      VALUES (${cart.id}, ${result.store}, ${result.checkoutUrl}, ${result.totalEstimatedCents}, ${JSON.stringify(result.items)}, ${result.overBudgetCount}, ${result.status})
+      INSERT INTO cart_fulfillments (cart_id, store, checkout_url, total_estimated_cents, items_json, over_budget_count, status, fallback_mode, initiated_by)
+      VALUES (${cart.id}, ${result.store}, ${result.checkoutUrl}, ${result.totalEstimatedCents}, ${JSON.stringify(result.items)}, ${result.overBudgetCount}, ${result.status}, ${result.fallbackMode ? 1 : 0}, ${initiatedBy})
     `);
 
-    res.json({ ...result, budgetCents });
+    res.json({ ...result, budgetCents, initiatedBy });
   } catch (err) {
     req.log.error({ err }, "Fulfillment failed");
     res.status(500).json({ error: "Fulfillment agent failed — check Gemini API availability" });

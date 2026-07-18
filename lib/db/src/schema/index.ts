@@ -284,6 +284,8 @@ export const cartFulfillmentsTable = pgTable("cart_fulfillments", {
   itemsJson: text("items_json").notNull().default("[]"),
   overBudgetCount: integer("over_budget_count").notNull().default(0),
   status: text("status").notNull().default("pending"),
+  fallbackMode: integer("fallback_mode").notNull().default(1),
+  initiatedBy: text("initiated_by").notNull().default("ray"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
