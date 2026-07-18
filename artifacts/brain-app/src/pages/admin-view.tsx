@@ -1758,18 +1758,22 @@ export function ShopperTab() {
   const [fulfillmentFetching, setFulfillmentFetching] = useState(true);
 
   useEffect(() => {
-    const fetchFulfillment = async () => {
+    let cancelled = false;
+    const fetchFulfillment = async (initial = false) => {
       try {
         const res = await fetch(`${WORKSPACE_BASE}/api/shopper/fulfill/current`);
         if (res.ok) {
           const data = await res.json();
-          if (data) setFulfillment(data);
+          if (data && !cancelled) setFulfillment(data);
         }
       } catch {} finally {
-        setFulfillmentFetching(false);
+        if (initial && !cancelled) setFulfillmentFetching(false);
       }
     };
-    fetchFulfillment();
+    fetchFulfillment(true);
+    // Poll every 30 s to catch Pops-initiated fulfillments that arrive while Ray is on the tab
+    const poll = setInterval(() => fetchFulfillment(false), 30_000);
+    return () => { cancelled = true; clearInterval(poll); };
   }, []);
 
   const toggleMealExpand = (id: number) =>
@@ -2136,12 +2140,16 @@ export function ShopperTab() {
 
               {(fulfillment.items ?? []).length > 0 && (
                 <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                  {(fulfillment.items ?? []).map((item, idx) => (
+                  {(fulfillment.items ?? []).map((item: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-border/20 last:border-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.status === "found" ? "bg-success" : item.status === "over_budget" ? "bg-accent" : "bg-muted-foreground/40"}`} />
-                        <span className={`${item.status === "over_budget" ? "text-muted-foreground/60 line-through" : "text-foreground"}`}>{item.itemName}</span>
-                        {item.status === "over_budget" && <span className="text-accent text-[10px] font-bold uppercase">over budget</span>}
+                        {item.affiliateUrl && item.status === "found" ? (
+                          <a href={item.affiliateUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">{item.itemName}</a>
+                        ) : (
+                          <span className={`${item.status === "over_budget" ? "text-muted-foreground/60 line-through" : "text-foreground"} truncate`}>{item.itemName}</span>
+                        )}
+                        {item.status === "over_budget" && <span className="text-accent text-[10px] font-bold uppercase shrink-0">over budget</span>}
                       </div>
                       <span className="text-muted-foreground shrink-0 ml-2">${(item.priceCents / 100).toFixed(2)} × {item.quantity}</span>
                     </div>

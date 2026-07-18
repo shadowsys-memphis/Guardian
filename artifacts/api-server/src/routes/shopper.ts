@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import {
@@ -526,18 +527,41 @@ interface FulfillmentItem {
   priceCents: number;
   quantity: number;
   status: "found" | "over_budget" | "not_found";
+  affiliateUrl?: string;
 }
 
-// Search Walmart Open API when WALMART_API_KEY is present; returns null on any failure.
-async function searchWalmartItem(itemName: string, apiKey: string): Promise<{ product_id: string; product_name: string; price_cents: number } | null> {
+// Search Walmart Open API (affiliate) with HMAC-SHA256 signing when WALMART_PRIVATE_KEY is set,
+// or simplified header auth with just WALMART_API_KEY. Returns null on any failure.
+async function searchWalmartItem(
+  itemName: string,
+  zip: string,
+  apiKey: string
+): Promise<{ product_id: string; product_name: string; price_cents: number; item_url: string } | null> {
   try {
-    const url = `https://developer.api.walmart.com/api-proxy/service/affil/product/v2/search?query=${encodeURIComponent(itemName)}&format=json`;
     const timestamp = Date.now();
+    const privateKey = process.env.WALMART_PRIVATE_KEY ?? "";
+
+    let authSignature: string;
+    if (privateKey) {
+      // Full HMAC-SHA256 signature (RSA) per Walmart Open API spec
+      const stringToSign = `${apiKey}\n${timestamp}\n`;
+      try {
+        authSignature = crypto.createSign("RSA-SHA256").update(stringToSign).sign(privateKey, "base64");
+      } catch {
+        authSignature = apiKey;
+      }
+    } else {
+      authSignature = apiKey;
+    }
+
+    // Walmart Open API product search — zip filters local availability
+    const url = `https://developer.api.walmart.com/api-proxy/service/affil/product/v2/search?query=${encodeURIComponent(itemName)}&numItems=5&format=json&zip=${encodeURIComponent(zip)}`;
     const res = await fetch(url, {
       headers: {
         "WM_CONSUMER.ID": apiKey,
         "WM_TIMESTAMP": String(timestamp),
-        "WM_SEC.AUTH_SIGNATURE": apiKey,
+        "WM_SEC.AUTH_SIGNATURE": authSignature,
+        "WM_CONSUMER.INTIMESTAMP": String(timestamp),
         "Accept": "application/json",
       },
       signal: AbortSignal.timeout(5000),
@@ -546,25 +570,39 @@ async function searchWalmartItem(itemName: string, apiKey: string): Promise<{ pr
     const data = await res.json() as any;
     const item = data?.items?.[0] ?? data?.search?.items?.item?.[0];
     if (!item) return null;
+    const itemId = String(item.itemId ?? item.ItemID ?? "");
+    const productName = String(item.name ?? item.productName ?? itemName);
     return {
-      product_id: String(item.itemId ?? item.ItemID ?? ""),
-      product_name: String(item.name ?? item.productName ?? itemName),
+      product_id: itemId,
+      product_name: productName,
       price_cents: Math.round(Number(item.salePrice ?? item.regularPrice ?? 5) * 100),
+      item_url: itemId ? `https://www.walmart.com/ip/${productName.replace(/\s+/g, "-")}/${itemId}` : "",
     };
   } catch {
     return null;
   }
 }
 
-// Build Walmart cart URL: use item-level add-to-cart when real product IDs are available,
-// otherwise fall back to the grocery storefront with zip pre-filled.
+// Build Walmart cart deep-link from accumulated real product IDs.
+// Falls back to grocery storefront with zip when no real IDs are available.
 function buildWalmartCheckoutUrl(foundItems: FulfillmentItem[], zip: string): string {
-  const realItems = foundItems.filter((i) => i.status === "found" && i.productId && !i.productId.startsWith("walmart_"));
+  const realItems = foundItems.filter((i) => i.status === "found" && i.productId && !/^walmart_/.test(i.productId));
   if (realItems.length > 0) {
-    const params = realItems.map((i) => `itemId=${i.productId}&quantity=${i.quantity}`).join("&");
+    // Walmart add-to-cart deep link: /cart/add?itemId=ID&quantity=QTY (repeatable)
+    const params = realItems.flatMap((i) => [`itemId=${encodeURIComponent(i.productId)}`, `quantity=${i.quantity}`]).join("&");
     return `https://www.walmart.com/cart/add?${params}`;
   }
   return zip ? `https://www.walmart.com/grocery?zip=${encodeURIComponent(zip)}` : "https://www.walmart.com/grocery";
+}
+
+// Generate Instacart affiliate search URL for a single ingredient at Stater Bros.
+function buildInstacartItemUrl(itemName: string): string {
+  return `https://www.instacart.com/store/stater-brothers-markets/search_v3/${encodeURIComponent(itemName)}`;
+}
+
+// Build Instacart checkout URL: storefront URL (Instacart Connect required for true deep-link cart).
+function buildInstacartCheckoutUrl(): string {
+  return "https://www.instacart.com/store/stater-brothers-markets/storefront";
 }
 
 async function runFulfillmentLoop(
@@ -589,6 +627,8 @@ async function runFulfillmentLoop(
 
   const cartAccumulator: FulfillmentItem[] = [];
   let runningTotalCents = 0;
+  // Tracks affiliate/item URLs returned by search so add_to_cart can attach them
+  const affiliateUrlMap = new Map<string, string>();
 
   const toolDefinitions = [{
     functionDeclarations: [
@@ -676,55 +716,45 @@ Process every item in order.`;
       if (name === "search_local_inventory") {
         const itemName = String(args.item_name ?? "");
 
-        // Attempt real Walmart API search when key is present
-        let liveResult: { product_id: string; product_name: string; price_cents: number } | null = null;
         if (!fallbackMode && targetStore === "walmart" && walmartKey) {
-          liveResult = await searchWalmartItem(itemName, walmartKey);
-        }
-
-        if (liveResult) {
-          result = { found: true, ...liveResult, in_stock: true, store: targetStore, source: "walmart_api" };
+          // Live Walmart Open API search with zip for local inventory
+          const liveResult = await searchWalmartItem(itemName, zip, walmartKey);
+          if (liveResult) {
+            if (liveResult.item_url) affiliateUrlMap.set(liveResult.product_id, liveResult.item_url);
+            result = { found: true, product_id: liveResult.product_id, product_name: liveResult.product_name, price_cents: liveResult.price_cents, in_stock: true, store: targetStore, source: "walmart_api", item_url: liveResult.item_url };
+          } else {
+            // API failed — fall back to estimated
+            const match = items.find((ci) => ci.ingredientName.toLowerCase().includes(itemName.toLowerCase().split(" ")[0]) || itemName.toLowerCase().includes(ci.ingredientName.toLowerCase().split(" ")[0]));
+            const pid = `walmart_${itemName.replace(/\s+/g, "_").toLowerCase().slice(0, 40)}`;
+            result = { found: true, product_id: pid, product_name: itemName, price_cents: match?.estimatedCostCents ?? 500, in_stock: true, store: targetStore, source: "estimated_fallback" };
+          }
+        } else if (targetStore === "stater_bros") {
+          // Stater Bros: build Instacart affiliate search URL per ingredient
+          const pid = `stater_${itemName.replace(/\s+/g, "_").toLowerCase().slice(0, 40)}`;
+          const affiliateUrl = buildInstacartItemUrl(itemName);
+          affiliateUrlMap.set(pid, affiliateUrl);
+          const match = items.find((ci) => ci.ingredientName.toLowerCase().includes(itemName.toLowerCase().split(" ")[0]) || itemName.toLowerCase().includes(ci.ingredientName.toLowerCase().split(" ")[0]));
+          result = { found: true, product_id: pid, product_name: itemName, price_cents: match?.estimatedCostCents ?? 500, in_stock: true, store: targetStore, source: "instacart_affiliate", item_url: affiliateUrl };
         } else {
-          // Fallback: match against known cart estimates
-          const match = items.find((ci) =>
-            ci.ingredientName.toLowerCase().includes(itemName.toLowerCase().split(" ")[0]) ||
-            itemName.toLowerCase().includes(ci.ingredientName.toLowerCase().split(" ")[0])
-          );
-          const priceCents = match?.estimatedCostCents ?? 500;
-          result = {
-            found: true,
-            product_id: `${targetStore}_${itemName.replace(/\s+/g, "_").toLowerCase().slice(0, 40)}`,
-            product_name: itemName,
-            price_cents: priceCents,
-            in_stock: true,
-            store: targetStore,
-            source: "estimated",
-          };
+          // Walmart fallback (no API key)
+          const match = items.find((ci) => ci.ingredientName.toLowerCase().includes(itemName.toLowerCase().split(" ")[0]) || itemName.toLowerCase().includes(ci.ingredientName.toLowerCase().split(" ")[0]));
+          const pid = `walmart_${itemName.replace(/\s+/g, "_").toLowerCase().slice(0, 40)}`;
+          result = { found: true, product_id: pid, product_name: itemName, price_cents: match?.estimatedCostCents ?? 500, in_stock: true, store: targetStore, source: "estimated" };
         }
       } else if (name === "add_to_cart") {
         const priceCents = Number(args.price_cents ?? 0);
         const quantity = Number(args.quantity ?? 1);
         const itemTotal = priceCents * quantity;
         const wouldExceed = runningTotalCents + itemTotal > budgetCents;
-        // Fixed: flag over_budget from item 1, not only after first item succeeds
+        const productId = String(args.product_id ?? "");
+        const affiliateUrl = affiliateUrlMap.get(productId);
+        // Flag over_budget from item 1 correctly (no length guard)
         if (wouldExceed) {
-          cartAccumulator.push({
-            itemName: String(args.product_name ?? ""),
-            productId: String(args.product_id ?? ""),
-            priceCents,
-            quantity,
-            status: "over_budget",
-          });
+          cartAccumulator.push({ itemName: String(args.product_name ?? ""), productId, priceCents, quantity, status: "over_budget", affiliateUrl });
           result = { added: false, reason: "over_budget", budget_remaining_cents: budgetCents - runningTotalCents };
         } else {
           runningTotalCents += itemTotal;
-          cartAccumulator.push({
-            itemName: String(args.product_name ?? ""),
-            productId: String(args.product_id ?? ""),
-            priceCents,
-            quantity,
-            status: "found",
-          });
+          cartAccumulator.push({ itemName: String(args.product_name ?? ""), productId, priceCents, quantity, status: "found", affiliateUrl });
           result = { added: true, running_total_cents: runningTotalCents, budget_remaining_cents: budgetCents - runningTotalCents };
         }
       } else {

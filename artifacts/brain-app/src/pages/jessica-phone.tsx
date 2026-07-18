@@ -799,7 +799,7 @@ export function JessicaPhone() {
         </div>
       )}
 
-      {(fulfillmentLoading || fulfillmentResult) && (
+      {mode !== "pops" && (fulfillmentLoading || fulfillmentResult) && (
         <div className="bg-primary/5 border-b border-primary/20 px-6 py-3 shrink-0">
           {fulfillmentLoading && (
             <div className="flex items-center gap-2">
