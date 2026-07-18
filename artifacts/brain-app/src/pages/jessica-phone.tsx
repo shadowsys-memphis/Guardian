@@ -121,6 +121,7 @@ export function JessicaPhone() {
     appointment: { date: string | null; time: string | null; provider: string | null; apptType: string; notes: string } | null;
     summary: string;
   } | null>(null);
+  const [visionCommitted, setVisionCommitted] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const visionInputRef = useRef<HTMLInputElement>(null);
@@ -525,12 +526,13 @@ export function JessicaPhone() {
     COMMAND: "text-muted-foreground border-border",
   };
 
-  const handleVisionIntake = async (file: File) => {
+  const handleVisionIntake = (file: File) => {
     setVisionLoading(true);
     setVisionResult(null);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
+    setVisionCommitted(new Set());
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
         const dataUrl = e.target?.result as string;
         const base64 = dataUrl.split(",")[1];
         const mimeType = file.type || "image/jpeg";
@@ -539,15 +541,34 @@ export function JessicaPhone() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64: base64, mimeType }),
         });
-        if (!res.ok) throw new Error("Vision intake failed");
+        if (!res.ok) throw new Error(`Vision intake failed (${res.status})`);
         const data = await res.json();
         setVisionResult(data);
+      } catch (err) {
+        toast({ title: "Vision intake failed", description: String(err), variant: "destructive" });
+      } finally {
         setVisionLoading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
+      }
+    };
+    reader.onerror = () => {
       setVisionLoading(false);
-      toast({ title: "Vision intake failed", description: String(err), variant: "destructive" });
+      toast({ title: "Could not read file", variant: "destructive" });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const commitVisionItem = async (key: string, title: string, quarter: string = "Q1") => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, quarter, timeLabel: "0800", order: 99 }),
+      });
+      if (!res.ok) throw new Error(`Schedule API ${res.status}`);
+      setVisionCommitted((prev) => new Set([...prev, key]));
+      toast({ title: "Added to schedule", description: title });
+    } catch (err) {
+      toast({ title: "Could not add to schedule", description: String(err), variant: "destructive" });
     }
   };
 
@@ -865,61 +886,121 @@ export function JessicaPhone() {
           </div>
           <div className="px-6 py-3 space-y-3">
             <p className="text-xs text-muted-foreground font-display">{visionResult.summary}</p>
+
             {visionResult.instructions.length > 0 && (
               <div>
-                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1">Instructions</p>
-                {visionResult.instructions.map((ins, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm">
-                    <CheckCircle size={12} className="text-success mt-0.5 shrink-0" />
-                    <span>{ins}</span>
-                  </div>
-                ))}
+                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1.5">Instructions</p>
+                <div className="space-y-1">
+                  {visionResult.instructions.map((ins, i) => {
+                    const key = `instruction-${i}`;
+                    const done = visionCommitted.has(key);
+                    return (
+                      <div key={i} className={`flex items-start gap-2 text-sm ${done ? "opacity-40" : ""}`}>
+                        <CheckCircle size={12} className={`mt-0.5 shrink-0 ${done ? "text-success" : "text-muted-foreground"}`} />
+                        <span className={done ? "line-through" : ""}>{ins}</span>
+                        {!done && (
+                          <button
+                            onClick={() => commitVisionItem(key, ins)}
+                            className="ml-auto text-[10px] font-display uppercase tracking-widest text-primary hover:underline shrink-0"
+                          >
+                            + Schedule
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
+
             {visionResult.medicationChanges.length > 0 && (
               <div>
-                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1">Medication Changes</p>
-                {visionResult.medicationChanges.map((mc, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm">
-                    <AlertCircle size={12} className="text-warning mt-0.5 shrink-0" />
-                    <span><strong>{mc.medication}</strong> — {mc.change}{mc.dose ? ` (${mc.dose})` : ""}</span>
-                  </div>
-                ))}
+                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1.5">Medication Changes</p>
+                <div className="space-y-1">
+                  {visionResult.medicationChanges.map((mc, i) => {
+                    const key = `medchange-${i}`;
+                    const done = visionCommitted.has(key);
+                    const label = `Med review: ${mc.medication} — ${mc.change}${mc.dose ? ` (${mc.dose})` : ""}`;
+                    return (
+                      <div key={i} className={`flex items-start gap-2 text-sm ${done ? "opacity-40" : ""}`}>
+                        <AlertCircle size={12} className={`mt-0.5 shrink-0 ${done ? "text-success" : "text-warning"}`} />
+                        <span className={done ? "line-through" : ""}><strong>{mc.medication}</strong> — {mc.change}{mc.dose ? ` (${mc.dose})` : ""}</span>
+                        {!done && (
+                          <button
+                            onClick={() => commitVisionItem(key, label)}
+                            className="ml-auto text-[10px] font-display uppercase tracking-widest text-primary hover:underline shrink-0"
+                          >
+                            + Schedule
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
+
             {visionResult.tasks.length > 0 && (
               <div>
-                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1">Follow-up Tasks</p>
-                {visionResult.tasks.map((task, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm">
-                    <ChevronRight size={12} className="text-muted-foreground mt-0.5 shrink-0" />
-                    <span>{task}</span>
-                  </div>
-                ))}
+                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1.5">Follow-up Tasks</p>
+                <div className="space-y-1">
+                  {visionResult.tasks.map((task, i) => {
+                    const key = `task-${i}`;
+                    const done = visionCommitted.has(key);
+                    return (
+                      <div key={i} className={`flex items-start gap-2 text-sm ${done ? "opacity-40" : ""}`}>
+                        <ChevronRight size={12} className={`mt-0.5 shrink-0 ${done ? "text-success" : "text-muted-foreground"}`} />
+                        <span className={done ? "line-through" : ""}>{task}</span>
+                        {!done && (
+                          <button
+                            onClick={() => commitVisionItem(key, task)}
+                            className="ml-auto text-[10px] font-display uppercase tracking-widest text-primary hover:underline shrink-0"
+                          >
+                            + Schedule
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
-            {visionResult.appointment?.provider && (
+
+            {visionResult.appointment?.provider && !visionCommitted.has("appointment") && (
               <div className="flex items-center gap-2 text-sm bg-primary/5 border border-primary/20 rounded-sm px-3 py-2">
                 <CheckCircle size={12} className="text-primary shrink-0" />
-                <span>Appointment: <strong>{visionResult.appointment.provider}</strong>{visionResult.appointment.date ? ` on ${visionResult.appointment.date}` : ""}{visionResult.appointment.time ? ` at ${visionResult.appointment.time}` : ""}</span>
+                <span>
+                  Appointment: <strong>{visionResult.appointment.provider}</strong>
+                  {visionResult.appointment.date ? ` on ${visionResult.appointment.date}` : ""}
+                  {visionResult.appointment.time ? ` at ${visionResult.appointment.time}` : ""}
+                </span>
                 <button
                   onClick={async () => {
                     const apt = visionResult.appointment!;
                     if (!apt.date || !apt.provider) return;
-                    const res = await fetch(`${BASE_URL}/api/appointments`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ appointmentDate: apt.date, appointmentTime: apt.time ?? "09:00", provider: apt.provider, type: apt.apptType ?? "primary_care", notes: apt.notes }),
-                    });
-                    if (res.ok) {
+                    try {
+                      const res = await fetch(`${BASE_URL}/api/appointments`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ appointmentDate: apt.date, appointmentTime: apt.time ?? "09:00", provider: apt.provider, type: apt.apptType ?? "primary_care", notes: apt.notes }),
+                      });
+                      if (!res.ok) throw new Error(`API ${res.status}`);
+                      setVisionCommitted((prev) => new Set([...prev, "appointment"]));
                       toast({ title: "Appointment saved" });
-                      setVisionResult((prev) => prev ? { ...prev, appointment: null } : null);
+                    } catch (err) {
+                      toast({ title: "Could not save appointment", description: String(err), variant: "destructive" });
                     }
                   }}
-                  className="ml-auto text-xs font-display uppercase tracking-widest text-primary hover:underline"
+                  className="ml-auto text-xs font-display uppercase tracking-widest text-primary hover:underline shrink-0"
                 >
                   Log it
                 </button>
+              </div>
+            )}
+            {visionResult.appointment?.provider && visionCommitted.has("appointment") && (
+              <div className="flex items-center gap-2 text-sm opacity-40">
+                <CheckCircle size={12} className="text-success shrink-0" />
+                <span className="line-through">Appointment logged — {visionResult.appointment.provider}</span>
               </div>
             )}
           </div>
