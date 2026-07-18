@@ -92,6 +92,8 @@ function GeneralTab() {
   const { toast } = useToast();
   const [savedKey, setSavedKey] = useState<string | null>(null);
 
+  const [appName, setAppName] = useState("br(AI)n");
+
   const [quietForm, setQuietForm] = useState({
     quietWindowStart: "22:00",
     quietWindowEnd: "07:00",
@@ -115,12 +117,19 @@ function GeneralTab() {
 
   useEffect(() => {
     if (!loading) {
+      setAppName(settings.app_name ?? "br(AI)n");
       setHaldolForm({
         haldol_injection_interval_days: settings.haldol_injection_interval_days ?? "14",
         haldol_zombie_phase_days: settings.haldol_zombie_phase_days ?? "5",
       });
     }
   }, [loading, settings]);
+
+  const saveAppName = async () => {
+    const ok = await save({ app_name: appName.trim() || "br(AI)n" });
+    if (ok) flash("app_name");
+    else toast({ title: "Failed to save app name", variant: "destructive" });
+  };
 
   const flash = (key: string) => {
     setSavedKey(key);
@@ -142,6 +151,22 @@ function GeneralTab() {
 
   return (
     <div className="space-y-6 max-w-xl">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest">App Name</CardTitle>
+          <CardDescription>The name displayed in the app header and session context.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            value={appName}
+            onChange={(e) => setAppName(e.target.value)}
+            onBlur={saveAppName}
+            placeholder="br(AI)n"
+          />
+          <SavedBadge visible={savedKey === "app_name"} />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">

@@ -28,6 +28,7 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
     }).parse(req.body);
 
     // 0. Check local_passphrase_hash in DB (set via change-passphrase endpoint)
+    // If a stored hash exists it is authoritative — no fallback to legacy mode.
     try {
       const localHashResult = await pool.query(
         `SELECT value FROM app_settings WHERE key = 'local_passphrase_hash' LIMIT 1`
@@ -36,10 +37,10 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
         const match = await bcrypt.compare(body.passphrase, localHashResult.rows[0].value as string);
         if (match) {
           res.json({ token: makeLocalToken(), type: "local", plan: "local", status: "active" });
-          return;
+        } else {
+          res.status(401).json({ error: "Incorrect passphrase." });
         }
-        // Hash found but doesn't match — don't fall through to legacy mode
-        // (still check VAULT_PASSPHRASE and tenant DB below)
+        return;
       }
     } catch {}
 
