@@ -26,8 +26,8 @@ router.post("/actions/log", async (req, res) => {
     await ensureActionLogsTable();
     const body = z.object({
       type: z.string().min(1),
-      payload: z.record(z.unknown()).optional().default({}),
-      result: z.record(z.unknown()).optional().default({}),
+      payload: z.record(z.string(), z.unknown()).optional().default({}),
+      result: z.record(z.string(), z.unknown()).optional().default({}),
       conversationId: z.number().int().nullable().optional(),
       dispatchedBy: z.string().optional().default("jessica"),
     }).parse(req.body);
