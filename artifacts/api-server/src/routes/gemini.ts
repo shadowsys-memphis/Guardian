@@ -223,6 +223,12 @@ CANCEL_CART — Ray says "cancel", "never mind", "hold off", "don't order", or w
 {"type":"CANCEL_CART","details":"cancelled"}
 ---END_ACTION---
 
+SCHEDULE_APPOINTMENT — if Pops or caller mentions a specific upcoming doctor visit with a date:
+---ACTION---
+{"type":"SCHEDULE_APPOINTMENT","date":"YYYY-MM-DD","time":"HH:MM","provider":"doctor or clinic name","apptType":"primary_care","notes":"context"}
+---END_ACTION---
+Appointment types: primary_care, psychiatry, neurology, cardiology, other
+
 Informational types (shown in caregiver stream, no device action):
 MED_CONFIRMED → {"type":"MED_CONFIRMED","title":"[medication] taken","details":"Pops confirmed"}
 MED_REFUSED → {"type":"MED_REFUSED","title":"[medication] skipped","details":"brief reason"}
@@ -274,6 +280,13 @@ CANCEL_CART — Ray says "cancel", "never mind", "hold off", "don't order":
 ---ACTION---
 {"type":"CANCEL_CART","details":"cancelled"}
 ---END_ACTION---
+
+SCHEDULE_APPOINTMENT — Ray or a caller mentions a specific upcoming doctor visit or appointment with a date:
+---ACTION---
+{"type":"SCHEDULE_APPOINTMENT","date":"YYYY-MM-DD","time":"HH:MM","provider":"doctor or clinic name","apptType":"primary_care","notes":"any context"}
+---END_ACTION---
+Appointment types: primary_care, psychiatry, neurology, cardiology, other
+Parse relative dates ("Tuesday the 15th", "next Monday") into YYYY-MM-DD based on today's date. If only a month/day is mentioned, assume the next upcoming occurrence.
 
 Informational stream (no action needed — system logs these automatically):
 MED_CONFIRMED → {"type":"MED_CONFIRMED","title":"med taken","details":"context"}

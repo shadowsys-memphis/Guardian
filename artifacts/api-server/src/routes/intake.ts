@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { ai } from "@workspace/integrations-gemini-ai";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const router: IRouter = Router();
 
@@ -52,6 +52,60 @@ router.post("/intake/image", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to process intake image");
     res.status(500).json({ error: "Image intake failed — ensure Gemini API is available and the image is a valid base64 JPEG/PNG." });
+  }
+});
+
+const VISION_INTAKE_PROMPT = `You are analyzing a photo of a doctor's care plan, clinical notes, discharge instructions, or medical document for a veteran patient.
+
+Extract all actionable clinical information and return ONLY valid JSON (no markdown fences) with this exact structure:
+{
+  "instructions": ["new care instruction or directive for the caregiver"],
+  "medicationChanges": [
+    {
+      "medication": "medication name",
+      "change": "description of change (e.g. dose increased, new medication, discontinued)",
+      "dose": "new dose if stated, else null"
+    }
+  ],
+  "tasks": ["follow-up task or action item for the caregiver"],
+  "appointment": {
+    "date": "YYYY-MM-DD or null if not clearly stated",
+    "time": "HH:MM or null",
+    "provider": "provider or clinic name or null",
+    "apptType": "primary_care|psychiatry|neurology|cardiology|other",
+    "notes": "any additional context"
+  },
+  "summary": "one sentence describing the overall purpose of this document"
+}
+
+If a section has no items, use an empty array [] or null for appointment fields.
+Prioritize concrete caregiver actions. If the document is not a medical document, return empty arrays and null appointment.`;
+
+router.post("/intake/vision", async (req, res) => {
+  try {
+    const { imageBase64, mimeType } = z.object({
+      imageBase64: z.string().min(10),
+      mimeType: z.string().default("image/jpeg"),
+    }).parse(req.body);
+
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{
+        role: "user" as const,
+        parts: [
+          { inlineData: { mimeType, data: imageBase64 } },
+          { text: VISION_INTAKE_PROMPT },
+        ],
+      }],
+    });
+
+    const raw = (result as any).text ?? "";
+    const jsonStr = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+    const parsed = JSON.parse(jsonStr);
+    res.json(parsed);
+  } catch (err) {
+    req.log.error({ err }, "Failed to process vision intake");
+    res.status(500).json({ error: "Vision intake failed — ensure Gemini API is available and the image is a valid base64 JPEG/PNG." });
   }
 });
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Send, Trash2, Zap, ChevronRight } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Send, Trash2, Zap, ChevronRight, Camera, ChevronDown, X, CheckCircle, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useGetAiModel, getGetAiModelQueryKey, useGetAppState, getGetAppStateQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
@@ -108,9 +108,22 @@ export function JessicaPhone() {
   const [actionStream, setActionStream] = useState<ParsedAction[]>([]);
   const [healthDataCount, setHealthDataCount] = useState(0);
   const [awaitingCartApproval, setAwaitingCartApproval] = useState(false);
-  const [mode, setMode] = useState<"ray" | "pops">("ray");
+  const [mode, setMode] = useState<"ray" | "pops">(() => (localStorage.getItem("jessica_mode") as "ray" | "pops") ?? "ray");
   const [quietWindowMessage, setQuietWindowMessage] = useState<string | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [visionLoading, setVisionLoading] = useState(false);
+  const [visionResult, setVisionResult] = useState<{
+    instructions: string[];
+    medicationChanges: Array<{ medication: string; change: string; dose: string | null }>;
+    tasks: string[];
+    appointment: { date: string | null; time: string | null; provider: string | null; apptType: string; notes: string } | null;
+    summary: string;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const visionInputRef = useRef<HTMLInputElement>(null);
   const synth = useRef<SpeechSynthesis | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const { data: aiModelStatus } = useGetAiModel({ query: { queryKey: getGetAiModelQueryKey(), refetchInterval: 10000 } });
@@ -137,8 +150,25 @@ export function JessicaPhone() {
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    localStorage.setItem("jessica_mode", mode);
+  }, [mode]);
+
+  useEffect(() => {
+    if (isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      setHasNewMessages(false);
+    } else {
+      setHasNewMessages(true);
+    }
+  }, [messages, isAtBottom]);
+
+  const handleScrollMessages = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setIsAtBottom(atBottom);
+    if (atBottom) setHasNewMessages(false);
+  }, []);
 
   const playBase64Audio = useCallback((base64: string) => {
     try {
@@ -153,6 +183,8 @@ export function JessicaPhone() {
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         source.connect(ctx.destination);
+        source.onended = () => setIsSpeaking(false);
+        setIsSpeaking(true);
         source.start(0);
       });
     } catch {
@@ -168,6 +200,9 @@ export function JessicaPhone() {
       utterance.rate = 0.9;
       utterance.pitch = 1.1;
       utterance.volume = 0.9;
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
       const voices = synth.current.getVoices();
       const preferred = voices.find((v) => v.name.includes("Samantha") || v.name.includes("Karen") || v.name.includes("Google US English Female"));
       if (preferred) utterance.voice = preferred;
@@ -440,6 +475,30 @@ export function JessicaPhone() {
           };
           setMessages((prev) => [...prev, cancelMsg]);
           speak("Cart dismissed — nothing was ordered.");
+
+        } else if (action.type === "SCHEDULE_APPOINTMENT") {
+          const p = action.payload as any;
+          const res = await fetch(`${BASE_URL}/api/appointments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              appointmentDate: p.date,
+              appointmentTime: p.time ?? "09:00",
+              provider: p.provider ?? "Doctor",
+              type: p.apptType ?? p.type_appt ?? "primary_care",
+              notes: p.notes ?? null,
+            }),
+          });
+          if (!res.ok) throw new Error("Could not save appointment");
+          const apt = await res.json() as any;
+          const confirmMsg: Message = {
+            id: `appt-${Date.now()}`,
+            role: "assistant",
+            content: `Appointment logged — ${apt.provider} on ${apt.appointmentDate} at ${apt.appointmentTime}.`,
+            createdAt: new Date(),
+          };
+          setMessages((prev) => [...prev, confirmMsg]);
+          speak(`Got it — appointment with ${apt.provider} on ${apt.appointmentDate} has been logged.`);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -462,7 +521,34 @@ export function JessicaPhone() {
     ADD_MEAL_TO_CART: "text-warning border-warning/30",
     APPROVE_CART: "text-success border-success/30",
     CANCEL_CART: "text-destructive border-destructive/30",
+    SCHEDULE_APPOINTMENT: "text-primary border-primary/30",
     COMMAND: "text-muted-foreground border-border",
+  };
+
+  const handleVisionIntake = async (file: File) => {
+    setVisionLoading(true);
+    setVisionResult(null);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataUrl = e.target?.result as string;
+        const base64 = dataUrl.split(",")[1];
+        const mimeType = file.type || "image/jpeg";
+        const res = await fetch(`${BASE_URL}/api/intake/vision`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64, mimeType }),
+        });
+        if (!res.ok) throw new Error("Vision intake failed");
+        const data = await res.json();
+        setVisionResult(data);
+        setVisionLoading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setVisionLoading(false);
+      toast({ title: "Vision intake failed", description: String(err), variant: "destructive" });
+    }
   };
 
   if (callState === "idle" || callState === "ended") {
@@ -590,7 +676,7 @@ export function JessicaPhone() {
             </p>
           </div>
           <div className="hidden sm:flex items-center gap-1 ml-2">
-            <WaveformBars active={isStreaming} />
+            <WaveformBars active={isSpeaking || isStreaming} />
           </div>
           {healthDataCount > 0 && (
             <div className="flex items-center gap-1.5 px-3 py-1 bg-success/10 border border-success/30 rounded-sm">
@@ -640,7 +726,7 @@ export function JessicaPhone() {
         </div>
       </header>
 
-      {deviceCommandResult && (
+      {deviceCommandResult && mode !== "pops" && (
         <div className="bg-primary/10 border-b border-primary/20 px-6 py-2 flex items-center gap-3 shrink-0">
           <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
           <p className="text-xs font-display text-primary uppercase tracking-widest">
@@ -653,7 +739,7 @@ export function JessicaPhone() {
         </div>
       )}
 
-      {awaitingCartApproval && (
+      {awaitingCartApproval && mode !== "pops" && (
         <div className="bg-success/10 border-b border-success/30 px-6 py-3 shrink-0">
           <p className="text-xs font-display text-success uppercase tracking-widest mb-2">Cart Ready — Awaiting Approval</p>
           <div className="flex gap-3">
@@ -685,7 +771,7 @@ export function JessicaPhone() {
         </div>
       )}
 
-      {actionStream.length > 0 && (
+      {actionStream.length > 0 && mode !== "pops" && (
         <div className="border-b border-border/30 bg-secondary/20 px-6 py-2 shrink-0">
           <div className="flex items-center gap-2 mb-1">
             <Zap size={12} className="text-primary" />
@@ -710,18 +796,28 @@ export function JessicaPhone() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleScrollMessages}
+        className={`flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-4 relative ${mode === "pops" ? "bg-amber-50/[0.03]" : ""}`}
+      >
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[80%] rounded-sm px-5 py-4 space-y-1 ${
+            <div className={`rounded-sm px-5 py-4 space-y-1 ${
+              mode === "pops" ? "max-w-[95%]" : "max-w-[80%]"
+            } ${
               msg.role === "user"
                 ? "bg-primary/10 border border-primary/20"
                 : "bg-card border border-border"
             }`}>
-              <p className={`text-xs font-display uppercase tracking-widest mb-2 ${msg.role === "user" ? "text-primary/60" : "text-muted-foreground"}`}>
-                {msg.role === "user" ? "YOU" : "JESSICA"}
-              </p>
-              <p className={`font-display text-lg leading-relaxed ${msg.role === "user" ? "text-primary" : "text-foreground"}`}>
+              {mode !== "pops" && (
+                <p className={`text-xs font-display uppercase tracking-widest mb-2 ${msg.role === "user" ? "text-primary/60" : "text-muted-foreground"}`}>
+                  {msg.role === "user" ? "YOU" : "JESSICA"}
+                </p>
+              )}
+              <p className={`font-display leading-relaxed ${
+                mode === "pops" ? "text-2xl sm:text-3xl" : "text-lg"
+              } ${msg.role === "user" ? "text-primary" : "text-foreground"}`}>
                 {msg.content || (
                   <span className="inline-flex gap-1">
                     <span className="animate-bounce">·</span>
@@ -730,7 +826,7 @@ export function JessicaPhone() {
                   </span>
                 )}
               </p>
-              {msg.deviceCommand && (
+              {msg.deviceCommand && mode !== "pops" && (
                 <div className="mt-2 pt-2 border-t border-border/30">
                   <p className="text-xs text-primary/60 font-display uppercase tracking-wider">
                     ⚡ {msg.deviceCommand.device.replace(/_/g, " ")} → {msg.deviceCommand.action}
@@ -741,42 +837,156 @@ export function JessicaPhone() {
           </div>
         ))}
         <div ref={messagesEndRef} />
+        {hasNewMessages && !isAtBottom && (
+          <div className="sticky bottom-4 flex justify-center pointer-events-none">
+            <button
+              onClick={() => {
+                setIsAtBottom(true);
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-full text-xs font-display uppercase tracking-widest shadow-lg hover:bg-primary/90 transition-colors"
+            >
+              <ChevronDown size={12} /> New message
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="bg-card border-t border-border shrink-0">
-        <div className="px-6 pt-3 pb-1 flex flex-wrap gap-1.5">
-          {(mode === "ray" ? SPEECH_PRESETS_RAY : SPEECH_PRESETS_POPS).map((preset) => (
-            <button
-              key={preset}
-              onClick={() => sendMessage(preset)}
-              disabled={isStreaming}
-              className="px-2.5 py-1 text-xs font-display uppercase tracking-wide rounded-sm border border-border/40 text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40"
-            >
-              {preset}
+      {visionResult && mode === "ray" && (
+        <div className="border-t border-border bg-card shrink-0 max-h-72 overflow-y-auto">
+          <div className="px-6 py-3 flex items-center justify-between border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <Camera size={14} className="text-primary" />
+              <span className="text-xs font-display uppercase tracking-widest text-primary">Care Plan Intake</span>
+            </div>
+            <button onClick={() => setVisionResult(null)} className="text-muted-foreground hover:text-foreground">
+              <X size={14} />
             </button>
-          ))}
+          </div>
+          <div className="px-6 py-3 space-y-3">
+            <p className="text-xs text-muted-foreground font-display">{visionResult.summary}</p>
+            {visionResult.instructions.length > 0 && (
+              <div>
+                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1">Instructions</p>
+                {visionResult.instructions.map((ins, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm">
+                    <CheckCircle size={12} className="text-success mt-0.5 shrink-0" />
+                    <span>{ins}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {visionResult.medicationChanges.length > 0 && (
+              <div>
+                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1">Medication Changes</p>
+                {visionResult.medicationChanges.map((mc, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm">
+                    <AlertCircle size={12} className="text-warning mt-0.5 shrink-0" />
+                    <span><strong>{mc.medication}</strong> — {mc.change}{mc.dose ? ` (${mc.dose})` : ""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {visionResult.tasks.length > 0 && (
+              <div>
+                <p className="text-xs font-display uppercase tracking-widest text-foreground/60 mb-1">Follow-up Tasks</p>
+                {visionResult.tasks.map((task, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm">
+                    <ChevronRight size={12} className="text-muted-foreground mt-0.5 shrink-0" />
+                    <span>{task}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {visionResult.appointment?.provider && (
+              <div className="flex items-center gap-2 text-sm bg-primary/5 border border-primary/20 rounded-sm px-3 py-2">
+                <CheckCircle size={12} className="text-primary shrink-0" />
+                <span>Appointment: <strong>{visionResult.appointment.provider}</strong>{visionResult.appointment.date ? ` on ${visionResult.appointment.date}` : ""}{visionResult.appointment.time ? ` at ${visionResult.appointment.time}` : ""}</span>
+                <button
+                  onClick={async () => {
+                    const apt = visionResult.appointment!;
+                    if (!apt.date || !apt.provider) return;
+                    const res = await fetch(`${BASE_URL}/api/appointments`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ appointmentDate: apt.date, appointmentTime: apt.time ?? "09:00", provider: apt.provider, type: apt.apptType ?? "primary_care", notes: apt.notes }),
+                    });
+                    if (res.ok) {
+                      toast({ title: "Appointment saved" });
+                      setVisionResult((prev) => prev ? { ...prev, appointment: null } : null);
+                    }
+                  }}
+                  className="ml-auto text-xs font-display uppercase tracking-widest text-primary hover:underline"
+                >
+                  Log it
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="px-6 py-3 flex gap-3">
+      )}
+
+      <div className="bg-card border-t border-border shrink-0">
+        {mode !== "pops" && (
+          <div className="px-4 sm:px-6 pt-3 pb-1 flex flex-wrap gap-1.5">
+            {SPEECH_PRESETS_RAY.map((preset) => (
+              <button
+                key={preset}
+                onClick={() => sendMessage(preset)}
+                disabled={isStreaming}
+                className="px-2.5 py-1 text-xs font-display uppercase tracking-wide rounded-sm border border-border/40 text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="px-4 sm:px-6 py-3 flex gap-2 sm:gap-3">
+          {mode === "ray" && (
+            <>
+              <input
+                ref={visionInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleVisionIntake(file);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                onClick={() => visionInputRef.current?.click()}
+                disabled={visionLoading}
+                title="Scan care plan or medical document"
+                className="p-3 border border-border rounded-sm text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-40 shrink-0"
+              >
+                {visionLoading ? <div className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /> : <Camera size={18} />}
+              </button>
+            </>
+          )}
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-            placeholder="Talk to Jessica..."
+            placeholder={mode === "pops" ? "Talk to Jessica..." : "Talk to Jessica..."}
             disabled={isStreaming}
-            className="flex-1 bg-secondary border border-border rounded-sm px-4 py-3 font-display text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            className={`flex-1 bg-secondary border border-border rounded-sm px-4 font-display text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 ${mode === "pops" ? "py-4 text-xl" : "py-3"}`}
           />
           <button
             onClick={() => sendMessage()}
             disabled={isStreaming || !input.trim()}
-            className="px-4 py-3 bg-primary text-primary-foreground rounded-sm hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-2"
+            className="px-4 py-3 bg-primary text-primary-foreground rounded-sm hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center gap-2 min-w-[48px] min-h-[48px] justify-center"
           >
             <Send size={18} />
           </button>
         </div>
-        <p className="text-xs text-muted-foreground/40 px-6 pb-3 font-display uppercase tracking-widest">
-          {speakerOn ? "Speaker ON — Jessica will speak responses" : "Speaker OFF — tap 🔊 to enable voice"}
-        </p>
+        {mode !== "pops" && (
+          <p className="text-xs text-muted-foreground/40 px-6 pb-3 font-display uppercase tracking-widest">
+            {speakerOn ? "Speaker ON — Jessica will speak responses" : "Speaker OFF — tap 🔊 to enable voice"}
+          </p>
+        )}
       </div>
     </div>
   );

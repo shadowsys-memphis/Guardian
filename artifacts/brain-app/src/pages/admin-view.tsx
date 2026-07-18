@@ -927,6 +927,9 @@ function DashboardTab() {
   const { data: state } = useGetAppState();
   const { data: haldol } = useGetHaldolCycle();
   const { data: schedule } = useGetSchedule();
+  const { data: symptomLogs } = useGetSymptomLogs();
+  const { data: todaySummary } = useGetTodaySummary();
+  const { data: cart } = useGetCart();
   const updateState = useUpdateAppState();
   const { toast } = useToast();
   const [broadcastValue, setBroadcastValue] = useState(state?.activeMessage ?? "");
@@ -1073,6 +1076,142 @@ function DashboardTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Pops Status Card ───────────────────────────────────────────── */}
+      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
+              <HeartPulse size={14} /> Pops Status
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(() => {
+              const last = (symptomLogs as any[])?.[0];
+              if (!last) return <p className="text-xs text-muted-foreground">No symptom logs yet.</p>;
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground uppercase tracking-widest">Hallucinations</span>
+                    <span className={`text-sm font-bold ${last.hallucinationIntensity >= 3 ? "text-destructive" : last.hallucinationIntensity >= 1 ? "text-warning" : "text-success"}`}>
+                      {last.hallucinationIntensity}/5
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground uppercase tracking-widest">PTSD Trigger</span>
+                    <span className={`text-sm font-bold ${last.ptsdTrigger ? "text-destructive" : "text-success"}`}>
+                      {last.ptsdTrigger ? "Active" : "None"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground uppercase tracking-widest">Motivation</span>
+                    <span className="text-sm font-bold">{last.motivationLevel}/5</span>
+                  </div>
+                  {last.behaviorNotes && (
+                    <p className="text-xs text-muted-foreground italic border-t border-border/40 pt-2">{last.behaviorNotes}</p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground/50 pt-1">
+                    Last log: {last.loggedAt ? new Date(last.loggedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Unknown"}
+                  </p>
+                </>
+              );
+            })()}
+            {todaySummary && (
+              <div className="border-t border-border/40 pt-2">
+                <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest mb-1">Last Check-in</p>
+                <p className="text-xs text-muted-foreground">
+                  {(todaySummary as any).sessionCount ?? 0} session{(todaySummary as any).sessionCount !== 1 ? "s" : ""} today
+                  {(todaySummary as any).lastSessionTime ? ` · ${new Date((todaySummary as any).lastSessionTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Today's Schedule by Q1-Q4 ─────────────────────────────────── */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
+              <Clock size={14} /> Today's Schedule
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => {
+              const qLabels: Record<string, string> = { Q1: "Morning", Q2: "Afternoon", Q3: "Evening", Q4: "Night" };
+              const tasks = (schedule ?? []).filter((t) => t.quarter === q && t.isActive !== false);
+              const done = tasks.filter((t) => t.isCompleted).length;
+              return (
+                <div key={q}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{q} — {qLabels[q]}</span>
+                    <span className="text-[10px] text-muted-foreground">{done}/{tasks.length}</span>
+                  </div>
+                  {tasks.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground/40 italic">No tasks</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {tasks.map((t) => (
+                        <div
+                          key={t.id}
+                          title={t.title}
+                          className={`h-2 w-2 rounded-full shrink-0 ${t.isCompleted ? "bg-success" : "bg-border"}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {(schedule ?? []).length === 0 && (
+              <p className="text-xs text-muted-foreground/60">No active schedule tasks.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Cart Status ────────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
+              <ShoppingCart size={14} /> Grocery Cart
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!cart ? (
+              <p className="text-xs text-muted-foreground">No cart this week yet.</p>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-sm uppercase tracking-widest ${
+                    (cart as any).status === "approved" ? "bg-success/10 text-success" :
+                    (cart as any).status === "ordered" ? "bg-primary/10 text-primary" :
+                    "bg-secondary text-muted-foreground"
+                  }`}>
+                    {(cart as any).status ?? "pending"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground uppercase tracking-widest">Estimated</span>
+                  <span className="text-sm font-bold">${(((cart as any).totalEstimatedCostCents ?? 0) / 100).toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground uppercase tracking-widest">Budget</span>
+                  <span className="text-sm font-bold">${(((cart as any).budgetCents ?? 15000) / 100).toFixed(2)}</span>
+                </div>
+                <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${((cart as any).totalEstimatedCostCents ?? 0) > ((cart as any).budgetCents ?? 15000) ? "bg-destructive" : "bg-success"}`}
+                    style={{ width: `${Math.min(100, (((cart as any).totalEstimatedCostCents ?? 0) / ((cart as any).budgetCents ?? 15000)) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground/50">
+                  Week of {(cart as any).weekStartDate}
+                  {(cart as any).approvedAt ? ` · Approved ${new Date((cart as any).approvedAt).toLocaleDateString()}` : ""}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
