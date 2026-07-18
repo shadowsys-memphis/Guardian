@@ -14,7 +14,7 @@
     <link rel="canonical" href="%VITE_PUBLIC_SITE_URL%/guardian" />
 
     <!-- Description -->
-    <meta name="description" content="Brain Guardian is the AI-powered caregiving OS built for families supporting Veterans with PTSD and complex care needs. Medication tracking, care routines, meal planning, and weekly clinical summaries. 14-day free trial — $19/mo." />
+    <meta name="description" content="AI-powered caregiving OS for families supporting Veterans with PTSD. Medication tracking, care routines, and AI clinical summaries. 14-day free trial — $19/mo." />
 
     <!-- Open Graph -->
     <meta property="og:title" content="Brain Guardian — AI Caregiving OS for Veteran Families" />
@@ -23,12 +23,44 @@
     <meta property="og:url" content="%VITE_PUBLIC_SITE_URL%/guardian" />
     <meta property="og:image" content="%VITE_PUBLIC_SITE_URL%/opengraph.jpg" />
     <meta property="og:site_name" content="Brain Guardian" />
+    <meta property="og:locale" content="en_US" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Brain Guardian — AI Caregiving OS for Veteran Families" />
     <meta name="twitter:description" content="The first AI-powered caregiving OS for Veterans with complex care needs. Medication tracking, care routines, meal planning, and weekly clinical summaries. 14-day free trial." />
     <meta name="twitter:image" content="%VITE_PUBLIC_SITE_URL%/opengraph.jpg" />
+
+    <!-- Structured Data: WebSite + Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "%VITE_PUBLIC_SITE_URL%/#website",
+          "url": "%VITE_PUBLIC_SITE_URL%/",
+          "name": "Brain Guardian",
+          "description": "AI-powered caregiving OS for families supporting Veterans with PTSD and complex care needs.",
+          "inLanguage": "en-US",
+          "publisher": {
+            "@id": "%VITE_PUBLIC_SITE_URL%/#organization"
+          }
+        },
+        {
+          "@type": "Organization",
+          "@id": "%VITE_PUBLIC_SITE_URL%/#organization",
+          "name": "Brain Guardian",
+          "url": "%VITE_PUBLIC_SITE_URL%/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "%VITE_PUBLIC_SITE_URL%/favicon.svg"
+          },
+          "sameAs": []
+        }
+      ]
+    }
+    </script>
 
     <!-- Structured Data: SoftwareApplication -->
     <script type="application/ld+json">
