@@ -80,13 +80,16 @@ function BottomNav() {
 
 function PrivateWorkspace() {
   const { isUnlocked } = useVault();
+  const [location] = useLocation();
 
   if (!isUnlocked) {
     return <VaultGate>{null}</VaultGate>;
   }
 
+  const isFullPageRoute = location.startsWith("/admin");
+
   return (
-    <div className="pb-16">
+    <div className={isFullPageRoute ? undefined : "pb-16"}>
       <Suspense fallback={null}>
         <Switch>
           <Route path="/">
@@ -103,7 +106,7 @@ function PrivateWorkspace() {
           <Route component={NotFound} />
         </Switch>
       </Suspense>
-      <BottomNav />
+      {!isFullPageRoute && <BottomNav />}
     </div>
   );
 }
