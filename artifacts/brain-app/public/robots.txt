@@ -3,6 +3,7 @@
 # /guardian is the public acquisition landing page — allow all crawlers to index it.
 # Its render assets (JS/CSS bundles, favicon, and preview image) must also be
 # reachable so crawlers can fully render the page and generate link previews.
+# llms.txt and sitemap.xml are always allowed for all crawlers.
 # Everything else is a private care workspace and must not be indexed or crawled.
 
 User-agent: *
@@ -11,17 +12,20 @@ Allow: /guardian/
 Allow: /assets/
 Allow: /opengraph.jpg
 Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /guardian/success
 Disallow: /
 
-# Block AI training crawlers from the private workspace,
-# but allow them to index the public acquisition page and its render assets.
+# ── OpenAI ────────────────────────────────────────────────────────────────────
 User-agent: GPTBot
 Allow: /guardian$
 Allow: /guardian/
 Allow: /assets/
 Allow: /opengraph.jpg
 Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /guardian/success
 Disallow: /
 
@@ -31,24 +35,43 @@ Allow: /guardian/
 Allow: /assets/
 Allow: /opengraph.jpg
 Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /guardian/success
 Disallow: /
 
+User-agent: OAI-SearchBot
+Allow: /guardian$
+Allow: /guardian/
+Allow: /assets/
+Allow: /opengraph.jpg
+Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
+Disallow: /guardian/success
+Disallow: /
+
+# ── Google ────────────────────────────────────────────────────────────────────
 User-agent: Google-Extended
 Allow: /guardian$
 Allow: /guardian/
 Allow: /assets/
 Allow: /opengraph.jpg
 Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /guardian/success
 Disallow: /
 
+# ── Anthropic ─────────────────────────────────────────────────────────────────
 User-agent: anthropic-ai
 Allow: /guardian$
 Allow: /guardian/
 Allow: /assets/
 Allow: /opengraph.jpg
 Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /guardian/success
 Disallow: /
 
@@ -58,27 +81,84 @@ Allow: /guardian/
 Allow: /assets/
 Allow: /opengraph.jpg
 Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /guardian/success
 Disallow: /
 
+# ── Perplexity ────────────────────────────────────────────────────────────────
 User-agent: PerplexityBot
 Allow: /guardian$
 Allow: /guardian/
 Allow: /assets/
 Allow: /opengraph.jpg
 Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /guardian/success
 Disallow: /
 
+# ── Cohere ────────────────────────────────────────────────────────────────────
 User-agent: cohere-ai
 Allow: /guardian$
 Allow: /guardian/
 Allow: /assets/
 Allow: /opengraph.jpg
 Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /guardian/success
 Disallow: /
 
+# ── Meta ──────────────────────────────────────────────────────────────────────
+User-agent: meta-externalagent
+Allow: /guardian$
+Allow: /guardian/
+Allow: /assets/
+Allow: /opengraph.jpg
+Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
+Disallow: /guardian/success
+Disallow: /
+
+# ── Amazon ────────────────────────────────────────────────────────────────────
+User-agent: Amazonbot
+Allow: /guardian$
+Allow: /guardian/
+Allow: /assets/
+Allow: /opengraph.jpg
+Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
+Disallow: /guardian/success
+Disallow: /
+
+# ── Apple ─────────────────────────────────────────────────────────────────────
+User-agent: Applebot-Extended
+Allow: /guardian$
+Allow: /guardian/
+Allow: /assets/
+Allow: /opengraph.jpg
+Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
+Disallow: /guardian/success
+Disallow: /
+
+# ── DuckDuckGo ────────────────────────────────────────────────────────────────
+User-agent: DuckAssistBot
+Allow: /guardian$
+Allow: /guardian/
+Allow: /assets/
+Allow: /opengraph.jpg
+Allow: /favicon.svg
+Allow: /llms.txt
+Allow: /sitemap.xml
+Disallow: /guardian/success
+Disallow: /
+
+# ── Block scraping/training crawlers with no attribution use case ──────────────
 User-agent: Bytespider
 Disallow: /
 
