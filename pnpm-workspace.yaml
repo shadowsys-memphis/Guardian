@@ -42,6 +42,19 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  brace-expansion: 2.1.2
+  path-to-regexp: 8.4.2
+  postcss: 8.5.20
+  fast-uri: 3.1.4
+  qs: 6.15.3
+  markdown-it: 14.3.0
+  linkify-it: 5.0.2
+  '@babel/core': 7.29.7
+  protobufjs: 7.6.5
+  body-parser: 2.3.0
+  js-yaml: 4.3.0
+  lodash: 4.18.1
+  yaml: 2.9.0
   'picomatch@2': '2.3.2'
   'picomatch@4': '4.0.5'
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
@@ -65,7 +78,7 @@ overrides:
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
-  esbuild: 0.27.3
+  esbuild: 0.28.1
   esbuild>@esbuild/aix-ppc64: '-'
   esbuild>@esbuild/android-arm: '-'
   esbuild>@esbuild/android-arm64: '-'
