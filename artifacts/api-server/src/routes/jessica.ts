@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { createHmac, timingSafeEqual } from "crypto";
 import { requireLocalSession } from "../middlewares/tenant-auth";
 import { db, pool } from "@workspace/db";
 import {
@@ -27,6 +28,43 @@ function getAgentId(): string | null {
 
 function getPhoneNumberId(): string | null {
   return process.env["ELEVENLABS_PHONE_NUMBER_ID"] ?? null;
+}
+
+function getWebhookSecret(): string | null {
+  return process.env["ELEVENLABS_WEBHOOK_SECRET"] ?? null;
+}
+
+const WEBHOOK_SIGNATURE_TOLERANCE_SECS = 30 * 60;
+
+/**
+ * ElevenLabs signs webhook requests with an `ElevenLabs-Signature` header
+ * formatted as `t=<unix_seconds>,v0=<hex hmac-sha256>`, computed over
+ * `${timestamp}.${rawBody}` using the webhook secret configured on the
+ * ElevenLabs agent. Verifying this is what stops an outside caller from
+ * POSTing a forged transcript straight into Pops' health record.
+ */
+function verifyElevenLabsSignature(rawBody: Buffer, signatureHeader: string | undefined, secret: string): boolean {
+  if (!signatureHeader) return false;
+
+  const parts = Object.fromEntries(
+    signatureHeader.split(",").map((p) => p.split("=") as [string, string])
+  );
+  const timestamp = parts["t"];
+  const signature = parts["v0"];
+  if (!timestamp || !signature) return false;
+
+  const timestampSecs = parseInt(timestamp, 10);
+  if (!Number.isFinite(timestampSecs)) return false;
+  if (Math.abs(Date.now() / 1000 - timestampSecs) > WEBHOOK_SIGNATURE_TOLERANCE_SECS) return false;
+
+  const expected = createHmac("sha256", secret)
+    .update(`${timestamp}.${rawBody.toString("utf8")}`)
+    .digest("hex");
+
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const actualBuf = Buffer.from(signature, "utf8");
+  if (expectedBuf.length !== actualBuf.length) return false;
+  return timingSafeEqual(expectedBuf, actualBuf);
 }
 
 async function getPopsPhonenumber(): Promise<string | null> {
@@ -231,7 +269,30 @@ const webhookPayloadSchema = z.object({
 
 router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) => {
   try {
-    const parsed = webhookPayloadSchema.safeParse(req.body);
+    const webhookSecret = getWebhookSecret();
+    if (!webhookSecret) {
+      req.log.error("ELEVENLABS_WEBHOOK_SECRET not set — rejecting webhook (would otherwise accept unverified health data)");
+      res.status(503).json({ error: "Webhook not configured" });
+      return;
+    }
+
+    const rawBody = req.body as Buffer;
+    const signatureHeader = req.headers["elevenlabs-signature"] as string | undefined;
+    if (!verifyElevenLabsSignature(rawBody, signatureHeader, webhookSecret)) {
+      req.log.warn("ElevenLabs webhook signature verification failed");
+      res.status(401).json({ error: "Invalid signature" });
+      return;
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(rawBody.toString("utf8"));
+    } catch {
+      res.status(400).json({ error: "Invalid JSON" });
+      return;
+    }
+
+    const parsed = webhookPayloadSchema.safeParse(body);
 
     if (!parsed.success || !parsed.data.data?.conversation_id) {
       res.json({ received: true });

@@ -45,10 +45,11 @@ app.use(
   })
 );
 
-// Stripe webhook MUST receive the raw bytes for signature verification.
-// Mount express.raw() on this path only, BEFORE the global express.json() below,
-// so the two parsers never compete for the same request stream.
+// Stripe and ElevenLabs webhooks MUST receive the raw bytes for signature
+// verification. Mount express.raw() on these paths only, BEFORE the global
+// express.json() below, so the two parsers never compete for the same request stream.
 app.use("/api/billing/webhook", express.raw({ type: "application/json" }));
+app.use("/api/jessica/elevenlabs-webhook", express.raw({ type: "application/json" }));
 
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));

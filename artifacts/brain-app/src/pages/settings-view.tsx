@@ -330,10 +330,11 @@ function JessicaTab() {
             <p><span className="text-foreground font-bold">ELEVENLABS_API_KEY</span> — Your ElevenLabs account API key</p>
             <p><span className="text-foreground font-bold">ELEVENLABS_AGENT_ID</span> — The Conversational AI agent ID from ElevenLabs dashboard</p>
             <p><span className="text-foreground font-bold">ELEVENLABS_PHONE_NUMBER_ID</span> — The phone number ID of your Twilio caller in ElevenLabs</p>
+            <p><span className="text-foreground font-bold">ELEVENLABS_WEBHOOK_SECRET</span> — Signing secret from the webhook's ElevenLabs dashboard page (required — the webhook rejects every request until this is set)</p>
           </div>
           <div className="mt-3 pt-3 border-t border-border/30">
             <p className="text-muted-foreground/60 normal-case tracking-normal font-sans">
-              Set these in the Replit Secrets panel. When all three are configured and Pops' number is saved above,
+              Set these in the Replit Secrets panel. When all four are configured and Pops' number is saved above,
               the "Call Pops" button will use ElevenLabs instead of the in-app chat.
             </p>
           </div>
@@ -366,6 +367,9 @@ function JessicaTab() {
           </div>
           <p className="text-xs text-muted-foreground/60">
             Set the event type to <span className="font-mono">post_call_transcription</span> in ElevenLabs.
+            ElevenLabs generates a signing secret when you create the webhook — copy it into
+            <span className="font-mono"> ELEVENLABS_WEBHOOK_SECRET</span> above. Without it, the server rejects
+            every call from ElevenLabs instead of trusting an unsigned request.
           </p>
         </CardContent>
       </Card>
