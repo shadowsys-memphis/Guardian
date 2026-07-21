@@ -170,7 +170,20 @@ router.get("/health-assessment/sessions", async (req, res) => {
   try {
     const limit = parseInt((req.query.limit as string) ?? "30", 10);
     const sessions = await db.select().from(callSessionsTable).orderBy(desc(callSessionsTable.startedAt)).limit(limit);
-    res.json(sessions);
+    const sessionIds = sessions.map((s) => s.id);
+    let countMap: Record<number, number> = {};
+    if (sessionIds.length > 0) {
+      const counts = await db
+        .select({ sessionId: healthDataPointsTable.sessionId, count: sql<number>`cast(count(*) as int)` })
+        .from(healthDataPointsTable)
+        .where(inArray(healthDataPointsTable.sessionId, sessionIds))
+        .groupBy(healthDataPointsTable.sessionId);
+      for (const row of counts) {
+        if (row.sessionId !== null) countMap[row.sessionId] = row.count;
+      }
+    }
+    const result = sessions.map((s) => ({ ...s, dataPointCount: countMap[s.id] ?? 0 }));
+    res.json(result);
   } catch (err) {
     req.log.error({ err }, "Failed to list sessions");
     res.status(500).json({ error: "Failed to list sessions" });

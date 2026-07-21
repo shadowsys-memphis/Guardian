@@ -8,7 +8,7 @@ import { GuardianPage } from "@/pages/guardian";
 import { GuardianSuccessPage } from "@/pages/guardian-success";
 import { VaultGate } from "@/pages/vault-gate";
 import { VaultProvider, useVault } from "@/lib/vault-context";
-import { Home, Phone, ShoppingCart, ShieldAlert, CreditCard } from "lucide-react";
+import { Home, Phone, ShoppingCart, ShieldAlert, CreditCard, PhoneCall } from "lucide-react";
 
 const PopsView = lazy(() =>
   import("@/pages/pops-view").then((m) => ({ default: m.PopsView }))
@@ -36,6 +36,9 @@ const MySubscriptionPage = lazy(() =>
 const SettingsView = lazy(() =>
   import("@/pages/settings-view").then((m) => ({ default: m.SettingsView }))
 );
+const CallsView = lazy(() =>
+  import("@/pages/calls-view").then((m) => ({ default: m.CallsView }))
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,6 +52,7 @@ const queryClient = new QueryClient({
 const NAV_ITEMS = [
   { path: "/pops", label: "Home", icon: <Home size={20} /> },
   { path: "/jessica", label: "Jessica", icon: <Phone size={20} /> },
+  { path: "/calls", label: "Calls", icon: <PhoneCall size={20} /> },
   { path: "/shopper", label: "Shopper", icon: <ShoppingCart size={20} /> },
   { path: "/admin", label: "Admin", icon: <ShieldAlert size={20} /> },
   { path: "/my-subscription", label: "Plan", icon: <CreditCard size={20} /> },
@@ -97,6 +101,7 @@ function PrivateWorkspace() {
           </Route>
           <Route path="/pops" component={PopsView} />
           <Route path="/jessica" component={JessicaPhone} />
+          <Route path="/calls" component={CallsView} />
           <Route path="/shopper" component={ShopperView} />
           <Route path="/admin" component={AdminView} />
           <Route path="/admin/report" component={DoctorReport} />
