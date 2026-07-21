@@ -55,7 +55,6 @@ const NAV_ITEMS = [
   { path: "/calls", label: "Calls", icon: <PhoneCall size={20} /> },
   { path: "/shopper", label: "Shopper", icon: <ShoppingCart size={20} /> },
   { path: "/admin", label: "Admin", icon: <ShieldAlert size={20} /> },
-  { path: "/my-subscription", label: "Plan", icon: <CreditCard size={20} /> },
 ];
 
 function BottomNav() {

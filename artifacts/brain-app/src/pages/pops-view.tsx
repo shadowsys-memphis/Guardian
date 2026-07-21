@@ -39,8 +39,8 @@ export function PopsView() {
   const { data: haldol } = useGetHaldolCycle({
     query: { queryKey: getGetHaldolCycleQueryKey(), refetchInterval: 60000 },
   });
-  const { data: todaySummary } = useGetTodaySummary({ query: { refetchInterval: 60000 } });
-  const { data: assessmentSettings } = useGetAssessmentSettings({ query: { refetchInterval: 120000 } });
+  const { data: todaySummary } = useGetTodaySummary({ query: { refetchInterval: 60000 } as any });
+  const { data: assessmentSettings } = useGetAssessmentSettings({ query: { refetchInterval: 120000 } as any });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);

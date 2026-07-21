@@ -66,7 +66,10 @@ router.put("/smarthome/devices/:key", async (req, res) => {
       .from(smartHomeDevicesTable)
       .where(eq(smartHomeDevicesTable.deviceKey, key));
 
-    if (!existing) return res.status(404).json({ error: "Device not found" });
+    if (!existing) {
+      res.status(404).json({ error: "Device not found" });
+      return;
+    }
 
     const [updated] = await db
       .update(smartHomeDevicesTable)

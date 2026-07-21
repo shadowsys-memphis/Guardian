@@ -1,0 +1,29 @@
+---
+description: API server and OpenAPI spec rules
+globs: ["artifacts/api-server/**", "lib/api-spec/**", "lib/db/**"]
+alwaysApply: false
+---
+
+# API Rules
+
+## Auth middleware split (routes/index.ts)
+- `requireAnySession` — local or tenant sessions (state, schedule, symptoms, gemini, smarthome, intercom, health-assessment)
+- `requireLocalSession` — local only (scripts, haldol, health-assessment, shopper)
+
+## Adding an endpoint
+1. Add path + operationId to `lib/api-spec/openapi.yaml`
+2. Add handler in `artifacts/api-server/src/routes/<domain>.ts`
+3. Register router in `artifacts/api-server/src/routes/index.ts`
+4. `pnpm --filter @workspace/api-spec run codegen`
+5. `pnpm run typecheck`
+
+## Gemini SSE route
+`sendGeminiMessage` returns `text/event-stream` — never add JSON content-type expectations.
+
+## Hermes dispatch (artifacts/api-server/src/lib/hermes.ts)
+Single `dispatch(action, sessionId)` function. Actions dispatched via Promise.allSettled — one failure never blocks others. Never throws on malformed action, only logs warning.
+
+Action types: ADD_EVENT, TOGGLE_SMART_DEVICE, ADD_TASK, MED_CONFIRMED, MED_REFUSED, WELLBEING_ALERT
+
+## DB schema (lib/db/src/schema/index.ts)
+19 tables. Key ones: app_state (single row), schedule_tasks, symptom_logs, voice_scripts, haldol_cycle, conversations, messages, health_questions, call_sessions, health_data_points, smart_home_devices, intercom_messages, meals, grocery_carts.

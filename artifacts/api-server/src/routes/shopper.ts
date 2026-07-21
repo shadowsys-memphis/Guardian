@@ -298,11 +298,15 @@ router.post("/shopper/sync", async (req, res) => {
     const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=0`;
     const response = await fetch(csvUrl);
     if (!response.ok) {
-      return res.status(422).json({ error: "Could not fetch sheet. Make sure it is shared publicly (View access for anyone with link)." });
+      res.status(422).json({ error: "Could not fetch sheet. Make sure it is shared publicly (View access for anyone with link)." });
+      return;
     }
     const csvText = await response.text();
     const lines = csvText.trim().split("\n").map((l) => l.split(",").map((c) => c.trim().replace(/^"|"$/g, "")));
-    if (lines.length < 2) return res.status(422).json({ error: "Sheet appears empty." });
+    if (lines.length < 2) {
+      res.status(422).json({ error: "Sheet appears empty." });
+      return;
+    }
 
     let imported = 0;
     let currentMealId: number | null = null;
@@ -392,7 +396,8 @@ router.post("/shopper/cart/meals", async (req, res) => {
     const { mealId } = z.object({ mealId: z.number().int() }).parse(req.body);
     const cart = await getOrCreateCart();
     if (cart.status !== "pending") {
-      return res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
+      res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
+      return;
     }
     await db.insert(cartMealsTable).values({ cartId: cart.id, mealId });
     await rebuildCartItems(cart.id);

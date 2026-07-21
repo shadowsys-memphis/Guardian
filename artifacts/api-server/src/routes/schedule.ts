@@ -72,7 +72,10 @@ router.put("/schedule/:id", async (req, res) => {
       .set(body)
       .where(and(eq(scheduleTasksTable.id, id), eq(scheduleTasksTable.tenantId, tenantId)))
       .returning();
-    if (!updated) return res.status(404).json({ error: "Task not found" });
+    if (!updated) {
+      res.status(404).json({ error: "Task not found" });
+      return;
+    }
     res.json(serializeTask(updated));
   } catch (err) {
     req.log.error({ err }, "Failed to update task");
@@ -103,7 +106,10 @@ router.post("/schedule/:id/complete", async (req, res) => {
       .set({ isCompleted: true, completedAt: new Date() })
       .where(and(eq(scheduleTasksTable.id, id), eq(scheduleTasksTable.tenantId, tenantId)))
       .returning();
-    if (!updated) return res.status(404).json({ error: "Task not found" });
+    if (!updated) {
+      res.status(404).json({ error: "Task not found" });
+      return;
+    }
     res.json(serializeTask(updated));
   } catch (err) {
     req.log.error({ err }, "Failed to complete task");

@@ -1,0 +1,41 @@
+---
+description: Frontend rules for brain-app (React 19 + Vite 7)
+globs: ["artifacts/brain-app/**"]
+alwaysApply: false
+---
+
+# Frontend Rules
+
+## Stack
+React 19, Vite 7, TailwindCSS 4, Framer Motion, Wouter (routing), TanStack React Query v5
+
+## Route map
+```
+/               → redirect to /pops
+/pops           → PopsView (Pops' zero-touch display, auto-refreshes 30s)
+/jessica        → JessicaPhone (live Gemini call + SSE streaming)
+/scripts        → JessicaView (terminal-style script manifest)
+/admin          → AdminView (Raymo's dashboard — 7 tabs)
+/admin/report   → DoctorReport
+/smarthome      → SmartHomePanel
+/intercom       → E2EE intercom
+/my-subscription→ MySubscriptionPage
+/guardian       → GuardianPage (public — outside VaultGate)
+/guardian/success → GuardianSuccessPage
+```
+
+## Vault gate
+VaultProvider wraps all of AppContent. If isUnlocked === false, only VaultGate renders.
+/guardian and /guardian/success are intentionally outside the vault for public subscriber onboarding.
+Never move a page outside VaultProvider without explicit approval.
+
+## Adding a page
+1. Create `artifacts/brain-app/src/pages/<page>.tsx`
+2. Add `<Route>` in App.tsx inside AppContent
+3. Optionally add to NAV_ITEMS for bottom nav
+
+## Mobile PWA pass scope (branch: mobile-admin-pwa-pass)
+Phase 1: PWA manifest + safe areas + remove maximum-scale=1 + 16px inputs
+Phase 2: Admin mobile layout — tab bar/drawer, hide global bottom nav on /admin, stack cards, contain tables
+Phase 3: Jessica mobile polish — compact call header, keyboard-safe input, admin test mode
+No native iOS. PWA only.

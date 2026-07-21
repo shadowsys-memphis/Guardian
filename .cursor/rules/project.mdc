@@ -1,0 +1,49 @@
+---
+description: Guardian / br(AI)n App — core project rules for all files
+alwaysApply: true
+---
+
+# Guardian Project Rules
+
+## What this is
+A unified AI caregiver system for a Veteran (Pops) with PTSD and Schizophrenia. Caregiver is Raymo. Jessica is the AI companion (Gemini). This is a real care system — correctness matters.
+
+## Monorepo layout
+```
+artifacts/api-server/   Express 5 API
+artifacts/brain-app/    React 19 + Vite 7 frontend
+lib/api-spec/           openapi.yaml — source of truth for all API types
+lib/api-client-react/   GENERATED — never hand-edit
+lib/api-zod/            GENERATED — never hand-edit
+lib/db/                 Drizzle ORM schema + PostgreSQL
+lib/integrations-gemini-ai/  Gemini SDK wrapper
+scripts/                seed.ts
+```
+
+## Hard rules — never break these
+
+- `import { z } from "zod/v4"` — NOT `"zod"`. drizzle-zod requires the /v4 subpath.
+- Never hand-edit files under `lib/api-client-react/src/generated/` or `lib/api-zod/src/generated/`.
+- After editing `openapi.yaml`, always run codegen before typecheck: `pnpm --filter @workspace/api-spec run codegen`
+- VaultProvider wraps all UI in App.tsx. Never add a page that bypasses `useVault().isUnlocked`.
+- Haldol cycle day: `(diffDays % 14) + 1` — no Math.min/max clamping. Ever.
+- `/scripts/active` must be registered before `/:id` in the Express router.
+- `intercom_messages` stores ciphertext/iv/salt only — never plaintext. No server-side decryption.
+- CORS is exact-match allowlist — do not relax to startsWith.
+- Tenant scoping: derive tenant_id from `req.tenantSession.sub`, never from client-supplied fields.
+
+## Dev commands
+```bash
+pnpm run typecheck                              # always run from root
+pnpm --filter @workspace/api-spec run codegen  # after editing openapi.yaml
+pnpm --filter @workspace/db run push           # push schema changes
+pnpm --filter @workspace/api-server run dev    # start API
+pnpm --filter @workspace/brain-app run dev     # start frontend
+```
+
+## Git / machine discipline
+- One active writer at a time. Before editing: `git pull --rebase`. After: commit and push.
+- Canonical remote: https://github.com/shadowsys-memphis/Guardian.git
+- Never force push master. Never use LEDGERGHOST90 for this repo.
+- Open the repo ROOT in Cursor — not artifacts/brain-app, not a subfolder.
+- Run the proof block before any session: `pwd && git rev-parse --show-toplevel && git remote -v && git status --short`

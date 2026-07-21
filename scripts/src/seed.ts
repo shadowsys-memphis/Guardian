@@ -4,7 +4,6 @@ import {
   scheduleTasksTable,
   voiceScriptsTable,
   haldolCycleTable,
-  governorPillarsTable,
 } from "@workspace/db/schema";
 
 async function seed() {
@@ -175,43 +174,6 @@ async function seed() {
       notes: "Initial cycle record. Update with actual last injection date.",
     });
     console.log("✓ Haldol cycle seeded");
-  }
-
-  const existingPillars = await db.select().from(governorPillarsTable).limit(1);
-  if (existingPillars.length === 0) {
-    await db.insert(governorPillarsTable).values([
-      {
-        pillarKey: "productivity",
-        name: "Lulubear Bakery",
-        description: "Daily status: Optimization of high-leverage client assets. Focus on speed and site audit delivery.",
-        focusDurationMins: 60,
-        metrics: JSON.stringify([
-          "Lulubear site speed audit progress",
-          "Optimization asset staging in /projects/lulubear/optimizations",
-        ]),
-      },
-      {
-        pillarKey: "passion",
-        name: "SS_III",
-        description: "Logic problems: Developing the Autonomous IT Department. Shadow AI Service Agent development.",
-        focusDurationMins: 120,
-        metrics: JSON.stringify([
-          "Service Agent logic v0.1 stability",
-          "Shadow AI terminal history pattern mapping",
-        ]),
-      },
-      {
-        pillarKey: "curiosity",
-        name: "AI/Crypto Growth",
-        description: "Research: AI/Crypto trends, Kraken metrics. High-level strategic synthesis and learning.",
-        focusDurationMins: 45,
-        metrics: JSON.stringify([
-          "Kraken portfolio risk assessment",
-          "Latest AI/Crypto research synthesis docs",
-        ]),
-      },
-    ]);
-    console.log("✓ Governor pillars seeded");
   }
 
   console.log("Seeding complete.");

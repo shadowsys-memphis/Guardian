@@ -385,6 +385,10 @@ export const GetActiveScriptsResponse = zod.array(GetActiveScriptsResponseItem);
 export const GetHaldolCycleResponse = zod.object({
   id: zod.number(),
   lastInjectionDate: zod.date().describe("Date of the last Haldol injection"),
+  doseMg: zod
+    .number()
+    .nullish()
+    .describe("Injection dose in milligrams (null until confirmed)"),
   cycleDay: zod.number().describe("Current day within the 14-day cycle (1-14)"),
   isZombiePhase: zod
     .boolean()
@@ -398,12 +402,17 @@ export const GetHaldolCycleResponse = zod.object({
  */
 export const UpdateHaldolCycleBody = zod.object({
   lastInjectionDate: zod.date().optional(),
+  doseMg: zod.number().nullish().describe("Injection dose in milligrams"),
   notes: zod.string().optional(),
 });
 
 export const UpdateHaldolCycleResponse = zod.object({
   id: zod.number(),
   lastInjectionDate: zod.date().describe("Date of the last Haldol injection"),
+  doseMg: zod
+    .number()
+    .nullish()
+    .describe("Injection dose in milligrams (null until confirmed)"),
   cycleDay: zod.number().describe("Current day within the 14-day cycle (1-14)"),
   isZombiePhase: zod
     .boolean()

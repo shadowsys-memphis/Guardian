@@ -10,6 +10,8 @@ export interface HaldolCycle {
   id: number;
   /** Date of the last Haldol injection */
   lastInjectionDate: Date;
+  /** Injection dose in milligrams (null until confirmed) */
+  doseMg?: number | null;
   /** Current day within the 14-day cycle (1-14) */
   cycleDay: number;
   /** True on days 1-5 when symptoms are typically highest */

@@ -39,6 +39,7 @@ function serializeCycle(cycle: typeof haldolCycleTable.$inferSelect) {
   return {
     id: cycle.id,
     lastInjectionDate: cycle.lastInjectionDate,
+    doseMg: cycle.doseMg ?? null,
     notes: cycle.notes ?? undefined,
     ...computed,
   };
@@ -57,10 +58,21 @@ router.get("/haldol", async (req, res) => {
 router.put("/haldol", async (req, res) => {
   try {
     const body = UpdateHaldolCycleBody.parse(req.body);
+    const updateValues: { notes?: string; lastInjectionDate?: string; doseMg?: number | null } = {
+      notes: body.notes ?? undefined,
+    };
+    if (body.lastInjectionDate) {
+      updateValues.lastInjectionDate = body.lastInjectionDate instanceof Date
+        ? body.lastInjectionDate.toISOString().split("T")[0]
+        : String(body.lastInjectionDate);
+    }
+    if ("doseMg" in body) {
+      updateValues.doseMg = body.doseMg ?? null;
+    }
     const cycle = await ensureCycle();
     const [updated] = await db
       .update(haldolCycleTable)
-      .set(body)
+      .set(updateValues)
       .where(eq(haldolCycleTable.id, cycle.id))
       .returning();
     res.json(serializeCycle(updated));
