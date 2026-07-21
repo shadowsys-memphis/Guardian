@@ -114,6 +114,7 @@ export const callSessionsTable = pgTable("call_sessions", {
   endedAt: timestamp("ended_at"),
   summary: text("summary"),
   flagged: boolean("flagged").notNull().default(false),
+  elevenlabsConversationId: text("elevenlabs_conversation_id"),
 });
 
 export const healthDataPointsTable = pgTable("health_data_points", {

@@ -82,6 +82,11 @@ export async function runTenantMigration(): Promise<void> {
       END $$
     `);
 
+    // ── call_sessions — add elevenlabs_conversation_id if not yet present ─────
+    await pool.query(`
+      ALTER TABLE call_sessions ADD COLUMN IF NOT EXISTS elevenlabs_conversation_id TEXT
+    `);
+
     logger.info("Tenant migration complete");
   } catch (err) {
     logger.error({ err }, "Tenant migration failed");

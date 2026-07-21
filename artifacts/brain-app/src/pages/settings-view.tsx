@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   Syringe,
   Settings,
+  Phone,
 } from "lucide-react";
 import {
   useGetAssessmentSettings,
@@ -39,7 +40,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type SettingsTab = "general" | "store" | "medications" | "ai-model" | "access";
+type SettingsTab = "general" | "jessica" | "store" | "medications" | "ai-model" | "access";
 
 function SavedBadge({ visible }: { visible: boolean }) {
   if (!visible) return null;
@@ -249,6 +250,123 @@ function GeneralTab() {
             <p className="text-xs text-muted-foreground">How often Jessica proactively checks in with Pops.</p>
           </div>
           <SavedBadge visible={savedKey === "quiet"} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Jessica Tab ──────────────────────────────────────────────────────────────
+function JessicaTab() {
+  const { settings, loading, save } = useAppSettings();
+  const { toast } = useToast();
+  const [phone, setPhone] = useState("");
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!loading) setPhone(settings.pops_phone_number ?? "");
+  }, [loading, settings]);
+
+  const flash = (key: string) => {
+    setSavedKey(key);
+    setTimeout(() => setSavedKey(null), 2000);
+  };
+
+  const savePhone = async () => {
+    const trimmed = phone.trim();
+    const ok = await save({ pops_phone_number: trimmed });
+    if (ok) flash("phone");
+    else toast({ title: "Failed to save phone number", variant: "destructive" });
+  };
+
+  return (
+    <div className="space-y-6 max-w-xl">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Phone size={14} className="text-primary" /> Pops' Phone Number
+          </CardTitle>
+          <CardDescription>
+            When Ray hits "Call Pops," Jessica will ring this number directly. Pops answers his regular phone — no app needed.
+            Include country code (e.g. +17605551234).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <Input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              onBlur={savePhone}
+              onKeyDown={(e) => { if (e.key === "Enter") savePhone(); }}
+              placeholder="+17605551234"
+              maxLength={20}
+              className="max-w-[220px] font-mono"
+              type="tel"
+            />
+            <SavedBadge visible={savedKey === "phone"} />
+          </div>
+          {phone.trim() && !/^\+\d{10,15}$/.test(phone.trim()) && (
+            <p className="text-xs text-amber-500 flex items-center gap-1">
+              <AlertTriangle size={11} /> Use E.164 format: +1 followed by 10 digits (e.g. +17605551234)
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground/60">
+            Leave blank to use the in-app chat mode as a fallback.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            🔑 ElevenLabs Credentials
+          </CardTitle>
+          <CardDescription>
+            Outbound calling requires three Replit secrets set by Ray:
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs font-mono text-muted-foreground">
+          <div className="space-y-1">
+            <p><span className="text-foreground font-bold">ELEVENLABS_API_KEY</span> — Your ElevenLabs account API key</p>
+            <p><span className="text-foreground font-bold">ELEVENLABS_AGENT_ID</span> — The Conversational AI agent ID from ElevenLabs dashboard</p>
+            <p><span className="text-foreground font-bold">ELEVENLABS_PHONE_NUMBER_ID</span> — The phone number ID of your Twilio caller in ElevenLabs</p>
+          </div>
+          <div className="mt-3 pt-3 border-t border-border/30">
+            <p className="text-muted-foreground/60 normal-case tracking-normal font-sans">
+              Set these in the Replit Secrets panel. When all three are configured and Pops' number is saved above,
+              the "Call Pops" button will use ElevenLabs instead of the in-app chat.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest">Webhook URL</CardTitle>
+          <CardDescription>
+            Paste this into your ElevenLabs agent's webhook settings so call transcripts are automatically saved.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex items-center gap-2 p-2 bg-secondary/50 border border-border/40 rounded-sm">
+            <code className="text-xs text-muted-foreground flex-1 break-all">
+              {typeof window !== "undefined" ? `${window.location.origin}/api/jessica/elevenlabs-webhook` : "/api/jessica/elevenlabs-webhook"}
+            </code>
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/api/jessica/elevenlabs-webhook`;
+                navigator.clipboard.writeText(url).then(() => {
+                  flash("webhook");
+                });
+              }}
+              className="text-xs text-primary hover:underline shrink-0"
+            >
+              {savedKey === "webhook" ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground/60">
+            Set the event type to <span className="font-mono">post_call_transcription</span> in ElevenLabs.
+          </p>
         </CardContent>
       </Card>
     </div>
@@ -1044,6 +1162,7 @@ export function SettingsView() {
 
   const TABS: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: "general", label: "General", icon: <Settings size={16} /> },
+    { id: "jessica", label: "Jessica", icon: <Phone size={16} /> },
     { id: "store", label: "Store", icon: <Store size={16} /> },
     { id: "medications", label: "Medications", icon: <Pill size={16} /> },
     { id: "ai-model", label: "AI Model", icon: <BrainCircuit size={16} /> },
@@ -1052,6 +1171,7 @@ export function SettingsView() {
 
   const tabTitle: Record<SettingsTab, string> = {
     general: "General",
+    jessica: "Jessica Calling",
     store: "Store Preferences",
     medications: "Medications",
     "ai-model": "AI Model",
@@ -1060,6 +1180,7 @@ export function SettingsView() {
 
   const tabDesc: Record<SettingsTab, string> = {
     general: "Haldol cycle timing, quiet window, and engagement schedule.",
+    jessica: "Pops' phone number and ElevenLabs outbound call configuration.",
     store: "Zip code, preferred grocery store, and connection testing.",
     medications: "Track Pops' active medications so Jessica can verify adherence.",
     "ai-model": "Choose which AI model powers Jessica and configure LM Studio.",
@@ -1110,6 +1231,7 @@ export function SettingsView() {
           </header>
 
           {tab === "general" && <GeneralTab />}
+          {tab === "jessica" && <JessicaTab />}
           {tab === "store" && <StoreTab />}
           {tab === "medications" && <MedicationsTab />}
           {tab === "ai-model" && <AiModelTab />}

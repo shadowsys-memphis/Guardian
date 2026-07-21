@@ -135,6 +135,10 @@ export function JessicaPhone() {
   } | null>(null);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [outboundConversationId, setOutboundConversationId] = useState<string | null>(null);
+  const [isOutboundCall, setIsOutboundCall] = useState(false);
+  const [outboundSummary, setOutboundSummary] = useState<string | null>(null);
+  const outboundPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const visionInputRef = useRef<HTMLInputElement>(null);
@@ -227,7 +231,36 @@ export function JessicaPhone() {
   const startCall = async () => {
     setCallState("calling");
     setQuietWindowMessage(null);
+    setOutboundSummary(null);
+
     try {
+      const settingsRes = await fetch(`${BASE_URL}/api/settings`).catch(() => null);
+      const settings: Record<string, string> = settingsRes?.ok ? await settingsRes.json().catch(() => ({})) : {};
+      const popsPhone = settings["pops_phone_number"] ?? "";
+
+      if (popsPhone && popsPhone.trim()) {
+        const res = await fetch(`${BASE_URL}/api/jessica/outbound-call`, { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          setOutboundConversationId(data.elevenLabsConversationId);
+          setIsOutboundCall(true);
+          setCallState("connected");
+          return;
+        }
+
+        const body = await res.json().catch(() => ({}));
+        const isNotConfigured = res.status === 503 && (body as any).error === "elevenlabs_not_configured";
+        if (!isNotConfigured) {
+          toast({
+            title: "Could not start outbound call",
+            description: (body as any).message ?? "ElevenLabs call failed. Check Settings → Jessica.",
+            variant: "destructive",
+          });
+          setCallState("idle");
+          return;
+        }
+      }
+
       const res = await fetch(`${BASE_URL}/api/gemini/conversations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -243,6 +276,7 @@ export function JessicaPhone() {
       }
       const convo = await res.json();
       setConversationId(convo.id);
+      setIsOutboundCall(false);
       setTimeout(() => {
         setCallState("connected");
         const greeting: Message = {
@@ -259,9 +293,38 @@ export function JessicaPhone() {
     }
   };
 
+  useEffect(() => {
+    if (!isOutboundCall || !outboundConversationId || callState === "idle" || callState === "ended") return;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/jessica/call-status/${outboundConversationId}`);
+        if (!res.ok) return;
+        const data = await res.json() as { ended: boolean; summary: string | null; flagged: boolean };
+        if (data.ended) {
+          if (outboundPollRef.current) clearInterval(outboundPollRef.current);
+          setOutboundSummary(data.summary);
+          setCallState("ended");
+          setTimeout(() => {
+            setCallState("idle");
+            setIsOutboundCall(false);
+            setOutboundConversationId(null);
+            setOutboundSummary(null);
+          }, 5000);
+        }
+      } catch {}
+    };
+
+    outboundPollRef.current = setInterval(poll, 5000);
+    return () => {
+      if (outboundPollRef.current) clearInterval(outboundPollRef.current);
+    };
+  }, [isOutboundCall, outboundConversationId, callState]);
+
   const endCall = async () => {
     synth.current?.cancel();
-    if (conversationId) {
+    if (outboundPollRef.current) clearInterval(outboundPollRef.current);
+    if (conversationId && !isOutboundCall) {
       try {
         await fetch(`${BASE_URL}/api/gemini/conversations/${conversationId}/end`, { method: "POST" });
       } catch {}
@@ -271,6 +334,9 @@ export function JessicaPhone() {
       setCallState("idle");
       setMessages([]);
       setConversationId(null);
+      setIsOutboundCall(false);
+      setOutboundConversationId(null);
+      setOutboundSummary(null);
       setDeviceCommandResult(null);
       setActionStream([]);
       setHealthDataCount(0);
@@ -691,7 +757,15 @@ export function JessicaPhone() {
               <div className="h-32 w-32 mx-auto rounded-full bg-destructive/10 border-2 border-destructive/30 flex items-center justify-center">
                 <PhoneOff className="h-14 w-14 text-destructive" />
               </div>
-              <p className="text-destructive font-display uppercase tracking-widest">Ended</p>
+              <p className="text-destructive font-display uppercase tracking-widest">
+                {isOutboundCall ? "Call Ended" : "Ended"}
+              </p>
+              {outboundSummary && (
+                <div className="px-4 py-3 bg-secondary/60 border border-border/40 rounded-sm text-left max-w-xs mx-auto">
+                  <p className="text-xs font-display uppercase tracking-widest text-muted-foreground mb-1">Call Summary</p>
+                  <p className="text-sm text-foreground/80">{outboundSummary}</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -781,6 +855,46 @@ export function JessicaPhone() {
             className="flex items-center gap-2 px-6 py-3 bg-destructive/10 hover:bg-destructive/20 border border-destructive/40 text-destructive rounded-sm font-display text-sm uppercase tracking-widest transition-colors"
           >
             <PhoneOff size={16} /> Hang Up
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (callState === "connected" && isOutboundCall) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center">
+        <div className="text-center space-y-8 max-w-sm w-full px-6">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground uppercase tracking-widest font-display">Jessica</p>
+            <h1 className="text-3xl font-display font-bold text-primary tracking-widest uppercase">
+              Connected
+            </h1>
+            <p className="text-sm text-muted-foreground/70">
+              Jessica is talking to Pops on his phone.
+            </p>
+          </div>
+
+          <div className="h-36 w-36 mx-auto rounded-full bg-primary/10 border-2 border-primary/40 flex flex-col items-center justify-center gap-2 shadow-[0_0_60px_rgba(70,159,104,0.2)]">
+            <Phone className="h-12 w-12 text-primary" />
+            <WaveformBars active={true} />
+          </div>
+
+          <div className="px-4 py-3 bg-secondary/60 border border-border/40 rounded-sm text-xs text-muted-foreground space-y-1 text-left">
+            <p className="font-display uppercase tracking-widest text-muted-foreground/60">What happens next</p>
+            <p>Pops is talking to Jessica on his phone. When the call ends, the transcript will be saved automatically and health data will appear in the Dashboard.</p>
+          </div>
+
+          <div className="flex items-center justify-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            <span className="text-xs font-display text-success uppercase tracking-widest">Live — polling for completion</span>
+          </div>
+
+          <button
+            onClick={endCall}
+            className="flex items-center gap-2 px-6 py-3 bg-destructive/10 hover:bg-destructive/20 border border-destructive/40 text-destructive rounded-sm font-display text-sm uppercase tracking-widest transition-colors mx-auto"
+          >
+            <PhoneOff size={16} /> End & Hang Up
           </button>
         </div>
       </div>

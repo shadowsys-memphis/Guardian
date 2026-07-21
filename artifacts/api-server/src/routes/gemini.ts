@@ -134,7 +134,7 @@ ${symptomStr}`;
   }
 }
 
-function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string): string {
+export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string): string {
   const toneProfile = isZombiePhase
     ? "Today is a rest day for Pops — his Haldol cycle is in the high-symptom phase (days 1-5). Keep everything soft, brief, and low-pressure. No long conversations. Gentle check-ins only."
     : "Today is a normal day for Pops. You can be warm, engaged, and conversational. Keep him anchored and positive.";
@@ -430,7 +430,7 @@ function parseDeviceCommand(text: string): { device: string; action: string; val
   try { return JSON.parse(match[1]); } catch { return null; }
 }
 
-async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; isZombiePhase: boolean }> {
+export async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; isZombiePhase: boolean }> {
   try {
     const rows = await db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1);
     if (!rows[0]) return { cycleDay: null, isZombiePhase: false };

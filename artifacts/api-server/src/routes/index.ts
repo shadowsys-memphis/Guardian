@@ -23,6 +23,7 @@ import reportsRouter from "./reports";
 import actionsRouter from "./actions";
 import medicationsRouter from "./medications";
 import authRouter from "./auth";
+import jessicaRouter from "./jessica";
 
 const router: IRouter = Router();
 
@@ -30,6 +31,9 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(tenantsRouter);   // /tenants/auth, /tenants/setup
 router.use(billingRouter);   // billing public: /billing/checkout, /billing/webhook,
+router.use(jessicaRouter);   // jessica public: /jessica/elevenlabs-webhook
+                              // jessica private: /jessica/outbound-call, /jessica/call-status/:id
+                              // carry inline requireLocalSession.
                               // /billing/checkout-session.
                               // billing private: /billing/status + /billing/customer-portal
                               // already carry inline requireAnySession.
