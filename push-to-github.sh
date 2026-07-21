@@ -12,12 +12,12 @@ git remote add github "https://${TOKEN}@github.com/shadowsys-memphis/guardian.gi
 echo "Fetching from GitHub..."
 git fetch github master
 
-echo "Rebasing local commits on top of GitHub..."
-git rebase github/master
+echo "Merging GitHub history (keeping our code on conflicts)..."
+git merge github/master --allow-unrelated-histories --no-edit -s recursive -X ours
 
 if [ $? -ne 0 ]; then
-  echo "Rebase conflict. Aborting."
-  git rebase --abort
+  echo "Merge failed."
+  git merge --abort 2>/dev/null
   git remote remove github
   exit 1
 fi
