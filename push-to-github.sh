@@ -1,28 +1,21 @@
 #!/bin/bash
-echo ""
-echo "Paste your GitHub Personal Access Token, then press Enter:"
-echo "(Get one at: github.com/settings/tokens — needs 'repo' scope)"
-echo ""
-read -s TOKEN
+TOKEN="${GITHUB_TOKEN}"
 
 if [ -z "$TOKEN" ]; then
-  echo "No token entered. Exiting."
+  echo "GITHUB_TOKEN secret not found. Add it in Replit Secrets first."
   exit 1
 fi
 
 git remote remove github 2>/dev/null
 git remote add github "https://${TOKEN}@github.com/shadowsys-memphis/guardian.git"
 
-echo ""
 echo "Pushing to shadowsys-memphis/guardian..."
 git push github master
 
 if [ $? -eq 0 ]; then
-  echo ""
   echo "Done. GitHub is now in sync."
 else
-  echo ""
-  echo "Push failed. Check that the token has 'repo' scope and the repo name is correct."
+  echo "Push failed. Check token has 'repo' scope and repo name is correct."
 fi
 
 git remote remove github
