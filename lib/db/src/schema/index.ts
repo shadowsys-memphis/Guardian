@@ -319,3 +319,25 @@ export const medicationsTable = pgTable("medications", {
 export const insertMedicationSchema = createInsertSchema(medicationsTable).omit({ id: true, createdAt: true });
 export type Medication = typeof medicationsTable.$inferSelect;
 export type InsertMedication = z.infer<typeof insertMedicationSchema>;
+
+export const careEventsTable = pgTable("care_events", {
+  id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
+  source: text("source").notNull().default("jessica"),
+  actor: text("actor").notNull().default("jessica"),
+  eventType: text("event_type").notNull(),
+  sessionId: integer("session_id"),
+  taskId: integer("task_id"),
+  medicationId: integer("medication_id"),
+  severity: text("severity"),
+  confidence: text("confidence"),
+  payload: text("payload").notNull().default("{}"),
+  context: text("context"),
+  outcome: text("outcome").notNull().default("dispatched"),
+  adminIntervention: boolean("admin_intervention").notNull().default(false),
+  doctorRelevant: boolean("doctor_relevant").notNull().default(false),
+  learningRelevant: boolean("learning_relevant").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type CareEvent = typeof careEventsTable.$inferSelect;

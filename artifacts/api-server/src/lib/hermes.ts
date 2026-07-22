@@ -39,7 +39,7 @@
  *     ↓ Future learning engine studies outcomes
  */
 
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   scheduleTasksTable,
   smartHomeDevicesTable,
@@ -49,6 +49,33 @@ import {
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+
+let careEventsReady = false;
+async function ensureCareEventsTable(): Promise<void> {
+  if (careEventsReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS care_events (
+      id SERIAL PRIMARY KEY,
+      tenant_id TEXT NOT NULL DEFAULT 'local',
+      source TEXT NOT NULL DEFAULT 'jessica',
+      actor TEXT NOT NULL DEFAULT 'jessica',
+      event_type TEXT NOT NULL,
+      session_id INTEGER,
+      task_id INTEGER,
+      medication_id INTEGER,
+      severity TEXT,
+      confidence TEXT,
+      payload TEXT NOT NULL DEFAULT '{}',
+      context TEXT,
+      outcome TEXT NOT NULL DEFAULT 'dispatched',
+      admin_intervention BOOLEAN NOT NULL DEFAULT FALSE,
+      doctor_relevant BOOLEAN NOT NULL DEFAULT FALSE,
+      learning_relevant BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  careEventsReady = true;
+}
 
 // ─── Action contract ─────────────────────────────────────────────────────────
 // These types mirror the ACTION block format in Jessica's system prompt.
@@ -97,6 +124,7 @@ async function writeLedger(
   options: { doctorRelevant?: boolean; learningRelevant?: boolean; adminIntervention?: boolean } = {}
 ): Promise<void> {
   try {
+    await ensureCareEventsTable();
     await db.insert(careEventsTable).values({
       tenantId: ctx.tenantId,
       source: ctx.source ?? "jessica",
