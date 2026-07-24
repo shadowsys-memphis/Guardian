@@ -25,17 +25,20 @@ app.use(
     },
   }),
 );
-const allowedOrigins = [
-  process.env["VITE_PUBLIC_SITE_URL"],          // production Replit URL
-  "http://localhost:5173",                        // Vite dev server
-  "http://localhost:3000",
-].filter(Boolean) as string[];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow same-origin and server-to-server requests (no Origin header)
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow same-origin and server-to-server requests (no Origin header),
+      // all Replit dev/deployment domains, and local dev servers.
+      if (
+        !origin ||
+        origin.endsWith(".replit.dev") ||
+        origin.endsWith(".repl.co") ||
+        origin === "http://localhost:5173" ||
+        origin === "http://localhost:3000" ||
+        origin === process.env["VITE_PUBLIC_SITE_URL"]
+      ) {
         callback(null, true);
       } else {
         callback(new Error(`CORS: origin ${origin} not allowed`));
@@ -44,11 +47,6 @@ app.use(
     credentials: true,
   })
 );
-
-// Stripe webhook MUST receive the raw bytes for signature verification.
-// Mount express.raw() on this path only, BEFORE the global express.json() below,
-// so the two parsers never compete for the same request stream.
-app.use("/api/billing/webhook", express.raw({ type: "application/json" }));
 
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));

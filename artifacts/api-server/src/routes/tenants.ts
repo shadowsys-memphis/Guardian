@@ -1,6 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
-import { createHash } from "crypto";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -52,15 +51,14 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
         res.json({ token: makeLocalToken(), type: "local", plan: "local", status: "active" });
         return;
       }
-      // Fall through to check paying tenants even if local passphrase doesn't match
+      // Fall through to check tenants even if local passphrase doesn't match
     }
 
-    // 2. Check bcrypt hashes of paying tenants
+    // 2. Check bcrypt hashes of provisioned tenants (any that have completed setup)
     const tenantResult = await pool.query(
       `SELECT id, plan, status, passphrase_hash
        FROM tenants
-       WHERE status IN ('trialing', 'active', 'past_due')
-         AND passphrase_hash IS NOT NULL
+       WHERE passphrase_hash IS NOT NULL
          AND setup_completed_at IS NOT NULL`
     );
 
@@ -68,20 +66,19 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
       const match = await bcrypt.compare(body.passphrase, tenant.passphrase_hash as string);
       if (match) {
         const token = jwt.sign(
-          { sub: tenant.id, type: "tenant", plan: tenant.plan, status: tenant.status },
+          { sub: tenant.id, type: "tenant", plan: tenant.plan, status: "active" },
           getJwtSecret(),
           { expiresIn: "24h" }
         );
-        res.json({ token, type: "tenant", plan: tenant.plan, status: tenant.status });
+        res.json({ token, type: "tenant", plan: tenant.plan, status: "active" });
         return;
       }
     }
 
     // 3. Legacy / unconfigured mode:
-    //    If VAULT_PASSPHRASE is NOT set AND no paying tenants exist yet,
-    //    accept any passphrase ≥ 4 chars. Matches the pre-task behaviour so Ray
-    //    can still access his workspace before setting the secret.
-    //    This fallback automatically disables once VAULT_PASSPHRASE is configured.
+    //    If VAULT_PASSPHRASE is NOT set AND no tenants exist yet,
+    //    accept any passphrase ≥ 4 chars. This fallback automatically
+    //    disables once VAULT_PASSPHRASE is configured.
     if (!vaultPassphrase && tenantResult.rows.length === 0 && body.passphrase.length >= 4) {
       res.json({ token: makeLocalToken(), type: "local", plan: "local", status: "active" });
       return;
@@ -98,16 +95,20 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /tenants/setup — provision a new tenant workspace passphrase.
+ * Used by any future onboarding flow. No setup token required —
+ * a tenant row must already exist with no passphrase set yet.
+ */
 router.post("/tenants/setup", async (req: Request, res: Response) => {
   try {
     const body = z.object({
       tenantId: z.string().min(1),
-      setupToken: z.string().min(1),
       passphrase: z.string().min(8),
     }).parse(req.body);
 
     const result = await pool.query(
-      `SELECT id, setup_token_hash, setup_completed_at
+      `SELECT id, passphrase_hash, setup_completed_at
        FROM tenants WHERE id = $1`,
       [body.tenantId]
     );
@@ -120,17 +121,6 @@ router.post("/tenants/setup", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Setup already completed. Please sign in." });
       return;
     }
-    if (!tenant.setup_token_hash) {
-      res.status(401).json({ error: "Invalid or expired setup token" });
-      return;
-    }
-
-    // Verify by hashing the submitted token with SHA-256 and comparing
-    const submittedHash = createHash("sha256").update(body.setupToken).digest("hex");
-    if (submittedHash !== tenant.setup_token_hash) {
-      res.status(401).json({ error: "Invalid setup token" });
-      return;
-    }
 
     const passphraseHash = await bcrypt.hash(body.passphrase, 12);
 
@@ -138,7 +128,7 @@ router.post("/tenants/setup", async (req: Request, res: Response) => {
       `UPDATE tenants
        SET passphrase_hash = $1,
            setup_completed_at = NOW(),
-           setup_token_hash = NULL,
+           status = 'active',
            updated_at = NOW()
        WHERE id = $2`,
       [passphraseHash, body.tenantId]

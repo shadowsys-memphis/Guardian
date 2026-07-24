@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { requireAnySession, requireLocalSession, requireActiveSubscription } from "../middlewares/tenant-auth";
+import { requireAnySession, requireLocalSession } from "../middlewares/tenant-auth";
 
 import healthRouter from "./health";
 import stateRouter from "./state";
@@ -16,7 +16,6 @@ import adminRouter from "./admin";
 import workspaceRouteHandler from "./workspace";
 import inventoryRouter from "./inventory";
 import intakeRouter from "./intake";
-import billingRouter from "./billing";
 import tenantsRouter from "./tenants";
 import appointmentsRouter from "./appointments";
 import reportsRouter from "./reports";
@@ -31,13 +30,9 @@ const router: IRouter = Router();
 // ─── PUBLIC ROUTES — no authentication required ──────────────────────────────
 router.use(healthRouter);
 router.use(tenantsRouter);   // /tenants/auth, /tenants/setup
-router.use(billingRouter);   // billing public: /billing/checkout, /billing/webhook,
 router.use(jessicaRouter);   // jessica public: /jessica/elevenlabs-webhook
                               // jessica private: /jessica/outbound-call, /jessica/call-status/:id
                               // carry inline requireLocalSession.
-                              // /billing/checkout-session.
-                              // billing private: /billing/status + /billing/customer-portal
-                              // already carry inline requireAnySession.
 
 // ─── CORE WORKSPACE — any valid session (local or tenant) ────────────────────
 // These routes enforce tenant_id scoping on every DB query, resolving the
@@ -46,7 +41,6 @@ router.use(jessicaRouter);   // jessica public: /jessica/elevenlabs-webhook
 // tenant sessions: tenantId = session.sub (paying subscriber's UUID)
 const coreRouter: IRouter = Router();
 coreRouter.use(requireAnySession);
-coreRouter.use(requireActiveSubscription);
 coreRouter.use(stateRouter);
 coreRouter.use(scheduleRouter);
 coreRouter.use(symptomsRouter);
