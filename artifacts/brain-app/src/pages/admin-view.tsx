@@ -169,7 +169,7 @@ export function AdminView() {
 
       <main className="flex-1 p-6 md:p-8 overflow-y-auto">
         <div className="max-w-6xl mx-auto">
-          {activeTab === "dashboard" && <DashboardTab />}
+          {activeTab === "dashboard" && <DashboardTab onNavigate={setActiveTab} />}
           {activeTab === "schedule" && <ScheduleTab />}
           {activeTab === "symptoms" && <SymptomsTab />}
           {activeTab === "scripts" && <ScriptsTab />}
@@ -948,7 +948,7 @@ function NavButton({ active, onClick, icon, label }: { active: boolean; onClick:
   );
 }
 
-function DashboardTab() {
+function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { data: state } = useGetAppState();
   const { data: haldol } = useGetHaldolCycle();
   const { data: schedule } = useGetSchedule();
@@ -958,6 +958,19 @@ function DashboardTab() {
   const updateState = useUpdateAppState();
   const { toast } = useToast();
   const [broadcastValue, setBroadcastValue] = useState(state?.activeMessage ?? "");
+  const [dietaryProfile, setDietaryProfile] = useState<{ restrictions?: string[]; source?: string; updated_at?: string } | null>(null);
+  const [activityRestrictions, setActivityRestrictions] = useState<{ restrictions?: string[]; source?: string; updated_at?: string } | null>(null);
+
+  useEffect(() => {
+    fetch(`${WORKSPACE_BASE}/api/documents/care-context`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        if (data.dietary_profile) setDietaryProfile(data.dietary_profile);
+        if (data.activity_restrictions) setActivityRestrictions(data.activity_restrictions);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleStateChange = (updates: UpdateAppStateInput) => {
     updateState.mutate({ data: updates }, {
@@ -1071,6 +1084,70 @@ function DashboardTab() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Active Care Alerts ─────────────────────────────────────────── */}
+      {(dietaryProfile?.restrictions?.length || activityRestrictions?.restrictions?.length) ? (
+        <Card className="mt-8 border-amber-500/60 shadow-[0_0_16px_rgba(245,158,11,0.15)] bg-amber-500/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2 text-amber-500">
+                <ShieldAlert size={14} /> Active Care Alerts
+              </CardDescription>
+              <button
+                onClick={() => onNavigate("documents")}
+                className="text-[10px] uppercase tracking-widest font-bold text-primary hover:underline flex items-center gap-1"
+              >
+                <FileText size={10} /> View Documents
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {dietaryProfile?.restrictions?.length ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1.5 flex items-center gap-1">
+                  <Flame size={10} /> Dietary Restrictions
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {dietaryProfile.restrictions.map((r, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded-sm bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium border border-amber-500/30">
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {activityRestrictions?.restrictions?.length ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1.5 flex items-center gap-1">
+                  <Activity size={10} /> Activity Restrictions
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {activityRestrictions.restrictions.map((r, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded-sm bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium border border-amber-500/30">
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div className="border-t border-border/40 pt-2 flex items-center justify-between">
+              <p className="text-[10px] text-muted-foreground/60">
+                Source: <span className="font-medium text-muted-foreground">
+                  {dietaryProfile?.source ?? activityRestrictions?.source ?? "Medical Document"}
+                </span>
+              </p>
+              {(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at) && (
+                <p className="text-[10px] text-muted-foreground/60">
+                  Updated:{" "}
+                  {new Date(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at!).toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", year: "numeric",
+                  })}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="mt-8">
         <CardHeader>
