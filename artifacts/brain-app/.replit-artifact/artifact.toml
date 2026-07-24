@@ -23,6 +23,14 @@ publicDir = "artifacts/brain-app/dist/public"
 serve = "static"
 
 [[services.production.rewrites]]
+from = "/guardian/success"
+to = "/guardian-success.html"
+
+[[services.production.rewrites]]
+from = "/guardian/success/"
+to = "/guardian-success.html"
+
+[[services.production.rewrites]]
 from = "/guardian"
 to = "/guardian.html"
 
