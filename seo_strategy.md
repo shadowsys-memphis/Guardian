@@ -24,9 +24,9 @@
 - The built `/guardian` HTML now contains its H1 and body copy in the initial response, so the prior empty-shell rendering problem is fixed.
 - `artifacts/brain-app/public/robots.txt` now allows `/guardian` and the public assets it depends on while keeping the private workspace blocked.
 - The root app shell remains privacy-first: `artifacts/brain-app/index.html` emits `noindex, nofollow, noarchive` for the private workspace.
-- `/guardian` still hydrates the shared app entry and currently ships a single 1.1 MB minified JavaScript bundle because the app entry statically imports private workspace routes.
+- The current production build now code-splits the public acquisition route: `/guardian` loads its own `guardian-main` entry plus smaller shared chunks, and no built asset is near Google's 2 MB per-resource rendering cap.
 - `/guardian/success` has a dedicated source HTML shell, but production rewrites still fall through to `/index.html` for that route.
-- No `llms.txt` file or site-level `WebSite` / `Organization` JSON-LD is present in the public shell.
+- `artifacts/brain-app/public/llms.txt` now exists, and `/guardian` emits `WebSite`, `Organization`, and `SoftwareApplication` JSON-LD in the public shell.
 
 ## Dismissed categories
 - Do not propose generic ranking or content optimizations for the internal caregiver SPA while the project intentionally excludes the private shell from search.
