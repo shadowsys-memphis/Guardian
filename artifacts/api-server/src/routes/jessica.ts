@@ -102,7 +102,37 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
 
     const { cycleDay, isZombiePhase } = await getCurrentCycleInfo();
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
-    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase);
+
+    const careContextLines: string[] = [];
+    try {
+      const settingRows = await db.select().from(appSettingsTable)
+        .where(eq(appSettingsTable.key, "dietary_profile"));
+      const dietRow = settingRows[0];
+      if (dietRow?.value) {
+        const diet = JSON.parse(dietRow.value) as { restrictions?: string[]; source?: string };
+        if (diet.restrictions?.length) {
+          careContextLines.push(`DIETARY RESTRICTIONS (from ${diet.source ?? "care record"}): ${diet.restrictions.join(", ")}. Mention this casually when food or meals come up — do not make it a lecture.`);
+        }
+      }
+    } catch {}
+
+    try {
+      const settingRows = await db.select().from(appSettingsTable)
+        .where(eq(appSettingsTable.key, "activity_restrictions"));
+      const actRow = settingRows[0];
+      if (actRow?.value) {
+        const act = JSON.parse(actRow.value) as { restrictions?: string[]; source?: string };
+        if (act.restrictions?.length) {
+          careContextLines.push(`ACTIVITY RESTRICTIONS (from ${act.source ?? "care record"}): ${act.restrictions.join("; ")}. Gently remind Pops of these if relevant — keep it natural, not clinical.`);
+        }
+      }
+    } catch {}
+
+    const liveContext = careContextLines.length > 0
+      ? `CURRENT CARE CONTEXT — IMPORTANT:\n${careContextLines.join("\n")}\n`
+      : undefined;
+
+    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext);
 
     const elevenLabsBody = {
       agent_id: agentId,

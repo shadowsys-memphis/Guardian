@@ -119,7 +119,7 @@ function decodeJwtType(token: string | null): "local" | "tenant" | null {
 }
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "settings" | "devices" | "subscribers";
+type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "documents" | "settings" | "devices" | "subscribers";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -156,6 +156,7 @@ export function AdminView() {
           <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
           <div className="pt-2 border-t border-border/30 mt-2">
             <NavButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} icon={<Stethoscope size={18} />} label="Appointments" />
+            <NavButton active={activeTab === "documents"} onClick={() => setActiveTab("documents")} icon={<Scan size={18} />} label="Scan Docs" />
             {isLocal && <NavButton active={activeTab === "subscribers"} onClick={() => setActiveTab("subscribers")} icon={<ShieldAlert size={18} />} label="Subscribers" />}
             <NavButton active={false} onClick={() => navigate("/settings")} icon={<SlidersHorizontal size={18} />} label="Settings" />
           </div>
@@ -180,6 +181,7 @@ export function AdminView() {
           {activeTab === "rotation" && <RotationTab />}
           {activeTab === "calendar-sync" && <CalendarSyncTab />}
           {activeTab === "appointments" && <AppointmentsTab />}
+          {activeTab === "documents" && <DocumentsTab />}
           {activeTab === "subscribers" && isLocal && <SubscribersTab />}
           {activeTab === "settings" && <AppSettingsTab />}
         </div>
@@ -4596,6 +4598,335 @@ function SubscribersTab() {
             </div>
           </CardContent>
         </Card>
+      )}
+    </div>
+  );
+}
+
+function DocumentsTab() {
+  const { toast } = useToast();
+  const [docs, setDocs] = useState<any[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [extracted, setExtracted] = useState<any | null>(null);
+  const [docId, setDocId] = useState<number | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [applied, setApplied] = useState<any | null>(null);
+  const [include, setInclude] = useState<{
+    appointments: boolean[];
+    medications: boolean[];
+    dietary_restrictions: boolean[];
+    activity_restrictions: boolean[];
+    clinical_notes: boolean;
+  } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const loadDocs = async () => {
+    setDocsLoading(true);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/documents`);
+      if (res.ok) setDocs(await res.json());
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  useEffect(() => { loadDocs(); }, []);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    setExtracted(null);
+    setApplied(null);
+    setDocId(null);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string;
+      const base64 = dataUrl.split(",")[1];
+      const mimeType = file.type || "image/jpeg";
+      setScanning(true);
+      try {
+        const res = await fetch(`${WORKSPACE_BASE}/api/documents/scan`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64, mimeType }),
+        });
+        if (!res.ok) throw new Error("Scan failed");
+        const data = await res.json();
+        setExtracted(data.extracted);
+        setDocId(data.docId);
+        setInclude({
+          appointments: (data.extracted.appointments ?? []).map(() => true),
+          medications: (data.extracted.medications ?? []).map(() => true),
+          dietary_restrictions: (data.extracted.dietary_restrictions ?? []).map(() => true),
+          activity_restrictions: (data.extracted.activity_restrictions ?? []).map(() => true),
+          clinical_notes: true,
+        });
+        toast({ title: "Document scanned", description: data.extracted.source_label });
+      } catch {
+        toast({ title: "Scan failed", description: "Could not read the document. Try a clearer photo.", variant: "destructive" });
+        setPreviewUrl(null);
+      } finally {
+        setScanning(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleApply = async () => {
+    if (!extracted || !docId || !include) return;
+    setApplying(true);
+    try {
+      const payload = {
+        docId,
+        source_label: extracted.source_label,
+        appointments: (extracted.appointments ?? []).filter((_: any, i: number) => include.appointments[i]),
+        medications: (extracted.medications ?? []).filter((_: any, i: number) => include.medications[i]),
+        dietary_restrictions: (extracted.dietary_restrictions ?? []).filter((_: any, i: number) => include.dietary_restrictions[i]),
+        activity_restrictions: (extracted.activity_restrictions ?? []).filter((_: any, i: number) => include.activity_restrictions[i]),
+        clinical_notes: include.clinical_notes ? (extracted.clinical_notes ?? "") : "",
+      };
+      const res = await fetch(`${WORKSPACE_BASE}/api/documents/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Apply failed");
+      const result = await res.json();
+      setApplied(result);
+      toast({ title: "Applied to care plan" });
+      loadDocs();
+    } catch {
+      toast({ title: "Apply failed", variant: "destructive" });
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const reset = () => {
+    setExtracted(null);
+    setDocId(null);
+    setPreviewUrl(null);
+    setInclude(null);
+    setApplied(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  return (
+    <div className="space-y-6">
+      <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
+        <div>
+          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Scan Documents</h2>
+          <p className="text-muted-foreground">Photo a VA form, discharge slip, or appointment card. AI reads it and updates Pops' care plan.</p>
+        </div>
+        <Button onClick={() => fileRef.current?.click()} disabled={scanning} className="gap-2">
+          <Scan size={16} /> Scan Document
+        </Button>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+      </header>
+
+      {scanning && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <RefreshCw size={32} className="mx-auto mb-4 text-primary animate-spin" />
+            <p className="text-muted-foreground font-display uppercase tracking-widest text-sm">Reading document…</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Gemini AI is extracting care data</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {extracted && !applied && include && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">{extracted.source_label}</h3>
+              {extracted.patient_name && <p className="text-xs text-muted-foreground">Patient: {extracted.patient_name}{extracted.date ? ` · ${extracted.date}` : ""}</p>}
+            </div>
+            <Button variant="ghost" size="sm" onClick={reset}><X size={14} /></Button>
+          </div>
+
+          {previewUrl && (
+            <div className="rounded-md overflow-hidden border border-border/40 max-w-xs">
+              <img src={previewUrl} alt="Scanned document" className="w-full object-contain max-h-48" />
+            </div>
+          )}
+
+          {(extracted.appointments ?? []).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+                  <Calendar size={14} /> Appointments → Schedule
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                {extracted.appointments.map((appt: any, i: number) => (
+                  <label key={i} className={`flex items-start gap-3 p-3 rounded-sm border cursor-pointer transition-colors ${include.appointments[i] ? "border-primary/40 bg-primary/5" : "border-border/40 opacity-60"}`}>
+                    <input type="checkbox" checked={include.appointments[i]} onChange={() => setInclude({ ...include, appointments: include.appointments.map((v, j) => j === i ? !v : v) })} className="mt-0.5" />
+                    <div className="flex-1 text-sm">
+                      <span className="font-bold">{appt.date}</span>
+                      {appt.time && <span className="text-muted-foreground ml-2">at {appt.time}</span>}
+                      <span className="text-muted-foreground ml-2">— {appt.provider}</span>
+                      {appt.location && <span className="text-muted-foreground/60 ml-1">@ {appt.location}</span>}
+                    </div>
+                  </label>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {(extracted.medications ?? []).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-sm font-display uppercase tracking-widest">💊 Medications → Medications List</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                {extracted.medications.map((med: any, i: number) => (
+                  <label key={i} className={`flex items-start gap-3 p-3 rounded-sm border cursor-pointer transition-colors ${include.medications[i] ? "border-primary/40 bg-primary/5" : "border-border/40 opacity-60"}`}>
+                    <input type="checkbox" checked={include.medications[i]} onChange={() => setInclude({ ...include, medications: include.medications.map((v, j) => j === i ? !v : v) })} className="mt-0.5" />
+                    <div className="flex-1 text-sm">
+                      <span className="font-bold">{med.name}</span>
+                      {med.dose && <span className="text-muted-foreground ml-2">{med.dose}</span>}
+                      {med.instructions && <p className="text-xs text-muted-foreground/70 mt-0.5">{med.instructions}</p>}
+                    </div>
+                  </label>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {(extracted.dietary_restrictions ?? []).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-sm font-display uppercase tracking-widest">🥗 Dietary Restrictions → Shopper + Jessica</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                {extracted.dietary_restrictions.map((r: string, i: number) => (
+                  <label key={i} className={`flex items-center gap-3 p-3 rounded-sm border cursor-pointer transition-colors ${include.dietary_restrictions[i] ? "border-primary/40 bg-primary/5" : "border-border/40 opacity-60"}`}>
+                    <input type="checkbox" checked={include.dietary_restrictions[i]} onChange={() => setInclude({ ...include, dietary_restrictions: include.dietary_restrictions.map((v, j) => j === i ? !v : v) })} />
+                    <span className="text-sm">{r}</span>
+                  </label>
+                ))}
+                <p className="text-xs text-muted-foreground/50 mt-1">Jessica will casually mention this during her next call.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {(extracted.activity_restrictions ?? []).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-sm font-display uppercase tracking-widest">⚠️ Activity Restrictions → Jessica Briefing</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                {extracted.activity_restrictions.map((r: string, i: number) => (
+                  <label key={i} className={`flex items-center gap-3 p-3 rounded-sm border cursor-pointer transition-colors ${include.activity_restrictions[i] ? "border-primary/40 bg-primary/5" : "border-border/40 opacity-60"}`}>
+                    <input type="checkbox" checked={include.activity_restrictions[i]} onChange={() => setInclude({ ...include, activity_restrictions: include.activity_restrictions.map((v, j) => j === i ? !v : v) })} />
+                    <span className="text-sm">{r}</span>
+                  </label>
+                ))}
+                <p className="text-xs text-muted-foreground/50 mt-1">Jessica will gently remind Pops if relevant during her call.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {extracted.clinical_notes && (
+            <Card>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2"><FileText size={14} /> Clinical Notes → Care Record</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <label className={`flex items-start gap-3 p-3 rounded-sm border cursor-pointer transition-colors ${include.clinical_notes ? "border-primary/40 bg-primary/5" : "border-border/40 opacity-60"}`}>
+                  <input type="checkbox" checked={include.clinical_notes} onChange={() => setInclude({ ...include, clinical_notes: !include.clinical_notes })} className="mt-0.5" />
+                  <p className="text-sm text-muted-foreground">{extracted.clinical_notes}</p>
+                </label>
+                {extracted.physician && <p className="text-xs text-muted-foreground/50 mt-2">Signed: {extracted.physician}{extracted.facility ? ` · ${extracted.facility}` : ""}</p>}
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleApply} disabled={applying} className="gap-2">
+              {applying ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+              {applying ? "Applying…" : "Apply to Care Plan"}
+            </Button>
+            <Button variant="outline" onClick={reset}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {applied && (
+        <Card className="border-success/40 bg-success/5">
+          <CardContent className="py-6 px-6">
+            <div className="flex items-start gap-4">
+              <CheckCircle size={28} className="text-success shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-display uppercase tracking-widest text-success text-sm mb-1">Applied to Care Plan</h3>
+                <p className="text-muted-foreground text-sm">{applied.summary}</p>
+                {applied.details?.length > 0 && (
+                  <ul className="text-xs text-muted-foreground/70 mt-2 space-y-0.5 list-disc list-inside">
+                    {applied.details.map((d: string, i: number) => <li key={i}>{d}</li>)}
+                  </ul>
+                )}
+                <p className="text-xs text-muted-foreground/50 mt-3">Jessica is now briefed and will mention active restrictions naturally during her next call.</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={reset}>
+              <Scan size={14} /> Scan Another Document
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!extracted && !scanning && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">Recent Scans</h3>
+          {docsLoading ? (
+            <p className="text-xs text-muted-foreground text-center py-6">Loading…</p>
+          ) : docs.length === 0 ? (
+            <div className="py-16 text-center border border-dashed border-border/40 rounded-md">
+              <Scan size={36} className="mx-auto mb-3 text-muted-foreground/20" />
+              <p className="text-muted-foreground text-sm">No documents scanned yet.</p>
+              <p className="text-xs text-muted-foreground/50 mt-1">Tap "Scan Document" to photograph a VA form, appointment slip, or discharge instructions.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {docs.map((doc: any) => {
+                const structured = (() => { try { return JSON.parse(doc.structured_json); } catch { return {}; } })();
+                return (
+                  <Card key={doc.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm">{doc.source_label}</span>
+                            {doc.applied_at
+                              ? <Badge variant="outline" className="text-xs border-success/40 text-success">✓ Applied</Badge>
+                              : <Badge variant="outline" className="text-xs text-muted-foreground">Not applied</Badge>
+                            }
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {new Date(doc.created_at).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}
+                          </p>
+                          {structured.dietary_restrictions?.length > 0 && (
+                            <p className="text-xs text-muted-foreground/70 mt-1">🥗 {structured.dietary_restrictions.join(", ")}</p>
+                          )}
+                          {structured.activity_restrictions?.length > 0 && (
+                            <p className="text-xs text-muted-foreground/70">⚠️ {structured.activity_restrictions.join(" · ")}</p>
+                          )}
+                          {structured.appointments?.length > 0 && (
+                            <p className="text-xs text-muted-foreground/70">📅 {structured.appointments.map((a: any) => `${a.date} w/ ${a.provider}`).join(", ")}</p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

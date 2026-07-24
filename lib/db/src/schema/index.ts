@@ -341,3 +341,14 @@ export const careEventsTable = pgTable("care_events", {
 });
 
 export type CareEvent = typeof careEventsTable.$inferSelect;
+
+export const medicalDocumentsTable = pgTable("medical_documents", {
+  id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
+  sourceLabel: text("source_label").notNull().default("Medical Document"),
+  rawText: text("raw_text").notNull().default(""),
+  structuredJson: text("structured_json").notNull().default("{}"),
+  appliedAt: timestamp("applied_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type MedicalDocument = typeof medicalDocumentsTable.$inferSelect;
