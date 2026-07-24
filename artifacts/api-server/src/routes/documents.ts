@@ -145,6 +145,7 @@ router.post("/documents/apply", async (req, res) => {
     const body = z.object({
       docId: z.number().int(),
       source_label: z.string().default("Medical Document"),
+      overwrite: z.boolean().default(false),
       appointments: z.array(z.object({
         date: z.string(),
         time: z.string().optional(),
@@ -169,12 +170,28 @@ router.post("/documents/apply", async (req, res) => {
     for (const appt of body.appointments) {
       const title = `Appt: ${appt.provider}${appt.location ? ` @ ${appt.location}` : ""}`;
       const timeLabel = appt.time ?? "TBD";
+      const descriptionPrefix = `${appt.date}${appt.location ? ` — ${appt.location}` : ""}`;
+
+      if (body.overwrite) {
+        const existing = await db
+          .select()
+          .from(scheduleTasksTable)
+          .where(
+            sql`${scheduleTasksTable.title} = ${title} AND ${scheduleTasksTable.description} LIKE ${descriptionPrefix + "%"}`
+          )
+          .limit(1);
+        if (existing.length > 0) {
+          details.push(`Appointment already scheduled (skipped): ${title} on ${appt.date}`);
+          continue;
+        }
+      }
+
       await db.insert(scheduleTasksTable).values({
         tenantId: "local",
         quarter: "Q1",
         timeLabel,
         title,
-        description: `${appt.date}${appt.location ? ` — ${appt.location}` : ""}. Source: ${body.source_label}`,
+        description: `${descriptionPrefix}. Source: ${body.source_label}`,
         isActive: true,
         isCompleted: false,
         order: 99,
@@ -183,6 +200,19 @@ router.post("/documents/apply", async (req, res) => {
     }
 
     for (const med of body.medications) {
+      if (body.overwrite) {
+        const deactivated = await db
+          .update(medicationsTable)
+          .set({ active: false })
+          .where(
+            sql`LOWER(${medicationsTable.name}) = LOWER(${med.name}) AND ${medicationsTable.active} = true`
+          )
+          .returning();
+        if (deactivated.length > 0) {
+          details.push(`Deactivated old medication: ${med.name} (${deactivated.length} entry)`);
+        }
+      }
+
       await db.insert(medicationsTable).values({
         name: med.name,
         dose: med.dose ?? "as prescribed",

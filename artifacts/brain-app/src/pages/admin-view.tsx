@@ -4739,6 +4739,7 @@ function DocumentsTab() {
   const [docId, setDocId] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [applied, setApplied] = useState<any | null>(null);
+  const [isReapply, setIsReapply] = useState(false);
   const [include, setInclude] = useState<{
     appointments: boolean[];
     medications: boolean[];
@@ -4768,6 +4769,7 @@ function DocumentsTab() {
     setExtracted(null);
     setApplied(null);
     setDocId(null);
+    setIsReapply(false);
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
@@ -4802,6 +4804,23 @@ function DocumentsTab() {
     reader.readAsDataURL(file);
   };
 
+  const handleReapply = (doc: any) => {
+    let structured: any = {};
+    try { structured = JSON.parse(doc.structured_json); } catch { structured = {}; }
+    setExtracted(structured);
+    setDocId(doc.id);
+    setPreviewUrl(null);
+    setApplied(null);
+    setIsReapply(true);
+    setInclude({
+      appointments: (structured.appointments ?? []).map(() => true),
+      medications: (structured.medications ?? []).map(() => true),
+      dietary_restrictions: (structured.dietary_restrictions ?? []).map(() => true),
+      activity_restrictions: (structured.activity_restrictions ?? []).map(() => true),
+      clinical_notes: true,
+    });
+  };
+
   const handleApply = async () => {
     if (!extracted || !docId || !include) return;
     setApplying(true);
@@ -4809,6 +4828,7 @@ function DocumentsTab() {
       const payload = {
         docId,
         source_label: extracted.source_label,
+        overwrite: isReapply,
         appointments: (extracted.appointments ?? []).filter((_: any, i: number) => include.appointments[i]),
         medications: (extracted.medications ?? []).filter((_: any, i: number) => include.medications[i]),
         dietary_restrictions: (extracted.dietary_restrictions ?? []).filter((_: any, i: number) => include.dietary_restrictions[i]),
@@ -4823,7 +4843,7 @@ function DocumentsTab() {
       if (!res.ok) throw new Error("Apply failed");
       const result = await res.json();
       setApplied(result);
-      toast({ title: "Applied to care plan" });
+      toast({ title: isReapply ? "Care plan updated" : "Applied to care plan" });
       loadDocs();
     } catch {
       toast({ title: "Apply failed", variant: "destructive" });
@@ -4838,6 +4858,7 @@ function DocumentsTab() {
     setPreviewUrl(null);
     setInclude(null);
     setApplied(null);
+    setIsReapply(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -4866,6 +4887,12 @@ function DocumentsTab() {
 
       {extracted && !applied && include && (
         <div className="space-y-4">
+          {isReapply && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 text-xs">
+              <AlertTriangle size={13} />
+              <span><strong>Re-applying:</strong> Dietary &amp; activity restrictions will be replaced. Duplicate appointments will be skipped. Existing medications with matching names will be deactivated and replaced.</span>
+            </div>
+          )}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">{extracted.source_label}</h3>
@@ -4974,8 +5001,8 @@ function DocumentsTab() {
 
           <div className="flex gap-3 pt-2">
             <Button onClick={handleApply} disabled={applying} className="gap-2">
-              {applying ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
-              {applying ? "Applying…" : "Apply to Care Plan"}
+              {applying ? <RefreshCw size={14} className="animate-spin" /> : isReapply ? <RotateCcw size={14} /> : <Check size={14} />}
+              {applying ? (isReapply ? "Updating…" : "Applying…") : isReapply ? "Update Care Plan" : "Apply to Care Plan"}
             </Button>
             <Button variant="outline" onClick={reset}>Cancel</Button>
           </div>
@@ -4988,7 +5015,9 @@ function DocumentsTab() {
             <div className="flex items-start gap-4">
               <CheckCircle size={28} className="text-success shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="font-display uppercase tracking-widest text-success text-sm mb-1">Applied to Care Plan</h3>
+                <h3 className="font-display uppercase tracking-widest text-success text-sm mb-1">
+                  {isReapply ? "Care Plan Updated" : "Applied to Care Plan"}
+                </h3>
                 <p className="text-muted-foreground text-sm">{applied.summary}</p>
                 {applied.details?.length > 0 && (
                   <ul className="text-xs text-muted-foreground/70 mt-2 space-y-0.5 list-disc list-inside">
@@ -5020,6 +5049,10 @@ function DocumentsTab() {
             <div className="space-y-3">
               {docs.map((doc: any) => {
                 const structured = (() => { try { return JSON.parse(doc.structured_json); } catch { return {}; } })();
+                const hasContent = (structured.appointments?.length ?? 0) > 0
+                  || (structured.medications?.length ?? 0) > 0
+                  || (structured.dietary_restrictions?.length ?? 0) > 0
+                  || (structured.activity_restrictions?.length ?? 0) > 0;
                 return (
                   <Card key={doc.id}>
                     <CardContent className="p-4">
@@ -5045,6 +5078,17 @@ function DocumentsTab() {
                             <p className="text-xs text-muted-foreground/70">📅 {structured.appointments.map((a: any) => `${a.date} w/ ${a.provider}`).join(", ")}</p>
                           )}
                         </div>
+                        {hasContent && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 shrink-0 text-xs"
+                            onClick={() => handleReapply(doc)}
+                          >
+                            <RotateCcw size={12} />
+                            Re-apply
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
