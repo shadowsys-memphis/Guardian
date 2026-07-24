@@ -1754,6 +1754,19 @@ function HaldolTab() {
 export function ShopperTab() {
   const { toast } = useToast();
   const [sheetId, setSheetId] = useState("");
+  const [dietaryProfile, setDietaryProfile] = useState<{ restrictions?: string[]; source?: string } | null>(null);
+  const [activityRestrictions, setActivityRestrictions] = useState<{ restrictions?: string[]; source?: string } | null>(null);
+
+  useEffect(() => {
+    fetch(`${WORKSPACE_BASE}/api/documents/care-context`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        if (data.dietary_profile) setDietaryProfile(data.dietary_profile);
+        if (data.activity_restrictions) setActivityRestrictions(data.activity_restrictions);
+      })
+      .catch(() => {});
+  }, []);
   const [showAddMeal, setShowAddMeal] = useState(false);
   const [newMealName, setNewMealName] = useState("");
 
@@ -1987,6 +2000,42 @@ export function ShopperTab() {
           </Button>
         </div>
       </header>
+
+      {/* Active Care Restrictions from Medical Documents */}
+      {(dietaryProfile?.restrictions?.length || activityRestrictions?.restrictions?.length) ? (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertCircle size={14} /> Active Care Restrictions — Applies to This Week's Cart
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-2">
+            {dietaryProfile?.restrictions?.length ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">🥗 Dietary</p>
+                <div className="flex flex-wrap gap-2">
+                  {dietaryProfile.restrictions.map((r: string, i: number) => (
+                    <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-500/30">{r}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {activityRestrictions?.restrictions?.length ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1 mt-2">⚠️ Activity</p>
+                <div className="flex flex-wrap gap-2">
+                  {activityRestrictions.restrictions.map((r: string, i: number) => (
+                    <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-500/30">{r}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {(dietaryProfile?.source || activityRestrictions?.source) && (
+              <p className="text-[10px] text-muted-foreground/50 mt-1">Source: {dietaryProfile?.source ?? activityRestrictions?.source} · Jessica is briefed</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Budget Rules */}
       <Card className="border-primary/30">

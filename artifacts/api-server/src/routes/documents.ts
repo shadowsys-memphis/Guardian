@@ -5,9 +5,9 @@ import {
   medicationsTable,
   scheduleTasksTable,
   appSettingsTable,
-  careEventsTable,
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
+import { dispatch } from "../lib/hermes";
 import { eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -57,6 +57,23 @@ Rules:
 - activity_restrictions: extract ONLY physical limitations (e.g. "No bending/heavy lifting", "No eye rubbing")
 - Include ALL medications mentioned, including eye drops or topical treatments
 - appointments: include ALL future appointments mentioned in the document`;
+
+router.get("/documents/care-context", async (req, res) => {
+  try {
+    const keys = ["dietary_profile", "activity_restrictions"];
+    const rows = await db.select().from(appSettingsTable).where(
+      sql`${appSettingsTable.key} = ANY(${keys})`
+    );
+    const result: Record<string, unknown> = {};
+    for (const row of rows) {
+      try { result[row.key] = JSON.parse(row.value); } catch { result[row.key] = row.value; }
+    }
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch care context");
+    res.status(500).json({ error: "Failed" });
+  }
+});
 
 router.get("/documents", async (req, res) => {
   try {
@@ -217,18 +234,20 @@ router.post("/documents/apply", async (req, res) => {
       .set({ appliedAt: new Date() })
       .where(eq(medicalDocumentsTable.id, body.docId));
 
-    await db.insert(careEventsTable).values({
-      tenantId: "local",
-      source: "admin",
-      actor: "caregiver",
-      eventType: "MEDICAL_DOC_APPLIED",
-      severity: null,
-      confidence: "high",
-      payload: JSON.stringify({ docId: body.docId, source_label: body.source_label, details }),
-      outcome: "dispatched",
-      doctorRelevant: true,
-      learningRelevant: true,
-    }).catch(() => {});
+    await dispatch(
+      {
+        type: "MEDICAL_DOC_APPLIED",
+        title: body.source_label,
+        details: details.join("; "),
+        docId: body.docId,
+      },
+      {
+        tenantId: "local",
+        source: "admin",
+        actor: "caregiver",
+        confidence: "high",
+      }
+    );
 
     const summary = details.length > 0
       ? `Applied ${details.length} item(s) from ${body.source_label}.`

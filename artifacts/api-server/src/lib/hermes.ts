@@ -93,7 +93,8 @@ export type HermesActionType =
   | "ADD_TASK"
   | "MED_CONFIRMED"
   | "MED_REFUSED"
-  | "WELLBEING_ALERT";
+  | "WELLBEING_ALERT"
+  | "MEDICAL_DOC_APPLIED";
 
 export interface HermesAction {
   type: HermesActionType;
@@ -270,6 +271,9 @@ export async function dispatch(action: HermesAction, ctx: LedgerContext): Promis
         break;
       case "WELLBEING_ALERT":
         await handleWellbeingAlert(action, ctx);
+        break;
+      case "MEDICAL_DOC_APPLIED":
+        await writeLedger(action, ctx, "completed");
         break;
       default:
         logger.warn({ action }, "[Hermes] Unknown action type — skipped");
