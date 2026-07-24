@@ -1,0 +1,109 @@
+Shadow Storefront Website Audit
+You are performing a read-only UX, product, and architecture audit of a live website.
+This is not a repository audit.
+This is not a source-code review.
+This is not a redesign exercise.
+Your job is simply to understand what currently exists.
+Website
+https://shadow-ai-platform.replit.app
+Background
+Shadow Storefront is intended to become the organizational front door for a much larger SHADOW.AI ecosystem.
+For this audit, do not assume the website already fulfills that vision.
+Judge only what is actually observable.
+Do not use knowledge from previous conversations.
+Do not infer backend functionality from frontend elements.
+Do not speculate about source code unless directly visible.
+ 
+⸻
+ 
+Your Task
+Systematically inspect every page and accessible UI element.
+For every item explain:
+* what it is
+* what it appears intended to do
+* what actually happens
+* whether it works
+* whether it appears complete
+* whether it is static
+* whether it is placeholder content
+* whether it is confusing
+* whether anything is broken
+Whenever evidence is insufficient, explicitly say so.
+ 
+⸻
+ 
+Evidence Rules
+Separate every conclusion into one of:
+* Observed
+* Reasonable inference
+* Unknown
+Never mix them.
+ 
+⸻
+ 
+Output
+Executive Summary
+Brief overview of the site.
+ 
+⸻
+ 
+Navigation Map
+List every page and section discovered.
+ 
+⸻
+ 
+Page Walkthrough
+For each page include:
+* Purpose
+* Components
+* Working elements
+* Broken elements
+* Placeholder elements
+* UX observations
+* Questions raised
+ 
+⸻
+ 
+UI Inventory
+Table:
+| Component | Purpose | Behavior | Status | Notes |
+Status:
+* Working
+* Partial
+* Static
+* Placeholder
+* Broken
+* Unknown
+ 
+⸻
+ 
+Issues
+Rank:
+Critical
+High
+Medium
+Low
+Cosmetic
+ 
+⸻
+ 
+Shadow Storefront Alignment
+Compare the live website against the stated goal of becoming an organizational storefront for the SHADOW.AI ecosystem.
+Separate findings into:
+* Already aligned
+* Partially aligned
+* Missing
+* Confusing
+* Future opportunity
+Do not redesign the application.
+ 
+⸻
+ 
+Final Assessment
+Answer:
+* What is the website today?
+* What is it trying to become?
+* What is most complete?
+* What is least complete?
+* What should be addressed first?
+Base every conclusion on visible evidence.
