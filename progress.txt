@@ -6,6 +6,11 @@
 
 2026-07-11 | INIT | Bootstrap entry — Ralph loop wired up. AGENTS.md rewritten from live codebase. prd.json seeded with BR-001 through BR-004 from known debt. | Nothing passes yet.
 
+2026-07-25 | BR-001 | Already shipped — `buttonVariants` export exists; brain-app tsc has no errors in alert-dialog/calendar/pagination for that import. Marked passes:true. | Remaining tsc noise is unrelated (admin-view GroceryCartStatus "ordered").
+2026-07-25 | BR-003 | Already shipped — `/guardian/success` rewrites in artifact.toml + guardian-success.html (72ecff5). Marked passes:true. | Live fetch still hits Replit private-deploy shield; code criteria met.
+2026-07-25 | BR-002 | Still open — `artifacts/brain-app/public/guardian.html` still on disk beside MPA `guardian.html`. | Delete public copy next.
+2026-07-25 | BR-004 | Still open — only POST complete; no uncomplete op / hook / Done→Pending toggle. | Next foundation build item after BR-002.
+
 2026-07-11 | SCHEDULE-DND (pre-BR) | dnd-kit multi-container sortable pattern:
   - onDragOver handles cross-quarter moves in local state (visual)
   - onDragEnd handles same-quarter arrayMove + commits all changed tasks to API

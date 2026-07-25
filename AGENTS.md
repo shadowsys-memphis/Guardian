@@ -8,6 +8,8 @@ Deep technical reference:
 - [`GEMINI.md`](GEMINI.md) — Gemini integration architecture, multi-tenant ground rules
 - [`REPO_RELATIONSHIPS.md`](REPO_RELATIONSHIPS.md) — system boundary map (Guardian Core vs OpenClaw vs LM Studio)
 - [`docs/core-guardian/onboarding-flow.md`](docs/core-guardian/onboarding-flow.md) — approved V1 public-client onboarding flow
+- [`docs/core-guardian/market-thesis.md`](docs/core-guardian/market-thesis.md) — market seam thesis + validation-before-features rule
+- [`prd.json`](prd.json) — active stories: foundation `BR-*`, market validation `MV-*`
 
 ---
 
