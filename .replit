@@ -31,6 +31,7 @@ timeoutMs = 20000
 VITE_PUBLIC_SITE_URL = "https://guardian-os-LedgerGhost90.replit.app"
 
 [userenv.shared]
+GUARDIAN_API_BASE = "https://guardian-os-LedgerGhost90.replit.app/api???"
 
 [userenv.development]
 VITE_PUBLIC_SITE_URL = "https://guardian-os-LedgerGhost90.replit.app"
