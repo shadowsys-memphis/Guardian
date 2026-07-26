@@ -29,6 +29,28 @@ function getPhoneNumberId(): string | null {
   return process.env["ELEVENLABS_PHONE_NUMBER_ID"] ?? null;
 }
 
+/**
+ * ElevenLabs needs its internal `phnum_…` ID, but the env var may hold the
+ * Twilio SID (starts with "PN"). This function fetches the phone-numbers list
+ * and resolves the correct internal ID automatically.
+ */
+async function resolveElevenLabsPhoneNumberId(apiKey: string, storedId: string): Promise<string> {
+  // Already an ElevenLabs internal ID — use it directly.
+  if (storedId.startsWith("phnum_")) return storedId;
+
+  try {
+    const res = await fetch(`${ELEVENLABS_BASE}/convai/phone-numbers`, {
+      headers: { "xi-api-key": apiKey },
+    });
+    if (!res.ok) return storedId;
+    const list = await res.json() as Array<{ phone_number: string; phone_number_id: string }>;
+    const match = list.find((p) => p.phone_number === storedId || p.phone_number_id === storedId);
+    if (match) return match.phone_number_id;
+  } catch {}
+
+  return storedId;
+}
+
 async function getPopsPhonenumber(): Promise<string | null> {
   try {
     const rows = await db.select().from(appSettingsTable)
@@ -81,15 +103,17 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
   try {
     const apiKey = getElevenLabsKey();
     const agentId = getAgentId();
-    const phoneNumberId = getPhoneNumberId();
+    const rawPhoneNumberId = getPhoneNumberId();
 
-    if (!apiKey || !agentId || !phoneNumberId) {
+    if (!apiKey || !agentId || !rawPhoneNumberId) {
       res.status(503).json({
         error: "elevenlabs_not_configured",
         message: "ElevenLabs credentials not configured. Set ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID, and ELEVENLABS_PHONE_NUMBER_ID.",
       });
       return;
     }
+
+    const phoneNumberId = await resolveElevenLabsPhoneNumberId(apiKey, rawPhoneNumberId);
 
     const popsPhone = await getPopsPhonenumber();
     if (!popsPhone) {
