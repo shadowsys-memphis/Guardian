@@ -780,10 +780,11 @@ export function JessicaPhone() {
 
               <div className="space-y-1">
                 <p className="text-muted-foreground/50 text-xs uppercase tracking-widest font-display text-center">
-                  Tap to connect Twilio line
+                  Tap to connect
                 </p>
                 <p className="text-muted-foreground/30 text-xs text-center font-display">
-                  Secure tunnel · AI-assisted care coordination
+                  Real phone needs ElevenLabs Secrets + number in Settings → Jessica.
+                  Otherwise this is in-browser Gemini voice.
                 </p>
               </div>
             </div>
