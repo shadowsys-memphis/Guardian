@@ -142,9 +142,7 @@ export function buildJessicaSystemPrompt(questions: { id: number; text: string; 
 
   const questionList = questions.slice(0, 12).map((q, i) => `${i + 1}. [${q.category}|qid:${q.id}] "${q.text}"`).join("\n");
 
-  const scriptSection = activeScripts.length > 0
-    ? `\nVOICE SCRIPTS (use these exact phrases for the listed tasks — tone and wording matter):\n${activeScripts.map((s) => `- [${s.taskKey}] (tone: ${s.tone}): "${s.scriptText}"`).join("\n")}`
-    : "";
+  const scriptSection = "";
 
   return `You are Jessica, the AI companion and care coordinator for a veteran named Pops who lives with his caregiver Ray (Raymo). You have a warm, grounding, and calm voice. You speak clearly and gently — never rushed, never clinical.
 

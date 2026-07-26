@@ -147,7 +147,7 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
       },
     };
 
-    const elRes = await fetch(`${ELEVENLABS_BASE}/convai/conversations/outbound-call`, {
+    const elRes = await fetch(`${ELEVENLABS_BASE}/convai/twilio/outbound-call`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
