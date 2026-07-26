@@ -115,13 +115,24 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
 
     const phoneNumberId = await resolveElevenLabsPhoneNumberId(apiKey, rawPhoneNumberId);
 
-    const popsPhone = await getPopsPhonenumber();
-    if (!popsPhone) {
-      res.status(400).json({
-        error: "no_phone_number",
-        message: "Pops' phone number is not set. Add it in Settings → Jessica.",
-      });
-      return;
+    const isTest = req.body?.test === true;
+    let targetPhone: string | null = null;
+
+    if (isTest) {
+      targetPhone = process.env["ADMIN_PHONE_NUMBER"] ?? null;
+      if (!targetPhone) {
+        res.status(400).json({ error: "no_admin_phone", message: "ADMIN_PHONE_NUMBER secret is not set." });
+        return;
+      }
+    } else {
+      targetPhone = await getPopsPhonenumber();
+      if (!targetPhone) {
+        res.status(400).json({
+          error: "no_phone_number",
+          message: "Pops' phone number is not set. Add it in Settings → Jessica.",
+        });
+        return;
+      }
     }
 
     const { cycleDay, isZombiePhase } = await getCurrentCycleInfo();
@@ -161,7 +172,7 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
     const elevenLabsBody = {
       agent_id: agentId,
       agent_phone_number_id: phoneNumberId,
-      to_number: popsPhone,
+      to_number: targetPhone,
       conversation_config_override: {
         agent: {
           prompt: {

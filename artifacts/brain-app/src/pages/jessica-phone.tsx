@@ -228,7 +228,7 @@ export function JessicaPhone() {
     }
   }, [speakerOn, isMuted]);
 
-  const startCall = async () => {
+  const startCall = async (testMode = false) => {
     setCallState("calling");
     setQuietWindowMessage(null);
     setOutboundSummary(null);
@@ -238,8 +238,12 @@ export function JessicaPhone() {
       const settings: Record<string, string> = settingsRes?.ok ? await settingsRes.json().catch(() => ({})) : {};
       const popsPhone = settings["pops_phone_number"] ?? "";
 
-      if (popsPhone && popsPhone.trim()) {
-        const res = await fetch(`${BASE_URL}/api/jessica/outbound-call`, { method: "POST" });
+      if (testMode || (popsPhone && popsPhone.trim())) {
+        const res = await fetch(`${BASE_URL}/api/jessica/outbound-call`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(testMode ? { test: true } : {}),
+        });
         if (res.ok) {
           const data = await res.json();
           setOutboundConversationId(data.elevenLabsConversationId);
@@ -770,7 +774,7 @@ export function JessicaPhone() {
           ) : (
             <div className="space-y-6">
               <button
-                onClick={startCall}
+                onClick={() => startCall(false)}
                 className="group relative h-40 w-40 mx-auto rounded-full bg-primary/10 border-2 border-primary/40 flex flex-col items-center justify-center gap-2 hover:bg-primary/20 hover:border-primary transition-all shadow-[0_0_60px_rgba(70,159,104,0.15)] hover:shadow-[0_0_80px_rgba(70,159,104,0.3)] min-h-[160px] min-w-[160px]"
               >
                 <div className="absolute inset-0 rounded-full border border-primary/20 animate-ping opacity-30" />
@@ -786,6 +790,16 @@ export function JessicaPhone() {
                   Real phone needs ElevenLabs Secrets + number in Settings → Jessica.
                   Otherwise this is in-browser Gemini voice.
                 </p>
+              </div>
+
+              <div className="flex justify-center">
+                <button
+                  onClick={() => startCall(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-sm border border-border/40 bg-secondary/30 text-xs text-muted-foreground hover:text-foreground hover:border-border/80 hover:bg-secondary/60 transition-all font-display uppercase tracking-widest"
+                >
+                  <Phone size={11} />
+                  Test Call Me
+                </button>
               </div>
             </div>
           )}

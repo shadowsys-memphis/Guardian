@@ -29,13 +29,14 @@ timeoutMs = 20000
 
 [userenv.production]
 VITE_PUBLIC_SITE_URL = "https://guardian-os-LedgerGhost90.replit.app"
+GEMINI_BASE_URL = "http://localhost:1106/modelfarm/gemini"
 
 [userenv.shared]
 GUARDIAN_API_BASE = "https://guardian-os-LedgerGhost90.replit.app/api"
-GEMINI_BASE_URL = "http://localhost:1106/modelfarm/gemini"
 
 [userenv.development]
 VITE_PUBLIC_SITE_URL = "https://guardian-os-LedgerGhost90.replit.app"
+GEMINI_BASE_URL = "http://localhost:1106/modelfarm/gemini"
 
 [[ports]]
 localPort = 8080
