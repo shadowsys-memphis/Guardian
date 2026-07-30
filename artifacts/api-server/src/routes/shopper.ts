@@ -803,7 +803,8 @@ router.post("/shopper/fulfill", async (req, res) => {
     const cartItems = await db.select().from(cartItemsTable).where(eq(cartItemsTable.cartId, cart.id));
 
     if (cartItems.length === 0) {
-      return res.status(400).json({ error: "Cart is empty — add meals first" });
+      res.status(400).json({ error: "Cart is empty — add meals first" });
+      return;
     }
 
     const [storeRow, zipRow] = await Promise.all([
@@ -839,7 +840,10 @@ router.get("/shopper/fulfill/current", async (req, res) => {
       .where(eq(cartFulfillmentsTable.cartId, cart.id))
       .orderBy(desc(cartFulfillmentsTable.createdAt))
       .limit(1);
-    if (!rows[0]) return res.json(null);
+    if (!rows[0]) {
+      res.json(null);
+      return;
+    }
     const row = rows[0];
     let items: FulfillmentItem[] = [];
     try { items = JSON.parse(row.itemsJson ?? "[]"); } catch {}

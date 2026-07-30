@@ -52,7 +52,10 @@ router.put("/appointments/:id", async (req, res) => {
       .set({ ...body, updatedAt: new Date() })
       .where(eq(medicalAppointmentsTable.id, id))
       .returning();
-    if (!row) return res.status(404).json({ error: "Not found" });
+    if (!row) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     res.json(row);
   } catch (err) {
     req.log.error({ err }, "Failed to update appointment");

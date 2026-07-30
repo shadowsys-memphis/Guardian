@@ -1271,7 +1271,6 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-sm uppercase tracking-widest ${
                     (cart as any).status === "approved" ? "bg-success/10 text-success" :
-                    (cart as any).status === "ordered" ? "bg-primary/10 text-primary" :
                     "bg-secondary text-muted-foreground"
                   }`}>
                     {(cart as any).status ?? "pending"}
@@ -2168,18 +2167,11 @@ export function ShopperTab() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-0">
-            {(["Draft", "Approved", "Ordered"] as const).map((step, idx) => {
-              const stepStatus = ["pending", "approved", "ordered"][idx];
-              const isDone =
-                cartStatus === "ordered"
-                  ? idx <= 2
-                  : cartStatus === "approved"
-                    ? idx <= 1
-                    : idx === 0;
+            {(["Draft", "Approved"] as const).map((step, idx) => {
+              const isDone = cartStatus === "approved" ? idx <= 1 : idx === 0;
               const isCurrent =
                 (step === "Draft" && cartStatus === "pending") ||
-                (step === "Approved" && cartStatus === "approved") ||
-                (step === "Ordered" && cartStatus === "ordered");
+                (step === "Approved" && cartStatus === "approved");
               const isCancelled = cartStatus === "dismissed" && step === "Draft";
               return (
                 <div key={step} className="flex items-center flex-1">
@@ -2199,7 +2191,7 @@ export function ShopperTab() {
                       {isCancelled ? "Cancelled" : step}
                     </span>
                   </div>
-                  {idx < 2 && (
+                  {idx < 1 && (
                     <div className={`h-0.5 flex-1 mx-1 rounded-full ${isDone && !isCurrent ? "bg-success/40" : "bg-border/30"}`} />
                   )}
                 </div>
