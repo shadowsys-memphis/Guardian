@@ -496,8 +496,8 @@ function parseDeviceCommand(text: string): { device: string; action: string; val
   try { return JSON.parse(match[1]); } catch { return null; }
 }
 
-export async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; intervalDays: number; isZombiePhase: boolean; isOverdue: boolean; daysOverdue: number }> {
-  const unknown = { cycleDay: null, intervalDays: DEFAULT_INTERVAL_DAYS, isZombiePhase: false, isOverdue: false, daysOverdue: 0 };
+export async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; intervalDays: number; zombiePhaseDays: number; isZombiePhase: boolean; isOverdue: boolean; daysOverdue: number }> {
+  const unknown = { cycleDay: null, intervalDays: DEFAULT_INTERVAL_DAYS, zombiePhaseDays: 5, isZombiePhase: false, isOverdue: false, daysOverdue: 0 };
   try {
     const rows = await db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1);
     if (!rows[0]) return unknown;
@@ -508,6 +508,7 @@ export async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; 
     return {
       cycleDay: info.cycleDay,
       intervalDays: info.intervalDays,
+      zombiePhaseDays: info.zombiePhaseDays,
       isZombiePhase: info.isZombiePhase,
       isOverdue: info.isOverdue,
       daysOverdue: info.daysOverdue,
@@ -678,12 +679,13 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       .where(eq(messagesTable.conversationId, conversationId))
       .orderBy(asc(messagesTable.createdAt));
 
-    const { cycleDay, isZombiePhase, isOverdue, daysOverdue } = await getCurrentCycleInfo();
+    const { cycleDay, isZombiePhase, isOverdue, daysOverdue, intervalDays, zombiePhaseDays } = await getCurrentCycleInfo();
     const liveContext = await loadLiveContext();
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
+    const cycle = { isOverdue, daysOverdue, intervalDays, zombiePhaseDays };
     const systemPrompt = mode === "ray"
-      ? buildRaySystemPrompt(liveContext, cycleDay, isZombiePhase, { isOverdue, daysOverdue })
-      : buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue });
+      ? buildRaySystemPrompt(liveContext, cycleDay, isZombiePhase, cycle)
+      : buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, cycle);
 
     const activeModel = await getActiveModel();
 

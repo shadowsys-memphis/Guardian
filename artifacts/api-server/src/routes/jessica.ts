@@ -145,7 +145,7 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
       }
     }
 
-    const { cycleDay, isZombiePhase, isOverdue, daysOverdue } = await getCurrentCycleInfo();
+    const { cycleDay, isZombiePhase, isOverdue, daysOverdue, intervalDays, zombiePhaseDays } = await getCurrentCycleInfo();
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
 
     const careContextLines: string[] = [];
@@ -184,7 +184,7 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
     const extraBlock = opts?.extraContext ? `${opts.extraContext}\n\n` : "";
     const liveContext = extraBlock + careContextBlock + scheduleContext;
 
-    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue });
+    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue, intervalDays, zombiePhaseDays });
 
     const elevenLabsBody = {
       agent_id: agentId,
