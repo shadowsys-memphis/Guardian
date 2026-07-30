@@ -110,9 +110,9 @@ If you touch guardian marketing content, keep the client component (`pages/guard
 
 ## Database Schema (partial — grep `lib/db/src/schema/index.ts` for the full/current list, it changes often)
 
-Core original tables: `app_state`, `schedule_tasks`, `symptom_logs`, `voice_scripts`, `haldol_cycle`, `conversations`/`messages` (Gemini chat), `smart_home_devices`, `health_questions`, `call_sessions`, `health_data_points`, `app_settings`, `meals`/`meal_ingredients`/`grocery_carts`/`cart_meals`/`cart_items`/`meal_cravings` (shopper), `rotation_tasks`, `historical_care_logs`, `inventory_items`, `medical_appointments`, `medication_adjustments`, `medications`, `cart_fulfillments`, `action_logs`.
+Core original tables: `app_state`, `schedule_tasks`, `symptom_logs`, `voice_scripts`, `haldol_cycle`, `conversations`/`messages` (Gemini chat), `smart_home_devices`, `health_questions`, `call_sessions` (includes `transcript` — full call transcript, saved when a call ends), `health_data_points`, `app_settings`, `meals`/`meal_ingredients`/`grocery_carts`/`cart_meals`/`cart_items`/`meal_cravings` (shopper), `rotation_tasks`, `historical_care_logs`, `inventory_items`, `medical_appointments`, `medication_adjustments`, `medications`, `cart_fulfillments`, `action_logs`, `medical_documents` (Document Scanner — `documents.ts`; not in this Drizzle file, created via raw SQL per gotcha #1, `applied_at` tracks whether it's been applied to the care plan).
 
-Tenant/billing tables (`tenants` and related) are **not** in this file — see gotcha #3 above.
+Tenant/billing tables (`tenants` — now also carries `session_version` for revocation, see Multi-Tenant Auth above — and related) are **not** in this file — see gotcha #3 above.
 
 `app_state`, `schedule_tasks`, `symptom_logs`, `inventory_items` carry `tenant_id` (see tenant scoping rule above); the rest are currently local-only / ungoverned by tenant scoping.
 
@@ -120,15 +120,23 @@ Tenant/billing tables (`tenants` and related) are **not** in this file — see g
 
 ## Jessica AI Phone Gateway
 
-Jessica is a Gemini-powered AI companion (`artifacts/api-server/src/routes/gemini.ts`, system prompt in `buildJessicaSystemPrompt()`; uses `@workspace/integrations-gemini-ai`'s `ai` client — `@google/genai` must stay a **direct** dependency of `api-server`, since it's externalized from the esbuild bundle and needs a runtime link, see `build.mjs`).
+Jessica is a Gemini-powered AI companion. There are **two separate call mechanisms** — don't conflate them:
 
-Call lifecycle:
+**1. Browser-based live voice/chat** (`artifacts/api-server/src/routes/gemini.ts`, system prompt in `buildJessicaSystemPrompt()`/`buildRaySystemPrompt()`; uses `@workspace/integrations-gemini-ai`'s `ai` client — `@google/genai` must stay a **direct** dependency of `api-server`, since it's externalized from the esbuild bundle and needs a runtime link, see `build.mjs`). Drives the `/jessica` phone UI page (`JessicaPhone`) and the admin chat assistant.
 1. `POST /gemini/conversations` → creates a `conversations` row and auto-creates a linked `call_sessions` row in the same handler.
-2. `POST /gemini/conversations/:id/messages` → streams the Gemini response as SSE (`text/event-stream`; consume with `fetch` + `ReadableStream` on the client, not a JSON-expecting React Query hook).
+2. `POST /gemini/conversations/:id/messages` → streams the response as SSE (`text/event-stream`; consume with `fetch` + `ReadableStream` on the client, not a JSON-expecting React Query hook). Provider is whichever `getActiveModel()` returns — Gemini (`generateContentStream`) or LM Studio (`streamLmStudio()`, OpenAI-compatible SSE) — both stream word-by-word through the same `flushDelta`/`getStreamSafeVisible` loop. If Gemini's stream throws, the handler automatically falls back to LM Studio via `findAvailableLocalModelId()` (probes `GET {lmStudioUrl}/v1/models`) before giving up — a Gemini outage no longer silently kills the check-in.
 3. Jessica's system prompt emits invisible XML tags parsed server-side: `<health_data>{...}</health_data>` → `health_data_points`, `<device_command>{...}</device_command>` → smart home commands, `<craving>{...}</craving>` → meal craving capture.
 4. `POST /gemini/conversations/:id/end` closes the session and computes a summary. Anomaly detection: a category flagged in 3+ of the last 5 sessions → `sustainedAnomalies`.
 
-`/health-assessment/sessions` endpoints exist as a standalone admin API, but the `/jessica` phone UI drives the whole call lifecycle through `/gemini/conversations`.
+**2. Real outbound telephone calls to Pops** (`artifacts/api-server/src/routes/jessica.ts`, via ElevenLabs/Twilio — `ELEVENLABS_API_KEY`/`ELEVENLABS_AGENT_ID`/`ELEVENLABS_PHONE_NUMBER_ID` env vars). This is what "Jessica calls Pops daily" actually means in the product.
+1. `triggerOutboundCall()` (exported, shared by the manual route and the scheduler) builds the system prompt via `buildJessicaSystemPrompt()` — including live schedule/meals/symptoms context from `loadLiveContext()` (exported from `gemini.ts`) merged with dietary/activity restrictions — then calls ElevenLabs' `/convai/twilio/outbound-call`.
+2. `POST /jessica/outbound-call` (local-only) is the manual "Call Now" trigger; it just calls `triggerOutboundCall()`.
+3. `artifacts/api-server/src/lib/call-scheduler.ts`'s `startDailyCallScheduler()` (started once from `index.ts`) ticks every 60s and calls `triggerOutboundCall()` automatically at `dailyCallTime` (stored in the `assessment_settings` app_settings blob alongside quiet-window config, edited via `PUT /health-assessment/settings`), respecting the quiet window and de-duping same-day fires via the `daily_call_last_triggered_date` app_settings key. **Status: implemented but held pending final review — do not assume it's live without checking with the team.**
+4. `POST /jessica/elevenlabs-webhook` (public) receives the call transcript + ElevenLabs' own summary when the call ends, parses health-data/craving tags out of it, and persists the full transcript to `call_sessions.transcript` (rendered in the admin Calls view) alongside the summary.
+
+`/health-assessment/sessions` (`GET`) lists `call_sessions` rows from **either** mechanism — `elevenlabsConversationId` set means it was an outbound phone call, unset means it was the browser flow.
+
+A larger scheduled-jobs layer (appointment reminders, Haldol overdue escalation, med-refusal/wellbeing alerting, rotation reset, missed-call detection, quarter auto-advance) is planned to extend `call-scheduler.ts` into a named-job registry — not yet built as of this writing.
 
 ---
 
