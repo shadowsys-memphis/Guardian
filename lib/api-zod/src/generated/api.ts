@@ -780,6 +780,12 @@ export const ListCallSessionsResponseItem = zod.object({
   endedAt: zod.date().nullish(),
   summary: zod.string().nullish(),
   flagged: zod.boolean(),
+  transcript: zod
+    .string()
+    .nullish()
+    .describe(
+      "Full call transcript (Jessica\/Pops turns), saved when the call ends",
+    ),
 });
 export const ListCallSessionsResponse = zod.array(ListCallSessionsResponseItem);
 
@@ -807,6 +813,12 @@ export const EndCallSessionResponse = zod.object({
   endedAt: zod.date().nullish(),
   summary: zod.string().nullish(),
   flagged: zod.boolean(),
+  transcript: zod
+    .string()
+    .nullish()
+    .describe(
+      "Full call transcript (Jessica\/Pops turns), saved when the call ends",
+    ),
 });
 
 /**

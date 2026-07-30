@@ -1909,6 +1909,10 @@ components:
           nullable: true
         flagged:
           type: boolean
+        transcript:
+          type: string
+          nullable: true
+          description: "Full call transcript (Jessica/Pops turns), saved when the call ends"
       required:
         - id
         - sessionDate

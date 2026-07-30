@@ -15,4 +15,6 @@ export interface CallSession {
   endedAt?: Date | null;
   summary?: string | null;
   flagged: boolean;
+  /** Full call transcript (Jessica/Pops turns), saved when the call ends */
+  transcript?: string | null;
 }

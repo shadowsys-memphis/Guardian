@@ -401,8 +401,8 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
         : "Phone call with Pops. No structured health data captured.");
 
     await pool.query(
-      `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2 WHERE id = $3`,
-      [callSummary, flagged, sessionId]
+      `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2, transcript = $3 WHERE id = $4`,
+      [callSummary, flagged, allText || null, sessionId]
     );
 
     req.log.info({ sessionId, elevenLabsConversationId, healthDataCount: healthDataTags.length }, "ElevenLabs webhook processed");

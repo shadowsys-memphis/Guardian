@@ -55,7 +55,7 @@ function formatCallDuration(startedAt: string | null, endedAt: string | null): s
   return `${dur.seconds ?? 0}s`;
 }
 
-function CallTranscript({ sessionId, summary }: { sessionId: number; summary: string | null }) {
+function CallTranscript({ sessionId, summary, transcript }: { sessionId: number; summary: string | null; transcript: string | null }) {
   const { data: dataPoints, isLoading } = useGetSessionDataPoints(sessionId, {
     query: { queryKey: getGetSessionDataPointsQueryKey(sessionId) },
   });
@@ -82,6 +82,28 @@ function CallTranscript({ sessionId, summary }: { sessionId: number; summary: st
           </p>
           <div className="p-3 rounded-sm bg-secondary/40 border border-border/30 text-xs text-foreground/90 leading-relaxed">
             {summary}
+          </div>
+        </div>
+      )}
+
+      {transcript && (
+        <div>
+          <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest mb-2 flex items-center gap-1.5">
+            <FileText size={11} />
+            Full Transcript
+          </p>
+          <div className="p-3 rounded-sm bg-secondary/40 border border-border/30 text-xs leading-relaxed max-h-72 overflow-y-auto space-y-1.5">
+            {transcript.split("\n").filter(Boolean).map((line, i) => {
+              const isJessica = line.startsWith("Jessica:");
+              return (
+                <p key={i} className={isJessica ? "text-foreground/90" : "text-muted-foreground"}>
+                  <span className={`font-bold ${isJessica ? "text-primary" : "text-accent"}`}>
+                    {isJessica ? "Jessica: " : line.slice(0, line.indexOf(":") + 1) + " "}
+                  </span>
+                  {isJessica ? line.slice("Jessica:".length) : line.slice(line.indexOf(":") + 1)}
+                </p>
+              );
+            })}
           </div>
         </div>
       )}
@@ -221,7 +243,7 @@ function CallRow({ session }: { session: any }) {
           <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest mb-3">
             📋 Call Transcript
           </p>
-          <CallTranscript sessionId={session.id} summary={session.summary ?? null} />
+          <CallTranscript sessionId={session.id} summary={session.summary ?? null} transcript={session.transcript ?? null} />
         </div>
       )}
     </div>
