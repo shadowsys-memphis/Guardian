@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { loginRateLimit } from "../middlewares/rate-limit";
 
 const router: IRouter = Router();
 
@@ -20,7 +21,7 @@ function makeLocalToken() {
   );
 }
 
-router.post("/tenants/auth", async (req: Request, res: Response) => {
+router.post("/tenants/auth", loginRateLimit, async (req: Request, res: Response) => {
   try {
     const body = z.object({
       passphrase: z.string().min(1),

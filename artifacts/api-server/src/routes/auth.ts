@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { pool } from "@workspace/db";
+import { loginRateLimit } from "../middlewares/rate-limit";
 
 const router: IRouter = Router();
 
@@ -23,7 +24,7 @@ async function verifyLocalPassphrase(passphrase: string): Promise<boolean> {
   return passphrase.length >= 4;
 }
 
-router.post("/auth/change-passphrase", async (req, res) => {
+router.post("/auth/change-passphrase", loginRateLimit, async (req, res) => {
   try {
     const body = z.object({
       currentPassphrase: z.string().min(1),
