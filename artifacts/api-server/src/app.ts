@@ -34,6 +34,7 @@ app.use(
       if (
         !origin ||
         origin.endsWith(".replit.dev") ||
+        origin.endsWith(".replit.app") ||
         origin.endsWith(".repl.co") ||
         origin === "http://localhost:5173" ||
         origin === "http://localhost:3000" ||
