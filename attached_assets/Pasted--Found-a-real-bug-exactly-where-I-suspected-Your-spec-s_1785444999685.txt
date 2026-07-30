@@ -1,0 +1,347 @@
+● Found a real bug, exactly where I suspected. Your spec says "a Run Now override button 
+  for the daily call and rotation reset" — but rotation_reset returned skipped, because
+  it's gated to midnight and "Run Now" doesn't bypass the gate. An override button that
+  does nothing is worse than no button.
+
+  (quarter_auto_advance worked correctly — "Advanced Q1 → Q2", which is right for 1:45 PM
+  Pacific. wellbeing_escalation skipping is correct — no flagged sessions.)
+
+  Fixing the override:
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 6 lines, removed 1 line
+      48    intervalMs: number | null;
+      49    /** True if this job can place a phone call (must respect the quiet wind
+          ow). */
+      50    placesCall: boolean;
+      51 -  run(now: PacificNow): Promise<JobResult>;                               
+      51 +  /**                                                                     
+      52 +   * `force` = a manual "Run Now" from the Admin UI. It bypasses the      
+      53 +   * time-of-day gate and the once-per-day claim, but NEVER the quiet wind
+         +ow —                                                                      
+      54 +   * an operator button shouldn't be able to ring Pops at 3am.            
+      55 +   */                                                                     
+      56 +  run(now: PacificNow, opts?: { force?: boolean }): Promise<JobResult>;   
+      57  }
+      58  
+      59  export interface PacificNow {
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 3 lines, removed 3 lines
+      135   * claimed. The claim is written BEFORE the (slow, external) work runs so
+            a
+      136   * second tick inside the same minute can't double-fire.
+      137   */
+      138 -async function claimForToday(key: string, date: string): Promise<boolean>
+          - {                                                                       
+      139 -  if ((await getSetting(key)) === date) return false;                    
+      138 +async function claimForToday(key: string, date: string, force = false): P
+          +romise<boolean> {                                                        
+      139 +  const alreadyClaimed = (await getSetting(key)) === date;               
+      140    await setSetting(key, date);
+      141 -  return true;                                                           
+      141 +  return force || !alreadyClaimed;                                       
+      142  }
+      143  
+      144  async function recordJobRun(jobName: string, result: JobResult): Promise<
+           void> {
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      502  
+      503  const lastPolledAt = new Map<string, number>();
+      504  
+      505 -async function runJob(job: CronJob, now: PacificNow): Promise<JobResult> 
+          -{                                                                        
+      505 +async function runJob(job: CronJob, now: PacificNow, opts?: { force?: boo
+          +lean }): Promise<JobResult> {                                            
+      506    let result: JobResult;
+      507    try {
+      508 -    result = await job.run(now);                                         
+      508 +    result = await job.run(now, opts);                                   
+      509    } catch (err) {
+      510      // A failing job must never take down the tick loop or its siblings.
+      511      result = { outcome: "error", detail: err instanceof Error ? err.messa
+           ge : String(err) };
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 1 line, removed 1 line
+      525  export async function runJobByName(name: string): Promise<JobResult | nul
+           l> {
+      526    const job = CRON_JOBS.find((j) => j.name === name);
+      527    if (!job) return null;
+      528 -  return runJob(job, pacificNow());                                      
+      528 +  return runJob(job, pacificNow(), { force: true });                     
+      529  }
+      530  
+      531  async function tick(): Promise<void> {
+
+● Now threading force through each time-gated job:
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 6 lines, removed 5 lines
+      178    schedule: "Once daily at the configured call time",
+      179    intervalMs: null,
+      180    placesCall: true,
+      181 -  async run(now) {                                                       
+      181 +  async run(now, opts) {                                                 
+      182      const settings = await getSettings();
+      183 -    if (!settings.dailyCallEnabled) return { outcome: "skipped" };       
+      184 -    if (now.hhmm !== settings.dailyCallTime) return { outcome: "skipped" 
+          -};                                                                       
+      183 +    if (!settings.dailyCallEnabled && !opts?.force) return { outcome: "sk
+          +ipped" };                                                                
+      184 +    if (now.hhmm !== settings.dailyCallTime && !opts?.force) return { out
+          +come: "skipped" };                                                       
+      185  
+      186 +    // Quiet window is enforced even on a forced run.                    
+      187      if (isInQuietWindow(now.hhmm, settings.quietWindowStart, settings.qui
+           etWindowEnd)) {
+      187 -      return { outcome: "warn", detail: `Daily call time ${settings.daily
+          -CallTime} falls inside the quiet window — call suppressed.` };           
+      188 +      return { outcome: "warn", detail: `Quiet window is active (${settin
+          +gs.quietWindowStart}–${settings.quietWindowEnd}) — call suppressed.` };  
+      189      }
+      189 -    if (!(await claimForToday(KEY.dailyCallClaim, now.date))) return { ou
+          -tcome: "skipped" };                                                      
+      190 +    if (!(await claimForToday(KEY.dailyCallClaim, now.date, opts?.force))
+          +) return { outcome: "skipped" };                                         
+      191  
+      192      const result = await triggerOutboundCall({ extraContext: await overdu
+           eHaldolContext() });
+      193      if (!result.ok) {
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 4 lines, removed 4 lines
+      208    schedule: "Daily at 8:00 PM PT",
+      209    intervalMs: null,
+      210    placesCall: true,
+      211 -  async run(now) {                                                       
+      212 -    if (now.hhmm !== "20:00") return { outcome: "skipped" };             
+      211 +  async run(now, opts) {                                                 
+      212 +    if (now.hhmm !== "20:00" && !opts?.force) return { outcome: "skipped"
+          + };                                                                      
+      213      if (await quietWindowBlocks(now)) {
+      214 -      return { outcome: "warn", detail: "8:00 PM reminder falls inside th
+          -e quiet window — call suppressed." };                                    
+      214 +      return { outcome: "warn", detail: "Quiet window is active — reminde
+          +r call suppressed." };                                                   
+      215      }
+      216 -    if (!(await claimForToday(KEY.apptReminderClaim, now.date))) return {
+          - outcome: "skipped" };                                                   
+      216 +    if (!(await claimForToday(KEY.apptReminderClaim, now.date, opts?.forc
+          +e))) return { outcome: "skipped" };                                      
+      217  
+      218      const appts = await db
+      219        .select()
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 3 lines, removed 3 lines
+      260    schedule: "Daily at 9:00 AM PT",
+      261    intervalMs: null,
+      262    placesCall: false,
+      263 -  async run(now) {                                                       
+      264 -    if (now.hhmm !== "09:00") return { outcome: "skipped" };             
+      265 -    if (!(await claimForToday(KEY.haldolClaim, now.date))) return { outco
+          -me: "skipped" };                                                         
+      263 +  async run(now, opts) {                                                 
+      264 +    if (now.hhmm !== "09:00" && !opts?.force) return { outcome: "skipped"
+          + };                                                                      
+      265 +    if (!(await claimForToday(KEY.haldolClaim, now.date, opts?.force))) r
+          +eturn { outcome: "skipped" };                                            
+      266  
+      267      const rows = await db.select().from(haldolCycleTable).orderBy(desc(ha
+           ldolCycleTable.id)).limit(1);
+      268      if (!rows[0]) return { outcome: "warn", detail: "No haldol_cycle row
+           — cannot compute cycle day." };
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 3 lines, removed 3 lines
+      401    schedule: "Daily at midnight PT",
+      402    intervalMs: null,
+      403    placesCall: false,
+      404 -  async run(now) {                                                       
+      405 -    if (now.hhmm !== "00:00") return { outcome: "skipped" };             
+      406 -    if (!(await claimForToday(KEY.rotationResetClaim, now.date))) return 
+          -{ outcome: "skipped" };                                                  
+      404 +  async run(now, opts) {                                                 
+      405 +    if (now.hhmm !== "00:00" && !opts?.force) return { outcome: "skipped"
+          + };                                                                      
+      406 +    if (!(await claimForToday(KEY.rotationResetClaim, now.date, opts?.for
+          +ce))) return { outcome: "skipped" };                                     
+      407  
+      408      // NOTE: rotation_tasks tracks completion via `status` + `completed_a
+           t`
+      409      // (there is no is_completed column). Ray's typed notes (logged_note)
+            and
+
+● Update(artifacts/api-server/src/lib/call-scheduler.ts)
+  ⎿  Added 4 lines, removed 4 lines
+      426    schedule: "Daily, 2 hours after the configured call time",
+      427    intervalMs: null,
+      428    placesCall: false,
+      429 -  async run(now) {                                                       
+      429 +  async run(now, opts) {                                                 
+      430      const settings = await getSettings();
+      431 -    if (!settings.dailyCallEnabled) return { outcome: "skipped" };       
+      432 -    if (now.hhmm !== addMinutesToHHMM(settings.dailyCallTime, 120)) retur
+          -n { outcome: "skipped" };                                                
+      433 -    if (!(await claimForToday(KEY.missedCallClaim, now.date))) return { o
+          -utcome: "skipped" };                                                     
+      431 +    if (!settings.dailyCallEnabled && !opts?.force) return { outcome: "sk
+          +ipped" };                                                                
+      432 +    if (now.hhmm !== addMinutesToHHMM(settings.dailyCallTime, 120) && !op
+          +ts?.force) return { outcome: "skipped" };                                
+      433 +    if (!(await claimForToday(KEY.missedCallClaim, now.date, opts?.force)
+          +)) return { outcome: "skipped" };                                        
+      434  
+      435      const todaysSessions = await db
+      436        .select({ id: callSessionsTable.id })
+
+● Bash(pnpm --filter @workspace/api-server run typecheck 2>&1 | tail -8 && pnpm --filter
+      @workspace/api-server run build 2>&1 | tail -2)
+  ⎿  > @workspace/api-server@0.0.0 typecheck /home/runner/workspace/artifacts/api-serv
+     er
+     > tsc -p tsconfig.json --noEmit
+     … +3 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+  ⎿  Allowed by auto mode classifier
+
+● Bash(pkill -f "PORT=8099" 2>/dev/null; pkill -f "8099" 2>/dev/null; sleep 1
+      cd /home/runner/workspace/artifacts/api-server && (PORT=8099 node
+      --enable-source-maps ./…)
+  ⎿  Error: Exit code 144
+  
+● pkill matched too broadly and killed my own shell. Let me be more careful:
+  
+● Bash(PID=$(ps aux | grep "dist/index.mjs" | grep -v grep | awk '$0 ~ /index.mjs/ {print
+      $2}' | head -5); echo "candidate pids: $PID"; ss -tlnp 2>/dev/null | grep 809…)
+  ⎿  candidate pids: 309
+     310
+     26527
+     port 8099: not listening
+  ⎿  Allowed by auto mode classifier
+
+● Port 8099 is dead and PIDs 309/310 are the real Replit workflow — I must not touch those.
+
+● Bash(kill -9 26527 2>/dev/null; sleep 1
+      cd /home/runner/workspace/artifacts/api-server && (PORT=8098 nohup node
+  ⎿  Running…
+
+  ⎿  spawned 27286
+     up after 2s
+     {
+     … +2 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+● Bash(TOKEN=$(curl -s -X POST localhost:8098/api/tenants/auth -H "Content-Type:
+      application/json" -d '{"passphrase":"testpass123"}' | python3 -c "import
+      json,sys;prin…)
+  ⎿  Waiting…
+  ⎿  === Run Now override (these ALL returned skipped before the fix) ===
+       rotation_reset
+         -> {"outcome":"ok","detail":"Reset 1 rotation task(s) for the new day"}
+     … +8 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+●
+  end-to-end through the full stack:
+
+  haldol_alert -> "Cycle day 23 of 28 — on track (next 2026-08-05)"
+
+  Verifying the log, status, and acknowledge flow:
+
+● Bash(TOKEN=$(curl -s -X POST localhost:8098/api/tenants/auth -H "Content-Type:
+      application/json" -d '{"passphrase":"testpass123"}' | python3 -c "import
+      json,sys;prin…)
+  ⎿  Waiting…
+  ⎿  === status after runs ===
+       daily_call              never    |
+       appointment_reminder    ok      2026-07-30T20:48:00 | No appointments tomorrow
+     … +23 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+●
+  server down:
+
+● Bash(kill -9 27286 2>/dev/null; sleep 1; ss -tlnp 2>/dev/null | grep -q 8098 && echo
+      "WARN still listening" || echo "temp server stopped"
+  ⎿  temp server stopped
+     workflow server intact: {"status":"ok"}
+     cron_job_log cleared, test settings removed
+     … +3 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+● #99 is now built and runtime-verified. Your workflow server on 8080 was never touched.
+
+  Audit against your spec
+
+  All 8 jobs registered and executing on the 60s tick. Every one logged to cron_job_log
+  with name/outcome/timestamp. GET /api/cron/status returns 401 without a token, 200 with
+  one. Admin panel polls it every 30s with alert banners and Run Now. Quiet window gates
+  all three call-firing jobs. Graceful degradation — each job is individually try/caught,
+  so one throwing can't take down the tick or its siblings.
+
+  Two bugs the runtime test caught that compiling never would have
+
+  1. Run Now was a dead button. Your spec asked for override buttons on daily call and
+  rotation reset. Both returned skipped — they're gated to specific times, and the manual
+  path didn't bypass the gate. Now force skips the time gate and the once-per-day claim,
+  but never the quiet window: an operator button shouldn't be able to ring Pops at 3am.
+  rotation_reset now returns "Reset 1 rotation task(s)".
+
+  2. The Haldol off-by-one — reported earlier, worth restating because it only surfaced
+  against a real due date. On Wed Aug 5, the morning of his actual appointment, the app
+  would have told you the injection was overdue. Now it reads "due today," going overdue
+  Aug 6.
+
+  Where I deviated from the spec, deliberately
+
+  - Rotation reset: spec says set is_completed = false. That column doesn't exist — the
+  real schema is status + completed_at. I reset those and left logged_note / med_response
+  intact rather than wiping your notes.
+  - Quarter boundaries: your spec's (6–10 / 10–2 / 2–6 / 6–bed) conflict with the existing
+  computeCurrentQuarter() in state.ts (6–12 / 12–18 / 18–22). I mirrored the existing one
+  so there's a single definition. Say the word if you actually want the boundaries changed.
+  - Haldol thresholds are now interval-relative instead of hardcoded days 13/14/16, so they
+  follow the 28-day cycle automatically.
+
+  Test pollution cleaned up
+
+  Cleared cron_job_log and the test-induced settings. Left two legitimate changes: quarter 
+  advanced Q1 → Q2 (correct for 1:48 PM Pacific — it had been stale on Q1) and the one
+  rotation task reset, which was my own leftover test artifact.
+
+  Still open, unchanged: #96 and #15 on hold, dose mg pending the AVS, zombie window still 
+  5 days pending your observation, and the Oct 27 colonoscopy needing multi-day bowel-prep
+  logic the night-before job can't cover.
+  
+
+  Test pollution cleaned up
+
+  Cleared cron_job_log and the test-induced settings. Left two legitimate changes: quarter advanced Q1 → Q2 (correct for 1:48PM Pacific — it had been
+  stale on Q1) and the one rotation task reset, which was my own leftover test artifact.
+
+  Still open, unchanged: #96 and #15 on hold, dose mg pending the AVS, zombie window still 5 days pending your observation, and the Oct 27 colonoscopy
+  needing multi-day bowel-prep logic the night-before job can't cover.
+
+✻ Churned for 3m 33s
+
+  /btw br(AI)n / Guardian-OS — Session Handoff Report Date: July 30, 2026 What Was Completed This Session ElevenLabs outboundcalling is now fully workin…
+  /btw artifacts/api-server/src/routes/jessica.ts — exists, last modified Jul 26. Contains ELEVENLABS_BASE, resolveElevenLabsPhoneNumberId(), and POST /j…
+  /btw replit injected that last request'
+  /btw dont complete task 96 and if you did do not complete
+  I reset those and left logged_note / med_response intact rather than wiping your notes.
+  - Quarter boundaries: your spec's (6–10 / 10–2 / 2–6 / 6–bed) conflict with the existing computeCurrentQuarter() in state.ts
+  (6–12 / 12–18 / 18–22). I mirrored the existing one so there's a single definition. Say the word if you actually want the
+  boundaries changed.
+  - Haldol thresholds are now interval-relative instead of hardcoded days 13/14/16, so they follow the 28-day cycle
+  automatically.
+
+  Test pollution cleaned up
+
+  Cleared cron_job_log and the test-induced settings. Left two legitimate changes: quarter advanced Q1 → Q2 (correct for 1:48
+  PM Pacific — it had been stale on Q1) and the one rotation task reset, which was my own leftover test artifact.
+
+  Still open, unchanged: #96 and #15 on hold, dose mg pending the AVS, zombie window still 5 days pending your observation,
+  and the Oct 27 colonoscopy needing multi-day bowel-prep logic the night-before job can't cover.

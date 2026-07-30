@@ -4,32 +4,11 @@ import { haldolCycleTable, medicationAdjustmentsTable } from "@workspace/db/sche
 import { UpdateHaldolCycleBody } from "@workspace/api-zod";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
+import { computeHaldolCycle } from "../lib/haldol-cycle";
 
 const router: IRouter = Router();
 
-function computeCycleInfo(lastInjectionDate: string) {
-  const injection = new Date(lastInjectionDate);
-  const now = new Date();
-  const diffMs = now.getTime() - injection.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const cycleDay = (diffDays % 14) + 1;
-  const isZombiePhase = cycleDay <= 5;
-  const nextInjection = new Date(injection);
-  nextInjection.setDate(injection.getDate() + 14 * Math.ceil((diffDays + 1) / 14));
-  // diffDays >= 14 means the 14-day window closed without a new injection being
-  // logged — cycleDay has silently wrapped back to a low number, which reads as
-  // a fresh cycle unless we surface isOverdue explicitly. See CLAUDE.md invariant:
-  // haldol.ts and gemini.ts must keep this formula in sync.
-  const isOverdue = diffDays >= 14;
-  const daysOverdue = isOverdue ? diffDays - 13 : 0;
-  return {
-    cycleDay,
-    isZombiePhase,
-    nextInjectionDate: nextInjection.toISOString().split("T")[0],
-    isOverdue,
-    daysOverdue,
-  };
-}
+// Cycle math lives in lib/haldol-cycle.ts — do not reimplement it here.
 
 async function ensureCycle() {
   const rows = await db.select().from(haldolCycleTable).limit(1);
@@ -43,7 +22,10 @@ async function ensureCycle() {
 }
 
 function serializeCycle(cycle: typeof haldolCycleTable.$inferSelect) {
-  const computed = computeCycleInfo(cycle.lastInjectionDate);
+  const computed = computeHaldolCycle(cycle.lastInjectionDate, {
+    intervalDays: cycle.intervalDays,
+    zombiePhaseDays: cycle.zombiePhaseDays,
+  });
   return {
     id: cycle.id,
     lastInjectionDate: cycle.lastInjectionDate,
@@ -66,7 +48,13 @@ router.get("/haldol", async (req, res) => {
 router.put("/haldol", async (req, res) => {
   try {
     const body = UpdateHaldolCycleBody.parse(req.body);
-    const updateValues: { notes?: string; lastInjectionDate?: string; doseMg?: number | null } = {
+    const updateValues: {
+      notes?: string;
+      lastInjectionDate?: string;
+      doseMg?: number | null;
+      intervalDays?: number;
+      zombiePhaseDays?: number;
+    } = {
       notes: body.notes ?? undefined,
     };
     if (body.lastInjectionDate) {
@@ -76,6 +64,12 @@ router.put("/haldol", async (req, res) => {
     }
     if ("doseMg" in body) {
       updateValues.doseMg = body.doseMg ?? null;
+    }
+    if (typeof body.intervalDays === "number") {
+      updateValues.intervalDays = body.intervalDays;
+    }
+    if (typeof body.zombiePhaseDays === "number") {
+      updateValues.zombiePhaseDays = body.zombiePhaseDays;
     }
     const cycle = await ensureCycle();
     const [updated] = await db

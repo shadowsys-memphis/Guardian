@@ -109,7 +109,7 @@ export type OutboundCallResult =
  * resolves to a result object so the scheduler's tick loop can log and
  * move on instead of crashing the interval.
  */
-export async function triggerOutboundCall(opts?: { test?: boolean }): Promise<OutboundCallResult> {
+export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?: string }): Promise<OutboundCallResult> {
   try {
     const apiKey = getElevenLabsKey();
     const agentId = getAgentId();
@@ -179,7 +179,10 @@ export async function triggerOutboundCall(opts?: { test?: boolean }): Promise<Ou
     const careContextBlock = careContextLines.length > 0
       ? `CURRENT CARE CONTEXT — IMPORTANT:\n${careContextLines.join("\n")}\n\n`
       : "";
-    const liveContext = careContextBlock + scheduleContext;
+    // Scheduled jobs (appointment reminders, overdue-Haldol nudges) inject a
+    // purpose for the call here — see lib/call-scheduler.ts.
+    const extraBlock = opts?.extraContext ? `${opts.extraContext}\n\n` : "";
+    const liveContext = extraBlock + careContextBlock + scheduleContext;
 
     const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue });
 

@@ -24,6 +24,7 @@ import medicationsRouter from "./medications";
 import authRouter from "./auth";
 import jessicaRouter from "./jessica";
 import documentsRouter from "./documents";
+import cronRouter from "./cron";
 
 const router: IRouter = Router();
 
@@ -68,6 +69,7 @@ localRouter.use(reportsRouter);
 localRouter.use(actionsRouter);
 localRouter.use(medicationsRouter);
 localRouter.use(documentsRouter);
+localRouter.use(cronRouter);
 localRouter.use(authRouter);
 
 router.use(localRouter);

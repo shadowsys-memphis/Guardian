@@ -212,7 +212,7 @@ function HaldolBar({ haldol, todaySummary }: { haldol: HaldolCycle; todaySummary
       <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
         <p className="text-lg font-display text-muted-foreground uppercase tracking-widest">
           Medication Cycle — Day{" "}
-          <span className="text-primary font-bold">{haldol.cycleDay}</span> of 14
+          <span className="text-primary font-bold">{haldol.cycleDay}</span> of {(haldol as any).intervalDays ?? 14}
         </p>
         <div className="flex items-center gap-4">
           {hasCheckin ? (

@@ -94,6 +94,34 @@ export async function runTenantMigration(): Promise<void> {
       ALTER TABLE call_sessions ADD COLUMN IF NOT EXISTS transcript TEXT
     `);
 
+    // ── haldol_cycle — dosing interval is prescriber-set, not a constant ─────
+    // Pops moved from biweekly to monthly on 2026-07-28; hardcoding 14 made
+    // every cycle-day, zombie-phase and overdue figure in the app wrong.
+    // zombie_phase_days is the post-injection high-symptom window, which also
+    // shifts with dose/interval changes — tuned from observation, not guessed.
+    await pool.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'haldol_cycle') THEN
+          ALTER TABLE haldol_cycle ADD COLUMN IF NOT EXISTS interval_days INTEGER NOT NULL DEFAULT 14;
+          ALTER TABLE haldol_cycle ADD COLUMN IF NOT EXISTS zombie_phase_days INTEGER NOT NULL DEFAULT 5;
+        END IF;
+      END $$
+    `);
+
+    // ── cron_job_log — one row per scheduled-job execution (see lib/call-scheduler.ts) ──
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cron_job_log (
+        id SERIAL PRIMARY KEY,
+        job_name TEXT NOT NULL,
+        ran_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        outcome TEXT NOT NULL,
+        detail TEXT
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS cron_job_log_name_ran_idx ON cron_job_log (job_name, ran_at DESC)
+    `);
+
     logger.info("Tenant migration complete");
   } catch (err) {
     logger.error({ err }, "Tenant migration failed");

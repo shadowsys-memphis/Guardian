@@ -389,10 +389,30 @@ export const GetHaldolCycleResponse = zod.object({
     .number()
     .nullish()
     .describe("Injection dose in milligrams (null until confirmed)"),
-  cycleDay: zod.number().describe("Current day within the 14-day cycle (1-14)"),
+  cycleDay: zod
+    .number()
+    .describe(
+      "Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped)",
+    ),
+  intervalDays: zod
+    .number()
+    .optional()
+    .describe(
+      "Prescribed dosing interval in days (e.g. 14 biweekly, 28 monthly)",
+    ),
+  zombiePhaseDays: zod
+    .number()
+    .optional()
+    .describe("Length of the post-injection high-symptom window, in days"),
+  daysSinceInjection: zod
+    .number()
+    .optional()
+    .describe("Days elapsed since lastInjectionDate"),
   isZombiePhase: zod
     .boolean()
-    .describe("True on days 1-5 when symptoms are typically highest"),
+    .describe(
+      "True while cycleDay is within the post-injection high-symptom window",
+    ),
   nextInjectionDate: zod.date(),
   isOverdue: zod
     .boolean()
@@ -408,9 +428,24 @@ export const GetHaldolCycleResponse = zod.object({
 /**
  * @summary Update Haldol cycle (set injection date, notes)
  */
+
+export const updateHaldolCycleBodyZombiePhaseDaysMin = 0;
+
 export const UpdateHaldolCycleBody = zod.object({
   lastInjectionDate: zod.date().optional(),
   doseMg: zod.number().nullish().describe("Injection dose in milligrams"),
+  intervalDays: zod
+    .number()
+    .min(1)
+    .optional()
+    .describe(
+      "Prescribed dosing interval in days — set when the prescriber changes the schedule",
+    ),
+  zombiePhaseDays: zod
+    .number()
+    .min(updateHaldolCycleBodyZombiePhaseDaysMin)
+    .optional()
+    .describe("Length of the post-injection high-symptom window, in days"),
   notes: zod.string().optional(),
 });
 
@@ -421,10 +456,30 @@ export const UpdateHaldolCycleResponse = zod.object({
     .number()
     .nullish()
     .describe("Injection dose in milligrams (null until confirmed)"),
-  cycleDay: zod.number().describe("Current day within the 14-day cycle (1-14)"),
+  cycleDay: zod
+    .number()
+    .describe(
+      "Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped)",
+    ),
+  intervalDays: zod
+    .number()
+    .optional()
+    .describe(
+      "Prescribed dosing interval in days (e.g. 14 biweekly, 28 monthly)",
+    ),
+  zombiePhaseDays: zod
+    .number()
+    .optional()
+    .describe("Length of the post-injection high-symptom window, in days"),
+  daysSinceInjection: zod
+    .number()
+    .optional()
+    .describe("Days elapsed since lastInjectionDate"),
   isZombiePhase: zod
     .boolean()
-    .describe("True on days 1-5 when symptoms are typically highest"),
+    .describe(
+      "True while cycleDay is within the post-injection high-symptom window",
+    ),
   nextInjectionDate: zod.date(),
   isOverdue: zod
     .boolean()

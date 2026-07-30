@@ -1604,10 +1604,19 @@ components:
           description: "Injection dose in milligrams (null until confirmed)"
         cycleDay:
           type: integer
-          description: "Current day within the 14-day cycle (1-14)"
+          description: "Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped)"
+        intervalDays:
+          type: integer
+          description: "Prescribed dosing interval in days (e.g. 14 biweekly, 28 monthly)"
+        zombiePhaseDays:
+          type: integer
+          description: "Length of the post-injection high-symptom window, in days"
+        daysSinceInjection:
+          type: integer
+          description: "Days elapsed since lastInjectionDate"
         isZombiePhase:
           type: boolean
-          description: "True on days 1-5 when symptoms are typically highest"
+          description: "True while cycleDay is within the post-injection high-symptom window"
         nextInjectionDate:
           type: string
           format: date
@@ -1638,6 +1647,14 @@ components:
           type: integer
           nullable: true
           description: "Injection dose in milligrams"
+        intervalDays:
+          type: integer
+          minimum: 1
+          description: "Prescribed dosing interval in days — set when the prescriber changes the schedule"
+        zombiePhaseDays:
+          type: integer
+          minimum: 0
+          description: "Length of the post-injection high-symptom window, in days"
         notes:
           type: string
 

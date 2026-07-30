@@ -10,5 +10,15 @@ export interface UpdateHaldolCycleInput {
   lastInjectionDate?: Date;
   /** Injection dose in milligrams */
   doseMg?: number | null;
+  /**
+   * Prescribed dosing interval in days — set when the prescriber changes the schedule
+   * @minimum 1
+   */
+  intervalDays?: number;
+  /**
+   * Length of the post-injection high-symptom window, in days
+   * @minimum 0
+   */
+  zombiePhaseDays?: number;
   notes?: string;
 }

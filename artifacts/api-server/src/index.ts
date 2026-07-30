@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runTenantMigration } from "./lib/tenant-migration";
-import { startDailyCallScheduler } from "./lib/call-scheduler";
+import { startCronScheduler } from "./lib/call-scheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -32,7 +32,7 @@ async function start() {
     logger.info({ port }, "Server listening");
   });
 
-  startDailyCallScheduler();
+  startCronScheduler();
 }
 
 start();
