@@ -1,10 +1,26 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { inventoryItemsTable } from "@workspace/db";
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc, and, sql } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
+
+async function ensureInventoryTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS inventory_items (
+      id SERIAL PRIMARY KEY,
+      tenant_id TEXT NOT NULL DEFAULT 'local',
+      item_name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'food',
+      replenishment_cycle TEXT NOT NULL DEFAULT 'weekly',
+      last_restocked_date DATE,
+      estimated_run_out_date DATE,
+      notes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+}
 
 const CYCLE_DAYS: Record<string, number> = {
   weekly: 7,
@@ -61,6 +77,7 @@ const INVENTORY_BASELINE = [
 ] as const;
 
 export async function ensureInventorySeeded(tenantId: string) {
+  await ensureInventoryTable();
   const existing = await db
     .select()
     .from(inventoryItemsTable)
