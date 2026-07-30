@@ -5,7 +5,10 @@
       "Bash(npx tsc *)",
       "Bash(pnpm run *)",
       "Bash(curl -s -X POST http://localhost:8080/tenants/auth -H \"Content-Type: application/json\" -d '{\"passphrase\":\"test1234\"}' -w \"\\\\nHTTP:%{http_code}\\\\n\")",
-      "Bash(awk 'NR==938,/^function [A-Za-z]+\\\\\\(/{if\\(NR>938 && /^function [A-Za-z]+\\\\\\(/ && NR!=938\\) exit; print NR\": \"$0}' /home/runner/workspace/artifacts/brain-app/src/pages/admin-view.tsx)"
+      "Bash(awk 'NR==938,/^function [A-Za-z]+\\\\\\(/{if\\(NR>938 && /^function [A-Za-z]+\\\\\\(/ && NR!=938\\) exit; print NR\": \"$0}' /home/runner/workspace/artifacts/brain-app/src/pages/admin-view.tsx)",
+      "Bash(cp /tmp/claude-1000/-home-runner-workspace/c59a1a29-bd38-4c25-a663-ebd8186c96d3/scratchpad/test-normalize.mjs /home/runner/workspace/artifacts/api-server/test-normalize.mjs)",
+      "Bash(node test-normalize.mjs)",
+      "Bash(rm -f /home/runner/workspace/artifacts/api-server/test-normalize.mjs)"
     ]
   }
 }

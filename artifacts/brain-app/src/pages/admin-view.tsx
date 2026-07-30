@@ -4692,6 +4692,18 @@ function DocumentsTab() {
     reader.readAsDataURL(file);
   };
 
+  const handleDeleteDoc = async (doc: any) => {
+    if (!window.confirm(`Delete "${doc.source_label}"? This only removes the scan — it won't undo anything already applied to the care plan.`)) return;
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/documents/${doc.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      toast({ title: "Document deleted" });
+    } catch {
+      toast({ title: "Delete failed", variant: "destructive" });
+    }
+  };
+
   const handleReapply = (doc: any) => {
     let structured: any = {};
     try { structured = JSON.parse(doc.structured_json); } catch { structured = {}; }
@@ -4728,6 +4740,11 @@ function DocumentsTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Already up to date", description: body.message ?? "This document already matches the active care plan.", variant: "destructive" });
+        return;
+      }
       if (!res.ok) throw new Error("Apply failed");
       const result = await res.json();
       setApplied(result);
@@ -4966,17 +4983,27 @@ function DocumentsTab() {
                             <p className="text-xs text-muted-foreground/70">📅 {structured.appointments.map((a: any) => `${a.date} w/ ${a.provider}`).join(", ")}</p>
                           )}
                         </div>
-                        {hasContent && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          {hasContent && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-xs"
+                              onClick={() => handleReapply(doc)}
+                            >
+                              <RotateCcw size={12} />
+                              Re-apply
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
-                            className="gap-1.5 shrink-0 text-xs"
-                            onClick={() => handleReapply(doc)}
+                            className="gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleDeleteDoc(doc)}
                           >
-                            <RotateCcw size={12} />
-                            Re-apply
+                            <Trash2 size={12} />
                           </Button>
-                        )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

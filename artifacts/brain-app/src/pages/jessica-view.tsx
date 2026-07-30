@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Mic, Activity, Radio, Cpu } from "lucide-react";
 import { useGetActiveScripts } from "@workspace/api-client-react";
-import { formatPacificDateTime } from "@/lib/time";
+import { formatPacificDateTime, formatPacificClock, formatPacificDate } from "@/lib/time";
 
 export function JessicaView() {
   const [time, setTime] = useState(new Date());
@@ -29,8 +29,8 @@ export function JessicaView() {
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xl tracking-wider">{format(time, 'HH:mm:ss.SSS')}</div>
-          <div className="text-xs opacity-70 uppercase">{format(time, 'yyyy-MM-dd')}</div>
+          <div className="text-xl tracking-wider">{formatPacificClock(time)}</div>
+          <div className="text-xs opacity-70 uppercase">{formatPacificDate(time)}</div>
         </div>
       </header>
 
