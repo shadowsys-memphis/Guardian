@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
 import { Mic, Activity, Radio, Cpu } from "lucide-react";
 import { useGetActiveScripts } from "@workspace/api-client-react";
+import { formatPacificDateTime } from "@/lib/time";
 
 export function JessicaView() {
   const [time, setTime] = useState(new Date());
@@ -69,7 +69,7 @@ export function JessicaView() {
                   )}
                 </div>
                 <div className="text-right text-xs opacity-70 pt-1">
-                  {script.lastPatched ? format(new Date(script.lastPatched), 'MM/dd HH:mm:ss') : 'SYSTEM_DEFAULT'}
+                  {script.lastPatched ? formatPacificDateTime(script.lastPatched) : 'SYSTEM_DEFAULT'}
                 </div>
               </div>
             ))}

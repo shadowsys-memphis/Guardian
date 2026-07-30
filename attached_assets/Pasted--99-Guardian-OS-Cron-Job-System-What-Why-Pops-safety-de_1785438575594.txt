@@ -1,0 +1,125 @@
+#99 - Guardian-OS Cron Job System
+What & Why
+Pops' safety depends on things happening at the right time — not just when Ray remembers to tap a button. The call-scheduler skeleton exists (lib/call-scheduler.ts, started in index.ts) but covers only the daily call. Every other time-sensitive event — appointment prep, Haldol overdue alerts, med refusal escalation, rotation resets — is either missing entirely or silently swallowed into a DB flag that nobody acts on in real time.
+
+This task builds the complete scheduled-jobs layer: every mandatory job, its timing logic, its safety conditions, and its escalation path when something goes wrong.
+
+Done looks like
+Eight named cron jobs run inside the API server process (single 60s tick loop, extended from the existing scheduler)
+Each job is logged with a job name, outcome, and timestamp on every tick
+Ray can see the job schedule and last-run status on the Admin page
+No job fires during Pops' quiet window (configurable, default 10 PM – 7 AM)
+All jobs degrade gracefully — a DB error or ElevenLabs timeout never crashes the scheduler
+Out of scope
+SMS/push notifications to Ray (no Twilio SMS or FCM set up yet — escalation for now means flagging the call session and updating a visible alert in the UI)
+Multi-caregiver alerting
+Jobs that require external calendar sync
+The Eight Jobs
+1. Daily Morning Call (mandatory — completes Task #96)
+Trigger: Once daily at dailyCallTime (stored in app_settings, set by Ray in Settings → Jessica)
+What it does: Fires POST /jessica/outbound-call to Pops' number
+Safety conditions:
+
+Not already called today (daily_call_last_triggered_date check — already in call-scheduler.ts)
+Not in quiet window
+pops_phone_number is set
+ElevenLabs credentials configured
+On failure: Log the miss with reason; increment a missed_call_streak counter in app_settings; surface alert in Admin UI
+Relevant existing code: artifacts/api-server/src/lib/call-scheduler.ts (extend, don't replace)
+2. Night-Before Appointment Reminder Call (mandatory)
+Trigger: Daily at 8:00 PM PT
+What it does: Checks medical_appointments for any appointment tomorrow. If found, fires an outbound call with a modified system prompt: "Tomorrow you have a [type] appointment at [location] at [time]. Here's what to expect…"
+Special case — bloodwork: If type = 'bloodwork' or 'lab', the prompt adds: "You'll need to fast from midnight — nothing to eat or drink except water. Don't take your morning medication until after the draw."
+Safety conditions:
+
+Quiet window respected
+Only fires if tomorrow has an appointment (skip if calendar is clear)
+Deduplication: one reminder per appointment_id per day (track in app_settings or a new appointment_reminders table)
+On failure: Log; no retry (next tick will catch it if still within window)
+3. Haldol Cycle Overdue Alert (mandatory)
+Trigger: Daily at 9:00 AM PT
+What it does: Computes current cycle day from haldol_cycle.last_injection_date.
+
+Day 13: Flags an advisory in app_settings (haldol_alert: "due_tomorrow")
+Day 14+: Escalates to haldol_alert: "overdue" — surfaces a red banner in the Admin UI
+Day 16+: Adds a spoken reminder to Jessica's next daily call ("Pops, Ray wanted me to remind you that your Haldol appointment is coming up")
+Why this matters: Missing the injection window causes the zombie phase to extend unpredictably. Ray must know at Day 13, not Day 15.
+Relevant existing code: artifacts/api-server/src/routes/haldol.ts — ensureCycle() and cycle day formula
+4. Medication Refusal Escalation (mandatory)
+Trigger: Runs every 15 minutes (4 ticks of the 60s loop × 15 checks)
+What it does: Queries call_sessions joined to health_data_points for any MED_REFUSED event in the last 2 hours that hasn't been acknowledged by Ray.
+
+Sets app_settings.med_refusal_alert with timestamp and session ID
+Surfaces a dismissible urgent alert in the Admin UI header
+Acknowledgement: Ray clicks "I know" in the UI → clears the flag
+Why 15 minutes not immediate: The ElevenLabs webhook can take a few minutes to deliver the transcript; 15-min polling catches it without hammering the DB
+Relevant existing code: artifacts/api-server/src/lib/hermes.ts — MED_REFUSED action handler already sets a DB flag
+5. Wellbeing Alert Escalation (mandatory)
+Trigger: Runs every 5 minutes
+What it does: Queries call_sessions for any flagged = true session in the last 4 hours without a Ray acknowledgement.
+
+Sets app_settings.wellbeing_alert with session ID, timestamp, and severity
+Shows a non-dismissible red banner in the Admin UI until Ray acknowledges
+Why non-dismissible: A flagged wellbeing session means Pops said something concerning. Ray should not be able to accidentally swipe it away.
+Relevant existing code: artifacts/api-server/src/lib/hermes.ts — WELLBEING_ALERT sets flagged on the session already
+6. Rotation Task Daily Reset (mandatory)
+Trigger: Every day at midnight PT
+What it does: Sets is_completed = false and clears completed_at on all rotation_tasks rows
+Why: Without this, tasks stay checked off forever. Every day starts clean.
+Edge case: Don't reset tasks that are is_hourly = true mid-day — only reset at midnight
+Relevant existing code: lib/db/src/schema/index.ts:205 — rotationTasksTable
+
+7. Missed Call Detection (mandatory)
+Trigger: Runs once daily at dailyCallTime + 2 hours
+What it does: Checks whether today's call session exists in call_sessions. If not:
+
+Sets app_settings.missed_call_today = true
+Increments missed_call_streak
+Surfaces an amber alert in the Admin UI ("No call reached Pops today")
+Reset: Cleared when a call session is successfully created for today
+Why 2-hour buffer: Gives time for retries and ElevenLabs provisioning delays
+8. Schedule Quarter Auto-Advance (quality-of-life, but important)
+Trigger: Runs every 30 minutes
+What it does: Checks current Pacific time and compares to quarter boundaries:
+
+Q1: 6:00–10:00 AM
+Q2: 10:00 AM–2:00 PM
+Q3: 2:00–6:00 PM
+Q4: 6:00 PM–bedtime
+If app_state.quarter_override is null, auto-sets current_quarter to the correct quarter.
+If quarter_override is set (Ray manually overrode), leave it alone.
+Relevant existing code: artifacts/api-server/src/routes/state.ts, app_state table with current_quarter and quarter_override
+
+Admin UI — Cron Status Dashboard
+Add a "System Jobs" section to the Admin page showing:
+
+Each job name, last run time, last outcome (✅ / ⚠️ / ❌)
+Current active alerts (med refusal, wellbeing, missed call, Haldol overdue)
+Dismiss buttons for acknowledged alerts
+A "Run Now" override button for the daily call and rotation reset
+Steps
+Extend call-scheduler.ts into a full job runner — Replace the single-purpose daily-call ticker with a named-job registry. Each job registers its interval, last-run timestamp, and handler. The 60s master tick iterates all jobs and fires any that are due. Add timezone-aware time comparison (America/Los_Angeles) for all time-based triggers.
+
+Implement Jobs 2–8 — Add each job handler using the patterns above. Jobs that need DB access use the existing db and pool imports. All jobs write their outcome to a new cron_job_log table (job_name, ran_at, outcome, detail).
+
+Add cron_job_log table and alert fields to DB — New table: cron_job_log(id, job_name, ran_at, outcome, detail). New app_settings keys: med_refusal_alert, wellbeing_alert, missed_call_today, missed_call_streak, haldol_alert, daily_call_last_triggered_date (already exists).
+
+Add appointment deduplication — New app_settings key last_appointment_reminder_ids (JSON array) prevents double-firing the night-before reminder for the same appointment.
+
+Expose cron status via API — New route GET /api/cron/status returns last-run times and current alerts. Requires requireLocalSession.
+
+Build Admin UI cron panel — Add a collapsible "System Jobs" section to admin-view.tsx that polls /api/cron/status every 30 seconds and shows job health + active alerts with dismiss actions.
+
+Verify quiet window applies to all call-firing jobs — Jobs 1, 2, and 3 (day 16+ spoken reminder) must all check the quiet window before firing a call.
+
+Relevant files
+artifacts/api-server/src/lib/call-scheduler.ts
+artifacts/api-server/src/index.ts
+artifacts/api-server/src/routes/jessica.ts
+artifacts/api-server/src/routes/haldol.ts
+artifacts/api-server/src/routes/rotation.ts
+artifacts/api-server/src/routes/appointments.ts
+artifacts/api-server/src/lib/hermes.ts
+artifacts/api-server/src/routes/state.ts
+artifacts/brain-app/src/pages/admin-view.tsx
+lib/db/src/schema/index.ts:205,247

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { format, formatDuration, intervalToDuration } from "date-fns";
+import { formatDuration, intervalToDuration } from "date-fns";
+import { formatPacificDate, formatPacificTime } from "@/lib/time";
 import {
   PhoneCall,
   PhoneIncoming,
@@ -168,10 +169,8 @@ function CallRow({ session }: { session: any }) {
   const endedAt: string | null = session.endedAt ?? null;
   const duration = formatCallDuration(startedAt, endedAt);
   const sessionDate = session.sessionDate as string;
-  const dateDisplay = sessionDate
-    ? format(new Date(sessionDate + "T12:00:00"), "MMM d, yyyy")
-    : "—";
-  const timeDisplay = startedAt ? format(new Date(startedAt), "h:mm a") : "—";
+  const dateDisplay = sessionDate ? formatPacificDate(sessionDate + "T12:00:00Z") : "—";
+  const timeDisplay = startedAt ? formatPacificTime(startedAt) : "—";
   const dataPointCount: number = session.dataPointCount ?? 0;
 
   return (

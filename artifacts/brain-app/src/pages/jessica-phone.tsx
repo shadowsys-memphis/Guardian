@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Send, Trash2, Zap, ChevronRight, Camera, ChevronDown, ChevronUp, X, CheckCircle, AlertCircle, Calendar, ShoppingCart, Lightbulb, Music } from "lucide-react";
-import { format } from "date-fns";
+import { formatPacificDateTime, formatPacificTime } from "@/lib/time";
 import { useGetAiModel, getGetAiModelQueryKey, useGetAppState, getGetAppStateQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -268,7 +268,7 @@ export function JessicaPhone() {
       const res = await fetch(`${BASE_URL}/api/gemini/conversations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: `Jessica Call — ${format(new Date(), "MMM dd HH:mm")}` }),
+        body: JSON.stringify({ title: `Jessica Call — ${formatPacificDateTime(new Date())}` }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -461,7 +461,7 @@ export function JessicaPhone() {
         if (action.type === "ADD_EVENT" || action.type === "ADD_TASK") {
           const p = action.payload as any;
           const now = new Date();
-          const timeLabel: string = p.timeLabel ?? format(now, "HHmm");
+          const timeLabel: string = p.timeLabel ?? formatPacificTime(now);
           const order: number = typeof p.order === "number" ? p.order : now.getHours() * 100 + now.getMinutes();
           const res = await fetch(`${BASE_URL}/api/schedule`, {
             method: "POST",

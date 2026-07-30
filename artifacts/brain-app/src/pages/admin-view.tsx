@@ -108,6 +108,7 @@ import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useVault } from "@/lib/vault-context";
+import { formatPacificTime, formatPacificDate, formatPacificDateTime, formatPacificShortDate } from "@/lib/time";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
 type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "documents" | "settings" | "devices";
@@ -1157,9 +1158,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
               {(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at) && (
                 <p className="text-[10px] text-muted-foreground/60">
                   Updated:{" "}
-                  {new Date(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at!).toLocaleDateString("en-US", {
-                    month: "short", day: "numeric", year: "numeric",
-                  })}
+                  {formatPacificDate(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at!)}
                 </p>
               )}
             </div>
@@ -1231,7 +1230,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                     <p className="text-xs text-muted-foreground italic border-t border-border/40 pt-2">{last.behaviorNotes}</p>
                   )}
                   <p className="text-[10px] text-muted-foreground/50 pt-1">
-                    Last log: {last.loggedAt ? new Date(last.loggedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Unknown"}
+                    Last log: {last.loggedAt ? formatPacificDateTime(last.loggedAt) : "Unknown"}
                   </p>
                 </>
               );
@@ -1241,7 +1240,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                 <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest mb-1">Last Check-in</p>
                 <p className="text-xs text-muted-foreground">
                   {(todaySummary as any).sessionCount ?? 0} session{(todaySummary as any).sessionCount !== 1 ? "s" : ""} today
-                  {(todaySummary as any).lastSessionTime ? ` · ${new Date((todaySummary as any).lastSessionTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+                  {(todaySummary as any).lastSessionTime ? ` · ${formatPacificTime((todaySummary as any).lastSessionTime)}` : ""}
                 </p>
               </div>
             )}
@@ -1324,7 +1323,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                 </div>
                 <p className="text-[10px] text-muted-foreground/50">
                   Week of {(cart as any).weekStartDate}
-                  {(cart as any).approvedAt ? ` · Approved ${new Date((cart as any).approvedAt).toLocaleDateString()}` : ""}
+                  {(cart as any).approvedAt ? ` · Approved ${formatPacificDate((cart as any).approvedAt)}` : ""}
                 </p>
               </>
             )}
@@ -1554,8 +1553,8 @@ function SymptomsTab() {
                 <CardContent className="p-4 flex gap-4">
                   <div className="shrink-0 text-center w-20 p-2 bg-secondary rounded border border-border/50">
                     <div className="text-xs text-muted-foreground uppercase font-bold">Time</div>
-                    <div className="text-lg font-display text-primary">{format(new Date(log.loggedAt), "HH:mm")}</div>
-                    <div className="text-xs text-muted-foreground">{format(new Date(log.loggedAt), "MM/dd")}</div>
+                    <div className="text-lg font-display text-primary">{formatPacificTime(log.loggedAt)}</div>
+                    <div className="text-xs text-muted-foreground">{formatPacificShortDate(log.loggedAt)}</div>
                   </div>
                   <div className="flex-1">
                     <div className="flex gap-2 mb-2">
@@ -1998,7 +1997,7 @@ export function ShopperTab() {
     }
     const lines: string[] = [
       `br(AI)n Weekly Meal Plan — Week of ${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}`,
-      `Generated: ${new Date().toLocaleString()}`,
+      `Generated: ${formatPacificDateTime(new Date())}`,
       `Budget: $${((cart?.totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $${((cart?.budgetCents ?? 15000) / 100).toFixed(2)}`,
       `Status: ${(cart?.status ?? "pending").toUpperCase()}`,
       "",
@@ -2329,7 +2328,7 @@ export function ShopperTab() {
                 </a>
               )}
               {fulfillment.createdAt && (
-                <p className="text-[10px] text-muted-foreground/50">Last run: {new Date(fulfillment.createdAt).toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground/50">Last run: {formatPacificDateTime(fulfillment.createdAt)}</p>
               )}
             </div>
           )}
@@ -3246,7 +3245,7 @@ function DevicesTab() {
               {actionLogs.map((log) => (
                 <div key={log.id} className="grid grid-cols-[auto_1fr_auto] gap-x-4 px-4 py-2.5 text-xs hover:bg-secondary/20 items-center">
                   <span className="text-muted-foreground/70 font-display whitespace-nowrap tabular-nums">
-                    {format(new Date(log.createdAt), "MMM d HH:mm")}
+                    {formatPacificDateTime(log.createdAt)}
                   </span>
                   <div className="min-w-0">
                     <span className="font-display uppercase tracking-widest text-foreground/80 text-[11px]">
@@ -3631,7 +3630,7 @@ function RotationTab() {
           <div className="max-h-[60vh] overflow-y-auto rounded-sm border border-border bg-secondary/10 p-4">
             <pre className="text-xs font-mono whitespace-pre-wrap text-foreground leading-relaxed">{summaryMarkdown || "Generating…"}</pre>
           </div>
-          {summaryDate && <p className="text-xs text-muted-foreground/40">Generated: {new Date(summaryDate).toLocaleString()}</p>}
+          {summaryDate && <p className="text-xs text-muted-foreground/40">Generated: {formatPacificDateTime(summaryDate)}</p>}
         </div>
       </Modal>
     </div>
