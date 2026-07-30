@@ -17,5 +17,9 @@ export interface HaldolCycle {
   /** True on days 1-5 when symptoms are typically highest */
   isZombiePhase: boolean;
   nextInjectionDate: Date;
+  /** True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle */
+  isOverdue: boolean;
+  /** Days past the expected injection date; 0 when not overdue */
+  daysOverdue: number;
   notes?: string;
 }

@@ -13,4 +13,8 @@ export interface AssessmentSettings {
   quietWindowEnd?: string;
   /** Hours of inactivity before Jessica initiates a check-in */
   engagementIntervalHours?: number;
+  /** When true, the server automatically places the daily Jessica call at dailyCallTime */
+  dailyCallEnabled?: boolean;
+  /** HH:MM 24-hour format, Pacific time, e.g. 10:00 */
+  dailyCallTime?: string;
 }

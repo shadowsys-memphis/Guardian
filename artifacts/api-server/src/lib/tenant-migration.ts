@@ -44,6 +44,13 @@ export async function runTenantMigration(): Promise<void> {
 
     await pool.query(`CREATE INDEX IF NOT EXISTS tenants_status_idx ON tenants (status)`);
 
+    // ── session_version — bumping this invalidates all outstanding JWTs for a
+    //    tenant (or for the local workspace, via app_settings) without waiting
+    //    for their 24h natural expiry. Checked on every request in tenant-auth.ts.
+    await pool.query(`
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 1
+    `);
+
     // ── inventory_items — ensure table exists with tenant_id from the start ──
     await pool.query(`
       CREATE TABLE IF NOT EXISTS inventory_items (

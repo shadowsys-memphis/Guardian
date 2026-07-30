@@ -79,7 +79,7 @@ async function callLmStudio(
   return content;
 }
 
-async function loadLiveContext(): Promise<string> {
+export async function loadLiveContext(): Promise<string> {
   try {
     const [meals, schedule, symptoms, carts] = await Promise.all([
       db.select({ id: mealsTable.id, name: mealsTable.name, estimatedCostCents: mealsTable.estimatedCostCents })
@@ -135,8 +135,10 @@ ${symptomStr}`;
   }
 }
 
-export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string): string {
-  const toneProfile = isZombiePhase
+export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string, overdue?: { isOverdue: boolean; daysOverdue: number }): string {
+  const toneProfile = overdue?.isOverdue
+    ? "Pops' Haldol injection is overdue — his caregiver has not logged a new dose within the expected 14-day window. Gently ask whether he's seen anyone about his injection recently, without alarming him, and keep the check-in soft and brief either way."
+    : isZombiePhase
     ? "Today is a rest day for Pops — his Haldol cycle is in the high-symptom phase (days 1-5). Keep everything soft, brief, and low-pressure. No long conversations. Gentle check-ins only."
     : "Today is a normal day for Pops. You can be warm, engaged, and conversational. Keep him anchored and positive.";
 
@@ -244,17 +246,17 @@ MED_CONFIRMED → {"type":"MED_CONFIRMED","title":"[medication] taken","details"
 MED_REFUSED → {"type":"MED_REFUSED","title":"[medication] skipped","details":"brief reason"}
 WELLBEING_ALERT → {"type":"WELLBEING_ALERT","title":"concern summary","details":"what was said"}
 
-Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.`;
+Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.${overdue?.isOverdue ? ` ⚠️ INJECTION OVERDUE — ${overdue.daysOverdue} day(s) past the expected 14-day window. If Ray hasn't mentioned it, casually surface this to him next time you speak, but don't alarm Pops.` : ""}`;
 }
 
-function buildRaySystemPrompt(liveContext: string, cycleDay: number | null, isZombiePhase: boolean): string {
+function buildRaySystemPrompt(liveContext: string, cycleDay: number | null, isZombiePhase: boolean, overdue?: { isOverdue: boolean; daysOverdue: number }): string {
   return `You are Jessica — br(AI)n's operations AI for Ray, Pops' caregiver and son.
 
 RAY MODE: Direct and operational. Ray is the caregiver — he needs status, decisions, and results fast. No therapy-speak. No filler. Respond like a sharp ops partner to a busy family caregiver. Max 2-3 sentences unless Ray asks for detail.
 
 ${liveContext}
 
-Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.${isZombiePhase ? " ⚠️ ZOMBIE PHASE (days 1-5) — Pops is in high-symptom window. Keep all Pops-facing activities minimal and low-pressure." : ""}
+Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.${isZombiePhase ? " ⚠️ ZOMBIE PHASE (days 1-5) — Pops is in high-symptom window. Keep all Pops-facing activities minimal and low-pressure." : ""}${overdue?.isOverdue ? ` ⚠️ INJECTION OVERDUE — ${overdue.daysOverdue} day(s) past the expected 14-day window. Lead with this — Ray needs to know his next Haldol injection is late.` : ""}
 
 ACTIONS — emit these blocks invisibly after your response when Ray gives instructions. JSON must be a single line. Never show delimiters to Ray.
 
@@ -440,18 +442,22 @@ function parseDeviceCommand(text: string): { device: string; action: string; val
   try { return JSON.parse(match[1]); } catch { return null; }
 }
 
-export async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; isZombiePhase: boolean }> {
+export async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; isZombiePhase: boolean; isOverdue: boolean; daysOverdue: number }> {
   try {
     const rows = await db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1);
-    if (!rows[0]) return { cycleDay: null, isZombiePhase: false };
+    if (!rows[0]) return { cycleDay: null, isZombiePhase: false, isOverdue: false, daysOverdue: 0 };
     const injection = new Date(rows[0].lastInjectionDate);
     const today = new Date();
     const diffMs = today.getTime() - injection.getTime();
     const diffDays = Math.floor(diffMs / 86400000);
     const cycleDay = (diffDays % 14) + 1;
-    return { cycleDay, isZombiePhase: cycleDay <= 5 };
+    // diffDays >= 14 means the dosing window closed without a new injection
+    // being logged — see the matching invariant in haldol.ts's computeCycleInfo.
+    const isOverdue = diffDays >= 14;
+    const daysOverdue = isOverdue ? diffDays - 13 : 0;
+    return { cycleDay, isZombiePhase: cycleDay <= 5, isOverdue, daysOverdue };
   } catch {
-    return { cycleDay: null, isZombiePhase: false };
+    return { cycleDay: null, isZombiePhase: false, isOverdue: false, daysOverdue: 0 };
   }
 }
 
@@ -616,12 +622,12 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       .where(eq(messagesTable.conversationId, conversationId))
       .orderBy(asc(messagesTable.createdAt));
 
-    const { cycleDay, isZombiePhase } = await getCurrentCycleInfo();
+    const { cycleDay, isZombiePhase, isOverdue, daysOverdue } = await getCurrentCycleInfo();
     const liveContext = await loadLiveContext();
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
     const systemPrompt = mode === "ray"
-      ? buildRaySystemPrompt(liveContext, cycleDay, isZombiePhase)
-      : buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext);
+      ? buildRaySystemPrompt(liveContext, cycleDay, isZombiePhase, { isOverdue, daysOverdue })
+      : buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue });
 
     const activeModel = await getActiveModel();
 

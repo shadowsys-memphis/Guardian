@@ -105,6 +105,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useVault } from "@/lib/vault-context";
 
@@ -1055,7 +1056,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={haldol?.isOverdue ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : undefined}>
           <CardHeader className="pb-2">
             <CardDescription className="uppercase tracking-widest font-bold">Haldol Cycle</CardDescription>
             <CardTitle className="text-5xl">Day {haldol?.cycleDay ?? "-"}</CardTitle>
@@ -1064,9 +1065,13 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             <p className="text-sm text-muted-foreground mt-2">
               Next: {haldol ? haldol.nextInjectionDate : "--"}
             </p>
-            {haldol?.isZombiePhase && (
+            {haldol?.isOverdue ? (
+              <Badge variant="destructive" className="mt-2 flex items-center gap-1 w-fit">
+                <ShieldAlert size={12} /> Injection Overdue — {haldol.daysOverdue} day{haldol.daysOverdue === 1 ? "" : "s"}
+              </Badge>
+            ) : haldol?.isZombiePhase ? (
               <Badge variant="destructive" className="mt-2">High Symptom Phase</Badge>
-            )}
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -4394,6 +4399,7 @@ function AppSettingsTab() {
   const { data: healthSettings } = useGetAssessmentSettings();
   const updateHealthSettings = useUpdateAssessmentSettings();
   const [quietForm, setQuietForm] = useState({ quietWindowStart: "22:00", quietWindowEnd: "07:00", engagementIntervalHours: 4 });
+  const [callForm, setCallForm] = useState({ dailyCallEnabled: false, dailyCallTime: "10:00" });
 
   useEffect(() => {
     if (healthSettings) {
@@ -4401,6 +4407,10 @@ function AppSettingsTab() {
         quietWindowStart: (healthSettings as any).quietWindowStart ?? "22:00",
         quietWindowEnd: (healthSettings as any).quietWindowEnd ?? "07:00",
         engagementIntervalHours: (healthSettings as any).engagementIntervalHours ?? 4,
+      });
+      setCallForm({
+        dailyCallEnabled: (healthSettings as any).dailyCallEnabled ?? false,
+        dailyCallTime: (healthSettings as any).dailyCallTime ?? "10:00",
       });
     }
   }, [healthSettings]);
@@ -4434,6 +4444,19 @@ function AppSettingsTab() {
   const handleQuietSave = (e: React.FormEvent) => {
     e.preventDefault();
     updateHealthSettings.mutate({ data: quietForm }, { onSuccess: () => toast({ title: "Quiet window saved" }) });
+  };
+
+  const handleCallToggle = (dailyCallEnabled: boolean) => {
+    const next = { ...callForm, dailyCallEnabled };
+    setCallForm(next);
+    updateHealthSettings.mutate({ data: next }, {
+      onSuccess: () => toast({ title: dailyCallEnabled ? "Daily call enabled" : "Daily call disabled" }),
+    });
+  };
+
+  const handleCallTimeSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateHealthSettings.mutate({ data: callForm }, { onSuccess: () => toast({ title: "Daily call time saved" }) });
   };
 
   return (
@@ -4503,6 +4526,36 @@ function AppSettingsTab() {
             </div>
             <p className="text-xs text-muted-foreground">Tells Jessica which stores to prioritize when building the cart.</p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Daily Call */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Clock size={14} /> Daily Call
+          </CardTitle>
+          <CardDescription>Jessica calls Pops automatically at this time every day (Pacific).</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between mb-4">
+            <label htmlFor="daily-call-toggle" className="text-sm font-medium">
+              {callForm.dailyCallEnabled ? "Automatic daily call is on" : "Automatic daily call is off"}
+            </label>
+            <Switch id="daily-call-toggle" checked={callForm.dailyCallEnabled} onCheckedChange={handleCallToggle} />
+          </div>
+          <form onSubmit={handleCallTimeSave} className="space-y-4 max-w-md">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Call Time (24h, Pacific)</label>
+              <Input
+                type="time"
+                value={callForm.dailyCallTime}
+                onChange={(e) => setCallForm({ ...callForm, dailyCallTime: e.target.value })}
+                className="max-w-[160px]"
+              />
+            </div>
+            <Button type="submit" disabled={updateHealthSettings.isPending}>Save Call Time</Button>
+          </form>
         </CardContent>
       </Card>
 

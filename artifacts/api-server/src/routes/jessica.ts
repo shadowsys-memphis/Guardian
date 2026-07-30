@@ -11,7 +11,7 @@ import {
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay } from "./health-assessment";
-import { buildJessicaSystemPrompt, getCurrentCycleInfo } from "./gemini";
+import { buildJessicaSystemPrompt, getCurrentCycleInfo, loadLiveContext } from "./gemini";
 
 const router: IRouter = Router();
 
@@ -99,43 +99,53 @@ function parseCravingTag(text: string): string | null {
   try { return JSON.parse(match[1])?.meal ?? null; } catch { return null; }
 }
 
-router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, res: Response) => {
+export type OutboundCallResult =
+  | { ok: true; elevenLabsConversationId: string; sessionId: number; conversationId: number }
+  | { ok: false; status: number; error: string; message?: string };
+
+/**
+ * Core outbound-call logic shared by the manual "Call Now" route and the
+ * daily call scheduler (lib/call-scheduler.ts). Never throws — always
+ * resolves to a result object so the scheduler's tick loop can log and
+ * move on instead of crashing the interval.
+ */
+export async function triggerOutboundCall(opts?: { test?: boolean }): Promise<OutboundCallResult> {
   try {
     const apiKey = getElevenLabsKey();
     const agentId = getAgentId();
     const rawPhoneNumberId = getPhoneNumberId();
 
     if (!apiKey || !agentId || !rawPhoneNumberId) {
-      res.status(503).json({
+      return {
+        ok: false,
+        status: 503,
         error: "elevenlabs_not_configured",
         message: "ElevenLabs credentials not configured. Set ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID, and ELEVENLABS_PHONE_NUMBER_ID.",
-      });
-      return;
+      };
     }
 
     const phoneNumberId = await resolveElevenLabsPhoneNumberId(apiKey, rawPhoneNumberId);
 
-    const isTest = req.body?.test === true;
     let targetPhone: string | null = null;
 
-    if (isTest) {
+    if (opts?.test) {
       targetPhone = process.env["ADMIN_PHONE_NUMBER"] ?? null;
       if (!targetPhone) {
-        res.status(400).json({ error: "no_admin_phone", message: "ADMIN_PHONE_NUMBER secret is not set." });
-        return;
+        return { ok: false, status: 400, error: "no_admin_phone", message: "ADMIN_PHONE_NUMBER secret is not set." };
       }
     } else {
       targetPhone = await getPopsPhonenumber();
       if (!targetPhone) {
-        res.status(400).json({
+        return {
+          ok: false,
+          status: 400,
           error: "no_phone_number",
           message: "Pops' phone number is not set. Add it in Settings → Jessica.",
-        });
-        return;
+        };
       }
     }
 
-    const { cycleDay, isZombiePhase } = await getCurrentCycleInfo();
+    const { cycleDay, isZombiePhase, isOverdue, daysOverdue } = await getCurrentCycleInfo();
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
 
     const careContextLines: string[] = [];
@@ -163,11 +173,15 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
       }
     } catch {}
 
-    const liveContext = careContextLines.length > 0
-      ? `CURRENT CARE CONTEXT — IMPORTANT:\n${careContextLines.join("\n")}\n`
-      : undefined;
+    // Same live schedule/meals/symptoms context the web-chat Jessica gets —
+    // without this the phone call couldn't answer schedule questions.
+    const scheduleContext = await loadLiveContext();
+    const careContextBlock = careContextLines.length > 0
+      ? `CURRENT CARE CONTEXT — IMPORTANT:\n${careContextLines.join("\n")}\n\n`
+      : "";
+    const liveContext = careContextBlock + scheduleContext;
 
-    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext);
+    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue });
 
     const elevenLabsBody = {
       agent_id: agentId,
@@ -193,9 +207,7 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
 
     if (!elRes.ok) {
       const errBody = await elRes.text().catch(() => "unknown");
-      req.log.error({ status: elRes.status, body: errBody }, "ElevenLabs outbound call failed");
-      res.status(502).json({ error: "ElevenLabs call failed", details: errBody });
-      return;
+      return { ok: false, status: 502, error: "ElevenLabs call failed", message: errBody };
     }
 
     const elData = await elRes.json() as { conversation_id: string };
@@ -218,16 +230,25 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
       [conversationId, session.id]
     );
 
-    res.json({
+    return {
       ok: true,
       elevenLabsConversationId: conversationId,
       sessionId: session.id,
       conversationId: convo.id,
-    });
+    };
   } catch (err) {
-    req.log.error({ err }, "Failed to initiate outbound call");
-    res.status(500).json({ error: "Failed to initiate call" });
+    return { ok: false, status: 500, error: "Failed to initiate call", message: err instanceof Error ? err.message : String(err) };
   }
+}
+
+router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, res: Response) => {
+  const result = await triggerOutboundCall({ test: req.body?.test === true });
+  if (!result.ok) {
+    if (result.status >= 500) req.log.error({ result }, "Failed to initiate outbound call");
+    res.status(result.status).json({ error: result.error, message: result.message });
+    return;
+  }
+  res.json(result);
 });
 
 router.get("/jessica/call-status/:conversationId", requireLocalSession, async (req: Request, res: Response) => {

@@ -269,6 +269,10 @@ export interface HaldolCycle {
   /** True on days 1-5 when symptoms are typically highest */
   isZombiePhase: boolean;
   nextInjectionDate: string;
+  /** True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle */
+  isOverdue: boolean;
+  /** Days past the expected injection date; 0 when not overdue */
+  daysOverdue: number;
   notes?: string;
 }
 
@@ -610,6 +614,10 @@ export interface AssessmentSettings {
   quietWindowEnd?: string;
   /** Hours of inactivity before Jessica initiates a check-in */
   engagementIntervalHours?: number;
+  /** When true, the server automatically places the daily Jessica call at dailyCallTime */
+  dailyCallEnabled?: boolean;
+  /** HH:MM 24-hour format, Pacific time, e.g. 10:00 */
+  dailyCallTime?: string;
 }
 
 export interface FlaggedEvent {

@@ -3,8 +3,17 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { pool } from "@workspace/db";
 import { loginRateLimit } from "../middlewares/rate-limit";
+import { requireLocalSession } from "../middlewares/tenant-auth";
 
 const router: IRouter = Router();
+
+async function bumpLocalSessionVersion(): Promise<void> {
+  await pool.query(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES ('local_session_version', '2', NOW())
+     ON CONFLICT (key) DO UPDATE SET value = (COALESCE(app_settings.value, '1')::int + 1)::text, updated_at = NOW()`
+  );
+}
 
 async function verifyLocalPassphrase(passphrase: string): Promise<boolean> {
   try {
@@ -52,6 +61,10 @@ router.post("/auth/change-passphrase", loginRateLimit, async (req, res) => {
       [hash]
     );
 
+    // Changing the passphrase revokes every outstanding local session token —
+    // anyone who had the old passphrase (and a still-valid JWT) is signed out.
+    await bumpLocalSessionVersion();
+
     res.json({ ok: true });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
@@ -60,6 +73,22 @@ router.post("/auth/change-passphrase", loginRateLimit, async (req, res) => {
     }
     req.log.error({ err }, "Change passphrase failed");
     res.status(500).json({ error: "Failed to change passphrase" });
+  }
+});
+
+/**
+ * POST /auth/revoke-sessions — sign out every local-session device/token
+ * immediately, without changing the passphrase. Requires an already-valid
+ * local session (this endpoint invalidates itself along with the rest —
+ * the caller has to log back in afterward).
+ */
+router.post("/auth/revoke-sessions", requireLocalSession, async (req, res) => {
+  try {
+    await bumpLocalSessionVersion();
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to revoke local sessions");
+    res.status(500).json({ error: "Failed to revoke sessions" });
   }
 });
 

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --filter @workspace/api-spec run codegen)",
+      "Bash(npx tsc *)",
+      "Bash(pnpm run *)"
+    ]
+  }
+}

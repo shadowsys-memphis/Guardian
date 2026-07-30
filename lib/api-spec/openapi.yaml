@@ -1611,6 +1611,12 @@ components:
         nextInjectionDate:
           type: string
           format: date
+        isOverdue:
+          type: boolean
+          description: "True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle"
+        daysOverdue:
+          type: integer
+          description: "Days past the expected injection date; 0 when not overdue"
         notes:
           type: string
       required:
@@ -1619,6 +1625,8 @@ components:
         - cycleDay
         - isZombiePhase
         - nextInjectionDate
+        - isOverdue
+        - daysOverdue
 
     UpdateHaldolCycleInput:
       type: object
@@ -2256,6 +2264,12 @@ components:
         engagementIntervalHours:
           type: integer
           description: "Hours of inactivity before Jessica initiates a check-in"
+        dailyCallEnabled:
+          type: boolean
+          description: "When true, the server automatically places the daily Jessica call at dailyCallTime"
+        dailyCallTime:
+          type: string
+          description: "HH:MM 24-hour format, Pacific time, e.g. 10:00"
       required: []
 
     FlaggedEvent:

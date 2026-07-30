@@ -394,6 +394,14 @@ export const GetHaldolCycleResponse = zod.object({
     .boolean()
     .describe("True on days 1-5 when symptoms are typically highest"),
   nextInjectionDate: zod.date(),
+  isOverdue: zod
+    .boolean()
+    .describe(
+      "True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle",
+    ),
+  daysOverdue: zod
+    .number()
+    .describe("Days past the expected injection date; 0 when not overdue"),
   notes: zod.string().optional(),
 });
 
@@ -418,6 +426,14 @@ export const UpdateHaldolCycleResponse = zod.object({
     .boolean()
     .describe("True on days 1-5 when symptoms are typically highest"),
   nextInjectionDate: zod.date(),
+  isOverdue: zod
+    .boolean()
+    .describe(
+      "True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle",
+    ),
+  daysOverdue: zod
+    .number()
+    .describe("Days past the expected injection date; 0 when not overdue"),
   notes: zod.string().optional(),
 });
 
@@ -883,6 +899,16 @@ export const GetAssessmentSettingsResponse = zod.object({
     .number()
     .optional()
     .describe("Hours of inactivity before Jessica initiates a check-in"),
+  dailyCallEnabled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the server automatically places the daily Jessica call at dailyCallTime",
+    ),
+  dailyCallTime: zod
+    .string()
+    .optional()
+    .describe("HH:MM 24-hour format, Pacific time, e.g. 10:00"),
 });
 
 /**
@@ -898,6 +924,16 @@ export const UpdateAssessmentSettingsBody = zod.object({
     .number()
     .optional()
     .describe("Hours of inactivity before Jessica initiates a check-in"),
+  dailyCallEnabled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the server automatically places the daily Jessica call at dailyCallTime",
+    ),
+  dailyCallTime: zod
+    .string()
+    .optional()
+    .describe("HH:MM 24-hour format, Pacific time, e.g. 10:00"),
 });
 
 export const UpdateAssessmentSettingsResponse = zod.object({
@@ -910,6 +946,16 @@ export const UpdateAssessmentSettingsResponse = zod.object({
     .number()
     .optional()
     .describe("Hours of inactivity before Jessica initiates a check-in"),
+  dailyCallEnabled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the server automatically places the daily Jessica call at dailyCallTime",
+    ),
+  dailyCallTime: zod
+    .string()
+    .optional()
+    .describe("HH:MM 24-hour format, Pacific time, e.g. 10:00"),
 });
 
 /**

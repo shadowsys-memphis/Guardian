@@ -16,10 +16,18 @@ function computeCycleInfo(lastInjectionDate: string) {
   const isZombiePhase = cycleDay <= 5;
   const nextInjection = new Date(injection);
   nextInjection.setDate(injection.getDate() + 14 * Math.ceil((diffDays + 1) / 14));
+  // diffDays >= 14 means the 14-day window closed without a new injection being
+  // logged — cycleDay has silently wrapped back to a low number, which reads as
+  // a fresh cycle unless we surface isOverdue explicitly. See CLAUDE.md invariant:
+  // haldol.ts and gemini.ts must keep this formula in sync.
+  const isOverdue = diffDays >= 14;
+  const daysOverdue = isOverdue ? diffDays - 13 : 0;
   return {
     cycleDay,
     isZombiePhase,
     nextInjectionDate: nextInjection.toISOString().split("T")[0],
+    isOverdue,
+    daysOverdue,
   };
 }
 
