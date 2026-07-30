@@ -94,6 +94,14 @@ export async function runTenantMigration(): Promise<void> {
       ALTER TABLE call_sessions ADD COLUMN IF NOT EXISTS transcript TEXT
     `);
 
+    // ── call_sessions — was Pops actually reached, not just dialed? ──────────
+    // Historical rows default true (nothing to retroactively flag); new
+    // outbound-call rows explicitly pass reached: false at creation and the
+    // ElevenLabs webhook flips it true once the transcript shows Pops spoke.
+    await pool.query(`
+      ALTER TABLE call_sessions ADD COLUMN IF NOT EXISTS reached BOOLEAN NOT NULL DEFAULT true
+    `);
+
     // ── haldol_cycle — dosing interval is prescriber-set, not a constant ─────
     // Pops moved from biweekly to monthly on 2026-07-28; hardcoding 14 made
     // every cycle-day, zombie-phase and overdue figure in the app wrong.

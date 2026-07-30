@@ -8,7 +8,7 @@ import {
   medicalAppointmentsTable,
   rotationTasksTable,
 } from "@workspace/db";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { computeHaldolCycle } from "./haldol-cycle";
 import { getSettings, isInQuietWindow } from "../routes/health-assessment";
 import { triggerOutboundCall } from "../routes/jessica";
@@ -21,7 +21,6 @@ const PACIFIC_TZ = "America/Los_Angeles";
 const KEY = {
   dailyCallClaim: "daily_call_last_triggered_date",
   apptReminderIds: "last_appointment_reminder_ids",
-  apptReminderClaim: "appointment_reminder_last_run_date",
   haldolAlert: "haldol_alert",
   haldolClaim: "haldol_alert_last_run_date",
   medRefusalAlert: "med_refusal_alert",
@@ -205,27 +204,34 @@ const dailyCallJob: CronJob = {
 const appointmentReminderJob: CronJob = {
   name: "appointment_reminder",
   title: "Night-Before Appointment Reminder",
-  schedule: "Daily at 8:00 PM PT",
+  schedule: "Daily, 8:00–10:00 PM PT (retries within window on failure)",
   intervalMs: null,
   placesCall: true,
   async run(now, opts) {
-    if (now.hhmm !== "20:00" && !opts?.force) return { outcome: "skipped" };
-    if (await quietWindowBlocks(now)) {
-      return { outcome: "warn", detail: "Quiet window is active — reminder call suppressed." };
-    }
-    if (!(await claimForToday(KEY.apptReminderClaim, now.date, opts?.force))) return { outcome: "skipped" };
+    // A 2-hour window, not a single exact minute — so a transient failure
+    // (ElevenLabs down, network blip) gets retried by a later tick instead of
+    // silently going unfixed for the night. Nothing below persists a
+    // "claimed" flag until AFTER a call actually succeeds, so retries work.
+    const inWindow = now.hhmm >= "20:00" && now.hhmm < "22:00";
+    if (!inWindow && !opts?.force) return { outcome: "skipped" };
 
     const appts = await db
       .select()
       .from(medicalAppointmentsTable)
       .where(eq(medicalAppointmentsTable.appointmentDate, now.tomorrow));
 
-    if (appts.length === 0) return { outcome: "ok", detail: "No appointments tomorrow — nothing to remind." };
+    if (appts.length === 0) return { outcome: "skipped" };
 
-    // One reminder per appointment per day.
+    // One reminder per appointment per day — this alone gives idempotency,
+    // so there's no separate "claimed today" flag to set before we know the
+    // call actually went through.
     const alreadyReminded = await getJsonSetting<string[]>(KEY.apptReminderIds, []);
     const pending = appts.filter((a) => !alreadyReminded.includes(`${a.id}:${now.tomorrow}`));
     if (pending.length === 0) return { outcome: "skipped" };
+
+    if (await quietWindowBlocks(now)) {
+      return { outcome: "warn", detail: "Quiet window is active — reminder call suppressed." };
+    }
 
     const lines = pending.map((a) => {
       const type = (a.type ?? "").toLowerCase();
@@ -241,6 +247,8 @@ const appointmentReminderJob: CronJob = {
 
     const result = await triggerOutboundCall({ extraContext });
     if (!result.ok) {
+      // Do NOT record these appointment ids as reminded — the next tick,
+      // still within the 20:00–22:00 window, retries automatically.
       return { outcome: "error", detail: `Reminder call failed: ${result.error}${result.message ? ` — ${result.message}` : ""}` };
     }
 
@@ -432,10 +440,20 @@ const missedCallJob: CronJob = {
     if (now.hhmm !== addMinutesToHHMM(settings.dailyCallTime, 120) && !opts?.force) return { outcome: "skipped" };
     if (!(await claimForToday(KEY.missedCallClaim, now.date, opts?.force))) return { outcome: "skipped" };
 
+    // A row merely existing isn't proof Pops was reached — browser chat
+    // (gemini.ts) and in-app health-assessment sessions also write to
+    // call_sessions with no ElevenLabs call involved, and even a real
+    // outbound call can ring out unanswered. Require an actual ElevenLabs
+    // outbound session AND a confirmed-reached outcome (set by the webhook
+    // once Pops is heard on the transcript).
     const todaysSessions = await db
       .select({ id: callSessionsTable.id })
       .from(callSessionsTable)
-      .where(eq(callSessionsTable.sessionDate, now.date))
+      .where(and(
+        eq(callSessionsTable.sessionDate, now.date),
+        isNotNull(callSessionsTable.elevenlabsConversationId),
+        eq(callSessionsTable.reached, true)
+      ))
       .limit(1);
 
     if (todaysSessions.length > 0) {

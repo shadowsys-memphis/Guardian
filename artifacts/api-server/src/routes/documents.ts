@@ -8,7 +8,7 @@ import {
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { dispatch } from "../lib/hermes";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -60,9 +60,11 @@ Rules:
 
 router.get("/documents/care-context", async (req, res) => {
   try {
-    const keys = ["dietary_profile", "activity_restrictions"];
+    // inArray, not a raw `= ANY(${keys})` — Drizzle binds a JS array as a
+    // single scalar parameter, which Postgres rejects, so the raw form threw
+    // a 500 on every request and silently hid the dashboard's care alerts.
     const rows = await db.select().from(appSettingsTable).where(
-      sql`${appSettingsTable.key} = ANY(${keys})`
+      inArray(appSettingsTable.key, ["dietary_profile", "activity_restrictions"])
     );
     const result: Record<string, unknown> = {};
     for (const row of rows) {

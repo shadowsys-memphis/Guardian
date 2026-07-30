@@ -226,6 +226,9 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
       conversationId: convo.id,
       sessionDate: today,
       cycleDay: cycleDay ?? null,
+      // Not yet confirmed reached — the webhook flips this to true once the
+      // transcript shows Pops actually responded.
+      reached: false,
     }).returning();
 
     await pool.query(
@@ -359,6 +362,12 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
       .map((t) => `${t.role === "agent" ? "Jessica" : "Pops"}: ${t.message}`)
       .join("\n");
 
+    // "Reached" means Pops actually said something back — not just that the
+    // call connected. A call that rings out to voicemail can still produce a
+    // webhook with an empty or agent-only transcript.
+    const popsSpoke = transcript.some((t) => t.role !== "agent" && t.message.trim().length > 0);
+    const reached = webhookData.status !== "failed" && popsSpoke;
+
     const healthDataTags = parseHealthDataTags(agentText);
     const cravingMeal = parseCravingTag(agentText);
 
@@ -401,11 +410,13 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
     const callSummary = summary
       ?? (categories.length > 0
         ? `Phone call with Pops. Covered: ${categories.join(", ")}. ${healthDataTags.length} data point(s) recorded.${flagged ? " ⚠️ Flagged." : ""}`
-        : "Phone call with Pops. No structured health data captured.");
+        : reached
+          ? "Phone call with Pops. No structured health data captured."
+          : "Call did not reach Pops (no answer or voicemail).");
 
     await pool.query(
-      `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2, transcript = $3 WHERE id = $4`,
-      [callSummary, flagged, allText || null, sessionId]
+      `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2, transcript = $3, reached = $4 WHERE id = $5`,
+      [callSummary, flagged, allText || null, reached, sessionId]
     );
 
     req.log.info({ sessionId, elevenLabsConversationId, healthDataCount: healthDataTags.length }, "ElevenLabs webhook processed");

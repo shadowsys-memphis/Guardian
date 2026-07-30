@@ -121,6 +121,11 @@ export const callSessionsTable = pgTable("call_sessions", {
   summary: text("summary"),
   flagged: boolean("flagged").notNull().default(false),
   elevenlabsConversationId: text("elevenlabs_conversation_id"),
+  // Whether this specific outbound call was actually answered/engaged with
+  // (Pops spoke), not just dialed. Defaults true so historical rows (created
+  // before this column existed) aren't retroactively flagged as missed; new
+  // outbound-call rows explicitly start false until the webhook confirms it.
+  reached: boolean("reached").notNull().default(true),
   transcript: text("transcript"),
 });
 
