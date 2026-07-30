@@ -4,7 +4,8 @@
       "Bash(pnpm --filter @workspace/api-spec run codegen)",
       "Bash(npx tsc *)",
       "Bash(pnpm run *)",
-      "Bash(curl -s -X POST http://localhost:8080/tenants/auth -H \"Content-Type: application/json\" -d '{\"passphrase\":\"test1234\"}' -w \"\\\\nHTTP:%{http_code}\\\\n\")"
+      "Bash(curl -s -X POST http://localhost:8080/tenants/auth -H \"Content-Type: application/json\" -d '{\"passphrase\":\"test1234\"}' -w \"\\\\nHTTP:%{http_code}\\\\n\")",
+      "Bash(awk 'NR==938,/^function [A-Za-z]+\\\\\\(/{if\\(NR>938 && /^function [A-Za-z]+\\\\\\(/ && NR!=938\\) exit; print NR\": \"$0}' /home/runner/workspace/artifacts/brain-app/src/pages/admin-view.tsx)"
     ]
   }
 }

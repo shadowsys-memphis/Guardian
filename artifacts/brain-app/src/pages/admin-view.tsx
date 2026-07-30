@@ -942,6 +942,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { data: symptomLogs } = useGetSymptomLogs();
   const { data: todaySummary } = useGetTodaySummary();
   const { data: cart } = useGetCart();
+  const { data: rawInventory } = useListInventory({ query: { queryKey: getListInventoryQueryKey() } });
   const updateState = useUpdateAppState();
   const { toast } = useToast();
   const [broadcastValue, setBroadcastValue] = useState(state?.activeMessage ?? "");
@@ -971,6 +972,10 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const completionRate = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
 
   const hasOverride = !!state?.quarterOverride;
+
+  const today = new Date().toISOString().split("T")[0];
+  const inventoryList = (rawInventory as InventoryItem[]) ?? [];
+  const overdueInventory = inventoryList.filter((i) => !!(i.estimatedRunOutDate && i.estimatedRunOutDate < today));
 
   return (
     <div className="space-y-6">
@@ -1072,6 +1077,28 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             ) : haldol?.isZombiePhase ? (
               <Badge variant="destructive" className="mt-2">High Symptom Phase</Badge>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition-colors hover:border-primary/40 ${overdueInventory.length > 0 ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : ""}`}
+          onClick={() => onNavigate("inventory")}
+        >
+          <CardHeader className="pb-2">
+            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
+              <Package size={14} /> Inventory
+            </CardDescription>
+            <CardTitle className="text-5xl">{overdueInventory.length}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mt-2">
+              {overdueInventory.length > 0 ? "item(s) overdue for restock" : "all items on track"}
+            </p>
+            {overdueInventory.length > 0 && (
+              <Badge variant="destructive" className="mt-2 flex items-center gap-1 w-fit">
+                <ShieldAlert size={12} /> Restock Needed
+              </Badge>
+            )}
           </CardContent>
         </Card>
       </div>
