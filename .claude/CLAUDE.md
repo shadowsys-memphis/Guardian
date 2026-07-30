@@ -66,16 +66,18 @@ pnpm --filter @workspace/brain-app run typecheck
 `artifacts/api-server/src/routes/index.ts` splits every route into three explicit tiers via `middlewares/tenant-auth.ts`:
 
 1. **PUBLIC** (no auth): `health`, `tenants` (`/tenants/auth`, `/tenants/setup`), `billing` public endpoints (`/billing/checkout`, `/billing/webhook`, `/billing/checkout-session`).
-2. **CORE WORKSPACE** (`requireAnySession` + `requireActiveSubscription` — local session OR tenant JWT): `state`, `schedule`, `symptoms`, `inventory` (tenant-scoped DB queries), `admin`/`workspace`/`intake`/`gemini` (AI proxies, no direct DB queries).
+2. **CORE WORKSPACE** (`requireAnySession` — local session OR tenant JWT; there is no separate subscription-gating middleware currently wired in): `state`, `schedule`, `symptoms`, `inventory` (tenant-scoped DB queries), `admin`/`workspace`/`intake`/`gemini` (AI proxies, no direct DB queries).
 3. **LOCAL-ONLY** (`requireLocalSession` — `session.type === "local"` only): `scripts`, `haldol`, `smarthome`, `health-assessment`, `shopper`, `rotation`, `appointments`, `reports`, `actions`, `medications`, `auth` — Ray's specialty care tools that aren't yet tenant-scoped.
 
-Sessions are JWTs signed with `SESSION_SECRET`, verified in `extractSession()`. `session.type` is `"local"` (Ray) or `"tenant"` (paying subscriber, `session.sub` = tenant UUID).
+Sessions are JWTs signed with `SESSION_SECRET`, verified (async) in `extractSession()`. `session.type` is `"local"` (Ray) or `"tenant"` (paying subscriber, `session.sub` = tenant UUID). Tokens carry a `sessionVersion` claim checked against a live DB value on every request (`tenants.session_version` for tenant sessions, `app_settings['local_session_version']` for local) — bumping that counter revokes every outstanding token of that type immediately, without waiting for the 24h JWT expiry. Revoke via `POST /tenants/:id/revoke-sessions` (local-only, per-tenant) or `POST /auth/revoke-sessions` (local session, "sign out everywhere"); changing the local passphrase (`POST /auth/change-passphrase`) also bumps the local version automatically.
 
 **tenant_id scoping rule**: `app_state`, `schedule_tasks`, `symptom_logs`, `inventory_items` each carry a `tenant_id TEXT NOT NULL DEFAULT 'local'` column. Every query on these tables must derive `tenant_id` from `req.tenantSession` (`"local"` for local sessions, `session.sub` for tenant sessions) — **never from client-supplied headers/body**, or tenants can read/write each other's data.
 
 **Setup token lifecycle** (Stripe → account activation): webhook (`checkout.session.completed`) generates a raw token, stores `sha256(rawToken)` as `setup_token_hash` and the raw token as `setup_token_pending`; `GET /billing/checkout-session` retrieves `setup_token_pending` **once** and clears it (never re-generates); `POST /tenants/setup` confirms `sha256(submitted) === setup_token_hash`. This prevents replay from minting unlimited valid setup tokens.
 
 **Legacy local-passphrase fallback**: if `VAULT_PASSPHRASE` is unset AND no tenant rows exist, any 4+ char passphrase is accepted for the local vault. This disables itself automatically once `VAULT_PASSPHRASE` is set or a tenant is created — don't rely on it in new code.
+
+**Brute-force protection**: `POST /tenants/auth` and `POST /auth/change-passphrase` are rate-limited via `middlewares/rate-limit.ts` (`loginRateLimit` — in-memory sliding window, 10 attempts/15min per IP, single-process only). Apply the same middleware to any new passphrase-guessing surface.
 
 ---
 
