@@ -12,6 +12,7 @@ import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay } from "./health-assessment";
 import { buildJessicaSystemPrompt, getCurrentCycleInfo, loadLiveContext } from "./gemini";
+import { todayPacific } from "../lib/pacific-time";
 
 const router: IRouter = Router();
 
@@ -216,7 +217,7 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
     const elData = await elRes.json() as { conversation_id: string };
     const conversationId = elData.conversation_id;
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayPacific();
 
     const [convo] = await db.insert(conversationsTable).values({
       title: `Outbound Call — Pops — ${new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit", hour12: true, month: "short", day: "numeric" })}`,

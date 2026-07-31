@@ -21,10 +21,13 @@ async function ensureMedicalDocsTable(): Promise<void> {
       source_label TEXT NOT NULL DEFAULT 'Medical Document',
       raw_text TEXT NOT NULL DEFAULT '',
       structured_json TEXT NOT NULL DEFAULT '{}',
+      card_last4 TEXT,
       applied_at TIMESTAMP,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
+  // Self-heal existing databases created before card_last4 existed.
+  await pool.query(`ALTER TABLE medical_documents ADD COLUMN IF NOT EXISTS card_last4 TEXT`);
 }
 
 const EXTRACTION_PROMPT = `You are a medical document parser for a veteran caregiver app.
@@ -47,7 +50,8 @@ Return ONLY valid JSON matching exactly this schema — no markdown, no explanat
   "activity_restrictions": ["list of activity restrictions as plain strings"],
   "wound_care": ["wound care instructions as plain strings"],
   "clinical_notes": "discharge diagnosis, condition at discharge, and other clinical narrative as a single string",
-  "discharge_instructions": "any discharge instructions not covered above"
+  "discharge_instructions": "any discharge instructions not covered above",
+  "card_last4": "if this is a receipt or payment confirmation showing a payment card (e.g. 'VISA ...1234' or 'card ending in 1234'), the LAST 4 DIGITS ONLY as a string, else null"
 }
 
 Rules:
@@ -56,7 +60,8 @@ Rules:
 - dietary_restrictions: extract ONLY diet instructions (e.g. "Diabetic diet")
 - activity_restrictions: extract ONLY physical limitations (e.g. "No bending/heavy lifting", "No eye rubbing")
 - Include ALL medications mentioned, including eye drops or topical treatments
-- appointments: include ALL future appointments mentioned in the document`;
+- appointments: include ALL future appointments mentioned in the document
+- card_last4: NEVER return more than the last 4 digits of any card number, even if more digits are visible on the document. If unsure or no card is shown, return null.`;
 
 router.get("/documents/care-context", async (req, res) => {
   try {
@@ -98,6 +103,16 @@ router.get("/documents", async (req, res) => {
 // entirely. This coerces whatever comes back into the shape the rest of the
 // app (and the frontend's .map() calls) expect, instead of crashing on it.
 const looseString = z.union([z.string(), z.number(), z.boolean()]).transform(String).nullable().catch(null);
+// Defensively reduces whatever Gemini returns (a bare "1234", "****1234",
+// "ending in 1234", or a full 16-digit number) down to exactly the last 4
+// digits. Never lets more than 4 digits through, and never a full card
+// number, regardless of what the model outputs.
+const cardLast4Schema = z.any().transform((v) => {
+  if (v === null || v === undefined) return null;
+  const digits = String(v).replace(/\D/g, "");
+  const last4 = digits.slice(-4);
+  return last4.length === 4 ? last4 : null;
+}).catch(null);
 const ExtractedAppointment = z.object({
   date: looseString.catch(null),
   time: looseString.catch(null),
@@ -125,6 +140,7 @@ const ExtractedDocumentSchema = z.object({
   wound_care: z.array(looseString).catch([]),
   clinical_notes: looseString.catch(""),
   discharge_instructions: looseString,
+  card_last4: cardLast4Schema,
 });
 
 function normalizeExtracted(parsed: unknown, rawText: string): Record<string, unknown> {
@@ -154,6 +170,51 @@ router.delete("/documents/:id", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to delete document");
     res.status(500).json({ error: "Failed to delete document" });
+  }
+});
+
+// Lets the family set/correct/clear which card a scan is associated with
+// when OCR misses it or gets it wrong — the "last 4 digits" are never
+// reliably visible on every document, so this can't depend on extraction alone.
+router.patch("/documents/:id", async (req, res) => {
+  try {
+    await ensureMedicalDocsTable();
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      res.status(400).json({ error: "Invalid document id" });
+      return;
+    }
+    const body = z.object({
+      card_last4: z.string().nullable(),
+    }).parse(req.body);
+
+    let cardLast4: string | null = null;
+    if (body.card_last4) {
+      const digits = body.card_last4.replace(/\D/g, "");
+      if (digits.length !== 4) {
+        res.status(400).json({ error: "card_last4 must be exactly 4 digits" });
+        return;
+      }
+      cardLast4 = digits;
+    }
+
+    const [updated] = await db
+      .update(medicalDocumentsTable)
+      .set({ cardLast4 })
+      .where(eq(medicalDocumentsTable.id, id))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "Document not found" });
+      return;
+    }
+    res.json(updated);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Invalid payload" });
+      return;
+    }
+    req.log.error({ err }, "Failed to update document card");
+    res.status(500).json({ error: "Update failed" });
   }
 });
 
@@ -195,6 +256,7 @@ router.post("/documents/scan", async (req, res) => {
       sourceLabel: (extracted.source_label as string) ?? "Medical Document",
       rawText,
       structuredJson: JSON.stringify(extracted),
+      cardLast4: (extracted.card_last4 as string | null) ?? null,
     }).returning();
 
     res.json({ docId: doc.id, extracted });

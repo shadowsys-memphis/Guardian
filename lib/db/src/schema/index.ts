@@ -359,6 +359,9 @@ export const medicalDocumentsTable = pgTable("medical_documents", {
   sourceLabel: text("source_label").notNull().default("Medical Document"),
   rawText: text("raw_text").notNull().default(""),
   structuredJson: text("structured_json").notNull().default("{}"),
+  // Last 4 digits ONLY of the payment card used for the visit/prescription/
+  // purchase this document is a receipt for — never the full card number.
+  cardLast4: text("card_last4"),
   appliedAt: timestamp("applied_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

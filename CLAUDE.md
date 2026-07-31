@@ -54,11 +54,13 @@ Package names: `@workspace/<dir-name>` (e.g. `@workspace/db`, `@workspace/api-cl
 
 ### Auth & Multi-Tenancy
 
-All API routes (except `/healthz`, `/tenants/auth`, `/billing/checkout`, `/billing/webhook`) require a JWT in `Authorization: Bearer <token>`.
+All API routes (except `/healthz`, `/tenants/auth`, `/tenants/setup`, `/jessica/elevenlabs-webhook`) require a JWT in `Authorization: Bearer <token>`.
 
 Two session types, both signed with `SESSION_SECRET`:
 - **`type: "local"`** — Ray's personal workspace (`sub: "local"`). Issued via `POST /tenants/auth` when `VAULT_PASSPHRASE` matches.
-- **`type: "tenant"`** — paying subscriber (`sub: <uuid>`). Issued after Stripe checkout completes.
+- **`type: "tenant"`** — additional tenant workspace (`sub: <uuid>`). Issued via `POST /tenants/auth` once a tenant row has a passphrase set through `POST /tenants/setup`.
+
+There is **no billing or payment layer.** Stripe checkout, the `/billing/*` routes, and the subscription flow were removed — do not re-add references to them, and don't assume a tenant row implies a paid subscription. Tenant rows are provisioned directly.
 
 Route middleware split in `artifacts/api-server/src/routes/index.ts`:
 - `requireAnySession` — local **or** tenant sessions (core workspace routes: state, schedule, symptoms, Gemini, etc.)
@@ -77,12 +79,12 @@ Route middleware split in `artifacts/api-server/src/routes/index.ts`:
 /admin/report   → DoctorReport
 /smarthome      → SmartHomePanel
 /intercom       → E2EE intercom (AES-GCM; ciphertext+iv+salt only in DB)
-/my-subscription→ MySubscriptionPage
-/guardian       → GuardianPage (public sign-up/Stripe checkout — outside VaultGate)
-/guardian/success → GuardianSuccessPage
+/my-subscription→ MySubscriptionPage (static "self-hosted, no billing" notice)
+/guardian       → GuardianPage (stub — outside VaultGate)
+/guardian/success → GuardianSuccessPage (stub — outside VaultGate)
 ```
 
-Routes under `AppContent` (inside `VaultProvider`) require vault unlock. `/guardian` and `/guardian/success` are outside the vault — intentionally public for subscriber onboarding.
+Routes under `AppContent` (inside `VaultProvider`) require vault unlock. `/guardian` and `/guardian/success` are outside the vault. They were the public sign-up/checkout funnel; since billing was removed they are inert stubs that make no API calls, but they still have their own Vite HTML entries and SSR prerender step (`vite.config.ts`) — that build cost is now unearned, so collapsing them into the main SPA is a safe cleanup if anyone wants it.
 
 ### Key Invariants
 
@@ -101,11 +103,9 @@ Routes under `AppContent` (inside `VaultProvider`) require vault unlock. `/guard
 | `VAULT_PASSPHRASE` | Ray's local login (optional if using tenant auth only) |
 | `AI_INTEGRATIONS_GEMINI_API_KEY` | Gemini wrapper (Replit-injected) |
 | `AI_INTEGRATIONS_GEMINI_BASE_URL` | Gemini wrapper (Replit-injected) |
-| `STRIPE_SECRET_KEY` | Billing routes |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook verification |
-| `STRIPE_FAMILY_PRICE_ID` | Checkout |
-| `STRIPE_MULTI_CARE_PRICE_ID` | Checkout |
-| `STRIPE_CHECKOUT_SUCCESS_URL` | Checkout redirect |
-| `STRIPE_CHECKOUT_CANCEL_URL` | Checkout redirect |
-| `STRIPE_CUSTOMER_PORTAL_RETURN_URL` | Customer portal |
+| `ELEVENLABS_API_KEY` | Outbound calls to Pops (`routes/jessica.ts`) |
+| `ELEVENLABS_AGENT_ID` | Outbound calls to Pops |
+| `ELEVENLABS_PHONE_NUMBER_ID` | Outbound calls to Pops |
 | `VITE_PUBLIC_SITE_URL` | CORS allowlist |
+
+No `STRIPE_*` variables are used anywhere — billing was removed.

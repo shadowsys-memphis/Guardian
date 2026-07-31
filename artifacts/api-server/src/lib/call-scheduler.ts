@@ -13,9 +13,9 @@ import { computeHaldolCycle } from "./haldol-cycle";
 import { getSettings, isInQuietWindow } from "../routes/health-assessment";
 import { triggerOutboundCall } from "../routes/jessica";
 import { logger } from "./logger";
+import { pacificNow, pacificDateOf, pacificWallTimeToEpochMs, type PacificNow } from "./pacific-time";
 
 const CHECK_INTERVAL_MS = 60_000;
-const PACIFIC_TZ = "America/Los_Angeles";
 
 // ─── app_settings keys owned by the scheduler ────────────────────────────────
 const KEY = {
@@ -55,49 +55,46 @@ export interface CronJob {
   run(now: PacificNow, opts?: { force?: boolean }): Promise<JobResult>;
 }
 
-export interface PacificNow {
-  hhmm: string;
-  date: string;
-  tomorrow: string;
-  hour: number;
-  epochMs: number;
-}
-
 // ─── Time helpers (all scheduling decisions are Pacific-local) ───────────────
+//
+// `pacificNow`, `pacificDateOf`, and `pacificWallTimeToEpochMs` live in
+// ./pacific-time (shared with the routes that create call_sessions rows, so
+// "today" means the same Pacific calendar date everywhere).
 
-function pacificNow(): PacificNow {
-  const now = new Date();
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: PACIFIC_TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const p = Object.fromEntries(fmt.formatToParts(now).map((x) => [x.type, x.value]));
-  // Intl renders midnight as "24" in some ICU versions — normalize to "00".
-  const hour = parseInt(p["hour"], 10) % 24;
-  const hh = String(hour).padStart(2, "0");
-  const date = `${p["year"]}-${p["month"]}-${p["day"]}`;
-  const t = new Date(`${date}T00:00:00Z`);
-  t.setUTCDate(t.getUTCDate() + 1);
-  return {
-    hhmm: `${hh}:${p["minute"]}`,
-    date,
-    tomorrow: t.toISOString().split("T")[0],
-    hour,
-    epochMs: now.getTime(),
-  };
+/**
+ * True once `now` has reached `targetHHMM` for the day — a durable catch-up
+ * window instead of an exact-minute match, so a server restart that lands on
+ * (or just after) the trigger minute doesn't cause that job to be skipped for
+ * the whole day. Each caller still calls `claimForToday` right after this
+ * check, so widening the window never causes a job to run more than once a
+ * day — it only widens WHEN the once-a-day claim can first succeed.
+ *
+ * `boundMinutes`, when given, closes the window that many minutes after the
+ * target — use it for call-placing jobs so a long outage doesn't trigger a
+ * surprise call hours late. Omit it for non-call jobs, where running late
+ * the same day is strictly better than not running at all.
+ *
+ * Compares real epoch-ms instants (via pacificWallTimeToEpochMs), not wrapped
+ * "HH:MM" strings, so a target/bound that crosses midnight (e.g. a 23:00
+ * target with a 60-minute bound) is handled correctly instead of the window
+ * silently never matching.
+ */
+function isTimeOfDayDue(now: PacificNow, targetHHMM: string, boundMinutes?: number): boolean {
+  const todayTargetMs = pacificWallTimeToEpochMs(now.date, targetHHMM);
+  if (boundMinutes === undefined) return now.epochMs >= todayTargetMs;
+  if (isWithinBoundedWindow(now.epochMs, todayTargetMs, boundMinutes)) return true;
+  // A bounded window anchored on the PRIOR Pacific calendar date can still be
+  // open right now if target+bound itself crosses midnight (e.g. a 23:30
+  // target with a 60-minute bound doesn't close until 00:30 the next day) —
+  // `now` rolling over to a new calendar date must not prematurely close a
+  // window that hasn't actually elapsed yet.
+  const priorDate = pacificDateOf(todayTargetMs - 24 * 60 * 60 * 1000);
+  const priorTargetMs = pacificWallTimeToEpochMs(priorDate, targetHHMM);
+  return isWithinBoundedWindow(now.epochMs, priorTargetMs, boundMinutes);
 }
 
-/** "10:00" + 120 → "12:00". Wraps within a 24h clock. */
-function addMinutesToHHMM(hhmm: string, minutes: number): string {
-  const [h, m] = hhmm.split(":").map((v) => parseInt(v, 10));
-  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
-  const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+function isWithinBoundedWindow(epochMs: number, targetMs: number, boundMinutes: number): boolean {
+  return epochMs >= targetMs && epochMs <= targetMs + boundMinutes * 60_000;
 }
 
 // ─── app_settings helpers ────────────────────────────────────────────────────
@@ -130,14 +127,30 @@ async function getJsonSetting<T>(key: string, fallback: T): Promise<T> {
 }
 
 /**
- * Claims a once-per-day slot for `key`. Returns false if today is already
- * claimed. The claim is written BEFORE the (slow, external) work runs so a
- * second tick inside the same minute can't double-fire.
+ * Atomically claims a once-per-day slot for `key`. Returns false if today is
+ * already claimed. Uses a single conditional UPSERT (not a separate read
+ * then write) because setInterval does not wait for a slow previous tick —
+ * two overlapping ticks (e.g. one stuck inside an external call) could both
+ * observe "unclaimed" under a read-then-write and both fire, placing two
+ * outbound calls to Pops. Postgres serializes conflicting writes to the same
+ * key, so only one caller's UPSERT actually changes the row per date; the
+ * `RETURNING` clause is empty for whichever caller loses that race.
  */
 async function claimForToday(key: string, date: string, force = false): Promise<boolean> {
-  const alreadyClaimed = (await getSetting(key)) === date;
-  await setSetting(key, date);
-  return force || !alreadyClaimed;
+  if (force) {
+    await setSetting(key, date);
+    return true;
+  }
+  const result = await pool.query(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (key) DO UPDATE
+       SET value = $2, updated_at = NOW()
+       WHERE app_settings.value IS DISTINCT FROM $2
+     RETURNING key`,
+    [key, date]
+  );
+  return (result.rowCount ?? 0) > 0;
 }
 
 async function recordJobRun(jobName: string, result: JobResult): Promise<void> {
@@ -148,6 +161,33 @@ async function recordJobRun(jobName: string, result: JobResult): Promise<void> {
     );
   } catch (err) {
     logger.error({ err, jobName }, "Failed to write cron_job_log row");
+  }
+}
+
+/**
+ * Idempotent, self-contained guard so the scheduler's own table doesn't
+ * depend on the broader tenant migration succeeding (index.ts logs and
+ * continues past a migration failure). Without this, a failed migration left
+ * jobs running "blind" — recordJobRun errors every tick and /api/cron/status
+ * (the Admin Jobs panel) 500s outright since it queries cron_job_log with no
+ * fallback. Mirrors the exact shape tenant-migration.ts creates.
+ */
+async function ensureCronLogTable(): Promise<void> {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cron_job_log (
+        id SERIAL PRIMARY KEY,
+        job_name TEXT NOT NULL,
+        ran_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        outcome TEXT NOT NULL,
+        detail TEXT
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS cron_job_log_name_ran_idx ON cron_job_log (job_name, ran_at DESC)
+    `);
+  } catch (err) {
+    logger.error({ err }, "Failed to ensure cron_job_log table — job history/status may be unavailable");
   }
 }
 
@@ -180,7 +220,7 @@ const dailyCallJob: CronJob = {
   async run(now, opts) {
     const settings = await getSettings();
     if (!settings.dailyCallEnabled && !opts?.force) return { outcome: "skipped" };
-    if (now.hhmm !== settings.dailyCallTime && !opts?.force) return { outcome: "skipped" };
+    if (!isTimeOfDayDue(now, settings.dailyCallTime, 60) && !opts?.force) return { outcome: "skipped" };
 
     // Quiet window is enforced even on a forced run.
     if (isInQuietWindow(now.hhmm, settings.quietWindowStart, settings.quietWindowEnd)) {
@@ -269,7 +309,7 @@ const haldolAlertJob: CronJob = {
   intervalMs: null,
   placesCall: false,
   async run(now, opts) {
-    if (now.hhmm !== "09:00" && !opts?.force) return { outcome: "skipped" };
+    if (!isTimeOfDayDue(now, "09:00") && !opts?.force) return { outcome: "skipped" };
     if (!(await claimForToday(KEY.haldolClaim, now.date, opts?.force))) return { outcome: "skipped" };
 
     const rows = await db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1);
@@ -410,7 +450,7 @@ const rotationResetJob: CronJob = {
   intervalMs: null,
   placesCall: false,
   async run(now, opts) {
-    if (now.hhmm !== "00:00" && !opts?.force) return { outcome: "skipped" };
+    if (!isTimeOfDayDue(now, "00:00") && !opts?.force) return { outcome: "skipped" };
     if (!(await claimForToday(KEY.rotationResetClaim, now.date, opts?.force))) return { outcome: "skipped" };
 
     // NOTE: rotation_tasks tracks completion via `status` + `completed_at`
@@ -437,8 +477,22 @@ const missedCallJob: CronJob = {
   async run(now, opts) {
     const settings = await getSettings();
     if (!settings.dailyCallEnabled && !opts?.force) return { outcome: "skipped" };
-    if (now.hhmm !== addMinutesToHHMM(settings.dailyCallTime, 120) && !opts?.force) return { outcome: "skipped" };
+
+    // The 2-hour deadline as a real epoch instant — not a wrapped "HH:MM"
+    // string — so a late-configured call time (e.g. 23:00, deadline 01:00
+    // the next Pacific day) is handled correctly instead of silently never
+    // matching or matching against the wrong day.
+    const callTargetMs = pacificWallTimeToEpochMs(now.date, settings.dailyCallTime);
+    const deadlineMs = callTargetMs + 120 * 60_000;
+    if (now.epochMs < deadlineMs && !opts?.force) return { outcome: "skipped" };
     if (!(await claimForToday(KEY.missedCallClaim, now.date, opts?.force))) return { outcome: "skipped" };
+
+    // The call being checked for happened (if at all) on the Pacific calendar
+    // date the call TIME itself falls on. For a normal morning call this is
+    // still `now.date`, but for a late call time the 2-hour deadline can
+    // itself land after midnight, so by the time we check, `now.date` has
+    // already rolled to the next Pacific day relative to when the call ran.
+    const callDate = pacificDateOf(callTargetMs);
 
     // A row merely existing isn't proof Pops was reached — browser chat
     // (gemini.ts) and in-app health-assessment sessions also write to
@@ -450,7 +504,7 @@ const missedCallJob: CronJob = {
       .select({ id: callSessionsTable.id })
       .from(callSessionsTable)
       .where(and(
-        eq(callSessionsTable.sessionDate, now.date),
+        eq(callSessionsTable.sessionDate, callDate),
         isNotNull(callSessionsTable.elevenlabsConversationId),
         eq(callSessionsTable.reached, true)
       ))
@@ -559,12 +613,22 @@ async function tick(): Promise<void> {
   }
 }
 
-/** Starts the in-process scheduled-jobs runner. Call once at server startup. */
+/**
+ * Starts the in-process scheduled-jobs runner. Call once at server startup.
+ * Ensures its own log table, then runs an immediate tick before the first
+ * 60s interval fires — otherwise a restart landing right on a trigger minute
+ * (or shortly before it) could wait up to a minute before the first check,
+ * on top of whatever the (now-widened) time-of-day windows already forgive.
+ */
 export function startCronScheduler(): void {
-  setInterval(() => {
-    tick().catch((err) => logger.error({ err }, "Cron scheduler tick threw"));
-  }, CHECK_INTERVAL_MS);
-  logger.info({ jobs: CRON_JOBS.map((j) => j.name) }, "Cron scheduler started");
+  void (async () => {
+    await ensureCronLogTable();
+    await tick().catch((err) => logger.error({ err }, "Cron scheduler initial tick threw"));
+    setInterval(() => {
+      tick().catch((err) => logger.error({ err }, "Cron scheduler tick threw"));
+    }, CHECK_INTERVAL_MS);
+    logger.info({ jobs: CRON_JOBS.map((j) => j.name) }, "Cron scheduler started");
+  })();
 }
 
 // ─── Status + acknowledgement surface (consumed by routes/cron.ts) ───────────

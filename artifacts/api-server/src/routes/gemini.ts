@@ -18,6 +18,7 @@ import { eq, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQuietWindow } from "./health-assessment";
 import { ensureMealsSeeded } from "./shopper";
+import { todayPacific } from "../lib/pacific-time";
 import { dispatchAll, type HermesAction } from "../lib/hermes";
 
 const router: IRouter = Router();
@@ -597,7 +598,7 @@ router.post("/gemini/conversations", async (req, res) => {
     const { title } = z.object({ title: z.string() }).parse(req.body);
     const [created] = await db.insert(conversationsTable).values({ title }).returning();
     const { cycleDay } = await getCurrentCycleInfo();
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayPacific();
     const [session] = await db.insert(callSessionsTable).values({
       conversationId: created.id,
       sessionDate: today,

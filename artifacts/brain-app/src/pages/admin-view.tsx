@@ -64,6 +64,8 @@ import {
   History,
   ToggleLeft,
   ToggleRight,
+  CreditCard,
+  Pencil,
 } from "lucide-react";
 
 import {
@@ -4852,6 +4854,9 @@ function DocumentsTab() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [applied, setApplied] = useState<any | null>(null);
   const [isReapply, setIsReapply] = useState(false);
+  const [editingCardId, setEditingCardId] = useState<number | null>(null);
+  const [cardDraft, setCardDraft] = useState("");
+  const [cardFilter, setCardFilter] = useState<string | null>(null);
   const [include, setInclude] = useState<{
     appointments: boolean[];
     medications: boolean[];
@@ -4917,7 +4922,7 @@ function DocumentsTab() {
   };
 
   const handleDeleteDoc = async (doc: any) => {
-    if (!window.confirm(`Delete "${doc.source_label}"? This only removes the scan — it won't undo anything already applied to the care plan.`)) return;
+    if (!window.confirm(`Delete "${doc.sourceLabel}"? This only removes the scan — it won't undo anything already applied to the care plan.`)) return;
     try {
       const res = await fetch(`${WORKSPACE_BASE}/api/documents/${doc.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
@@ -4930,7 +4935,7 @@ function DocumentsTab() {
 
   const handleReapply = (doc: any) => {
     let structured: any = {};
-    try { structured = JSON.parse(doc.structured_json); } catch { structured = {}; }
+    try { structured = JSON.parse(doc.structuredJson); } catch { structured = {}; }
     setExtracted(structured);
     setDocId(doc.id);
     setPreviewUrl(null);
@@ -4990,6 +4995,38 @@ function DocumentsTab() {
     setIsReapply(false);
     if (fileRef.current) fileRef.current.value = "";
   };
+
+  const handleSetCard = async (doc: any, value: string | null) => {
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/documents/${doc.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card_last4: value }),
+      });
+      if (!res.ok) throw new Error("Update failed");
+      const updated = await res.json();
+      setDocs((prev) => prev.map((d) => (d.id === doc.id ? updated : d)));
+    } catch {
+      toast({ title: "Couldn't update card", variant: "destructive" });
+    }
+  };
+
+  const handleSaveCard = (doc: any) => {
+    const digits = cardDraft.replace(/\D/g, "");
+    if (digits.length > 0 && digits.length !== 4) {
+      toast({ title: "Enter exactly 4 digits, or leave blank to clear", variant: "destructive" });
+      return;
+    }
+    handleSetCard(doc, digits.length === 4 ? digits : null);
+    setEditingCardId(null);
+  };
+
+  const distinctCards = Array.from(new Set(docs.map((d: any) => d.cardLast4).filter(Boolean))) as string[];
+  const filteredDocs = cardFilter === null
+    ? docs
+    : cardFilter === "__none__"
+      ? docs.filter((d: any) => !d.cardLast4)
+      : docs.filter((d: any) => d.cardLast4 === cardFilter);
 
   return (
     <div className="space-y-6">
@@ -5165,7 +5202,35 @@ function DocumentsTab() {
 
       {!extracted && !scanning && (
         <div className="space-y-4">
-          <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">Recent Scans</h3>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">Recent Scans</h3>
+            {distinctCards.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mr-1">Card:</span>
+                <button
+                  onClick={() => setCardFilter(null)}
+                  className={`text-xs rounded-full px-2.5 py-0.5 border transition-colors ${cardFilter === null ? "border-primary/40 bg-primary/5 text-primary" : "border-border/40 text-muted-foreground hover:bg-muted"}`}
+                >
+                  All
+                </button>
+                {distinctCards.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setCardFilter(c)}
+                    className={`text-xs rounded-full px-2.5 py-0.5 border transition-colors flex items-center gap-1 ${cardFilter === c ? "border-primary/40 bg-primary/5 text-primary" : "border-border/40 text-muted-foreground hover:bg-muted"}`}
+                  >
+                    <CreditCard size={10} /> •••• {c}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCardFilter("__none__")}
+                  className={`text-xs rounded-full px-2.5 py-0.5 border transition-colors ${cardFilter === "__none__" ? "border-primary/40 bg-primary/5 text-primary" : "border-border/40 text-muted-foreground hover:bg-muted"}`}
+                >
+                  No card
+                </button>
+              </div>
+            )}
+          </div>
           {docsLoading ? (
             <p className="text-xs text-muted-foreground text-center py-6">Loading…</p>
           ) : docs.length === 0 ? (
@@ -5174,10 +5239,15 @@ function DocumentsTab() {
               <p className="text-muted-foreground text-sm">No documents scanned yet.</p>
               <p className="text-xs text-muted-foreground/50 mt-1">Tap "Scan Document" to photograph a VA form, appointment slip, or discharge instructions.</p>
             </div>
+          ) : filteredDocs.length === 0 ? (
+            <div className="py-10 text-center border border-dashed border-border/40 rounded-md">
+              <CreditCard size={28} className="mx-auto mb-2 text-muted-foreground/20" />
+              <p className="text-muted-foreground text-sm">No documents for this card.</p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {docs.map((doc: any) => {
-                const structured = (() => { try { return JSON.parse(doc.structured_json); } catch { return {}; } })();
+              {filteredDocs.map((doc: any) => {
+                const structured = (() => { try { return JSON.parse(doc.structuredJson); } catch { return {}; } })();
                 const hasContent = (structured.appointments?.length ?? 0) > 0
                   || (structured.medications?.length ?? 0) > 0
                   || (structured.dietary_restrictions?.length ?? 0) > 0
@@ -5188,14 +5258,49 @@ function DocumentsTab() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-sm">{doc.source_label}</span>
-                            {doc.applied_at
+                            <span className="font-bold text-sm">{doc.sourceLabel}</span>
+                            {doc.appliedAt
                               ? <Badge variant="outline" className="text-xs border-success/40 text-success">✓ Applied</Badge>
                               : <Badge variant="outline" className="text-xs text-muted-foreground">Not applied</Badge>
                             }
+                            {editingCardId === doc.id ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  autoFocus
+                                  value={cardDraft}
+                                  onChange={(e) => setCardDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveCard(doc);
+                                    if (e.key === "Escape") setEditingCardId(null);
+                                  }}
+                                  placeholder="1234"
+                                  inputMode="numeric"
+                                  maxLength={4}
+                                  className="h-6 w-16 text-xs px-2"
+                                />
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => handleSaveCard(doc)}><Check size={12} /></Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditingCardId(null)}><X size={12} /></Button>
+                              </div>
+                            ) : doc.cardLast4 ? (
+                              <Badge
+                                variant="outline"
+                                className="text-xs gap-1 cursor-pointer hover:bg-muted"
+                                onClick={() => { setEditingCardId(doc.id); setCardDraft(doc.cardLast4 ?? ""); }}
+                              >
+                                <CreditCard size={11} /> •••• {doc.cardLast4}
+                                <Pencil size={9} className="opacity-50" />
+                              </Badge>
+                            ) : (
+                              <button
+                                onClick={() => { setEditingCardId(doc.id); setCardDraft(""); }}
+                                className="text-xs text-muted-foreground/50 hover:text-muted-foreground flex items-center gap-1 border border-dashed border-border/40 rounded-full px-2 py-0.5"
+                              >
+                                <CreditCard size={11} /> + Card
+                              </button>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {new Date(doc.created_at).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}
+                            {new Date(doc.createdAt).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}
                           </p>
                           {structured.dietary_restrictions?.length > 0 && (
                             <p className="text-xs text-muted-foreground/70 mt-1">🥗 {structured.dietary_restrictions.join(", ")}</p>

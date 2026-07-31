@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { todayPacific } from "../lib/pacific-time";
 
 const router: IRouter = Router();
 
@@ -201,7 +202,7 @@ router.post("/health-assessment/sessions", async (req, res) => {
       conversationId: z.number().optional(),
       cycleDay: z.number().optional(),
     }).parse(req.body);
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayPacific();
     const [session] = await db.insert(callSessionsTable).values({
       conversationId: body.conversationId ?? null,
       sessionDate: today,
