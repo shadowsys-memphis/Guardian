@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quarter Orbit — Brain Guardian proof</title>
+<style>
+/* ============================================================
+   THE JESSICA STATE — Brain Guardian
+   Drives the mark's Resting / Calling states.
+   Mount requirement: SVGs must be INLINE in the DOM
+   (an <img src="*.svg"> cannot be styled from page CSS).
+   Toggle: add/remove .is-calling on the wrapper (or the <svg>).
+   ============================================================ */
+
+:root{
+  /* Sovereign colorway — Brain Guardian */
+  --jessica-amber: #D9A441;   /* Lantern Amber core */
+  --jessica-glow:  #E8BC6A;   /* Amber Glow — ripples/halo */
+  --bg-palm:       #A9C7A6;   /* light-theme palm */
+  --bg-lobe:       #7FA382;   /* light-theme fingertips */
+  --bg-plate-fill: #3E4A40;   /* Dusk Green plate */
+}
+
+/* Dark / dusk mounts flip the vessel tones */
+.theme-dusk{
+  --bg-palm: #54665A;
+  --bg-lobe: #A9C7A6;
+}
+
+/* Light mounts usually hide the night plate */
+.no-plate .bg-plate{ display:none; }
+
+/* ---- Ripples: hidden at rest ------------------------------- */
+.jessica-ripple-group circle{
+  fill: none;
+  stroke: var(--jessica-glow, #E8BC6A);
+  stroke-width: 2px;
+  opacity: 0;
+  /* scale each ring about its own center, wherever it's mounted */
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* ---- Calling: the voice carrying across a quiet room ------- */
+.is-calling .jessica-ripple-group circle{
+  animation: jessica-call 4.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+.is-calling .jessica-ripple-group .ring-1{ animation-delay: 0s;   }
+.is-calling .jessica-ripple-group .ring-2{ animation-delay: 1.5s; }
+.is-calling .jessica-ripple-group .ring-3{ animation-delay: 3s;   }
+
+@keyframes jessica-call{
+  0%   { transform: scale(0.8); opacity: 0; }
+  15%  { opacity: 0.8; }               /* peaks gently, early */
+  100% { transform: scale(3.5); opacity: 0; }  /* dissolves wide */
+}
+
+/* ---- Optional resting breath on the halo ------------------- */
+.is-resting .jessica-halo{
+  animation: jessica-breathe 6s ease-in-out infinite;
+}
+@keyframes jessica-breathe{
+  0%,100%{ opacity: .7; }
+  50%    { opacity: 1;  }
+}
+
+/* ---- Accessibility ----------------------------------------- */
+@media (prefers-reduced-motion: reduce){
+  .is-calling .jessica-ripple-group circle,
+  .is-resting .jessica-halo{
+    animation: none;
+  }
+  /* Static "calling" indicator: one steady wide ring */
+  .is-calling .jessica-ripple-group .ring-1{
+    opacity: .35;
+    transform: scale(1.8);
+  }
+}
+
+/* ============================================================
+   QUARTER ORBIT — Brain Guardian Living Time Mark
+   Load order:  jessica-states.css  →  quarter-orbit-states.css
+   This file only ADDS the time layer. The locked Jessica
+   animations (.is-calling ripples, .is-resting breath) come
+   from jessica-states.css unchanged and drive this mark's
+   .jessica-* layers exactly as they drive the Offered mark.
+   ============================================================ */
+
+:root{
+  /* Track tones (extends the sovereign colorway) */
+  --track-rest:   #C6D6C4;   /* quiet quarters */
+  --track-active: #7FA382;   /* the quarter you're in */
+
+  /* The day clock. 0deg = 06:00 (top). One full turn = one day.
+     Set by useDayQuarter, or by the .q1–.q4 presets below. */
+  --orbit-angle: 45deg;
+
+  /* Motion tokens — one easing + one duration scale per daypart.
+     The dial, the halo breath, and any UI that keys off the day
+     all read these two variables and nothing else. */
+  --ease-day: cubic-bezier(0.16, 1, 0.3, 1);   /* morning ease-out */
+  --dur-scale: 1;
+}
+
+/* ---- The dial: the light riding the ring ------------------- */
+.quarter-orbit .orbit-dial{
+  transform-box: view-box;
+  transform-origin: 128px 128px;      /* master grid center */
+  transform: rotate(var(--orbit-angle));
+  transition: transform calc(900ms * var(--dur-scale)) var(--ease-day);
+}
+
+/* ---- Quarter presets (no-JS mounts, admin override) --------
+   Angles are each quarter's arc midpoint. With useDayQuarter
+   running, --orbit-angle is continuous and these are unused. */
+.q1{ --orbit-angle:  45deg; }
+.q2{ --orbit-angle: 135deg; }
+.q3{ --orbit-angle: 225deg; }
+.q4{ --orbit-angle: 315deg; }
+
+/* Active quarter's arc steps forward */
+.q1 .arc-q1, .q2 .arc-q2, .q3 .arc-q3, .q4 .arc-q4{
+  stroke: var(--track-active);
+}
+
+/* ---- Daypart color temperature -----------------------------
+   Five temperature states ride the four clock quarters.
+   The core stays Lantern Amber in every state — amber is
+   Jessica, and Pops' displays depend on that constancy.
+   Temperature moves through the halo, track, and plate. */
+.daypart-morning{
+  --jessica-glow: #E8BC6A;                     /* warm waking */
+  --ease-day: cubic-bezier(0.16, 1, 0.3, 1);   /* ease-out */
+  --dur-scale: 1;
+}
+.daypart-midday{
+  --jessica-glow: #BFD9A8;                     /* meadow light */
+  --ease-day: cubic-bezier(0.37, 0, 0.63, 1);  /* sine — steady loop */
+  --dur-scale: 1;
+}
+.daypart-midafternoon{
+  --jessica-glow: #A8CBD9;                     /* powder cool-down */
+  --ease-day: cubic-bezier(0.37, 0, 0.63, 1);
+  --dur-scale: 1.1;
+}
+.daypart-evening{
+  --jessica-glow: #C4B8DC;                     /* lavender dusk */
+  --track-rest:   #CFC9DC;
+  --ease-day: cubic-bezier(0.65, 0, 0.35, 1);  /* viscous ease-in-out */
+  --dur-scale: 1.25;
+}
+.daypart-night{
+  --jessica-glow: #8C97AD;                     /* fog slate */
+  --track-rest:   #55606F;
+  --track-active: #6F7A86;
+  --bg-plate-fill: #1C2A44;                    /* dusk navy plate */
+  --ease-day: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-scale: 1.3;
+}
+/* Rest mode: the light dims to a nightlight but never goes out */
+.daypart-night .jessica-core{ opacity: 0.55; }
+.daypart-night .jessica-halo{ opacity: 0.5; }
+
+/* The resting breath inherits the daypart's tempo */
+.is-resting .jessica-halo{
+  animation-duration: calc(6s * var(--dur-scale));
+}
+
+/* ---- Accessibility ----------------------------------------- */
+@media (prefers-reduced-motion: reduce){
+  .quarter-orbit .orbit-dial{ transition: none; }  /* snap, don't sweep */
+}
+
+/* ---- proof-sheet chrome (not part of the kit) ---- */
+*{ box-sizing:border-box }
+body{
+  margin:0; padding:28px 20px 64px; background:#FAF7F1; color:#2B3A31;
+  font:16px/1.5 "Avenir Next", "Seravek", "Gill Sans", system-ui, sans-serif;
+}
+.lockup{ font-family: Georgia, "Iowan Old Style", serif; font-size:34px; letter-spacing:.2px; color:#1C2A44; }
+.lockup .g{ color:#54665A } .lockup .ai{ color:#D9A441 }
+.motto{ margin:2px 0 0; font-size:12px; letter-spacing:.24em; text-transform:uppercase; color:#B08A3E }
+main{ max-width:560px; margin:0 auto }
+section{ margin-top:34px }
+h2{ font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:#7C8A80; font-weight:600; margin:0 0 14px }
+.hero{ display:flex; justify-content:center }
+.hero svg{ width:min(64vw,240px); height:auto }
+.clockline{ text-align:center; margin:10px 0 6px; font-size:15px; color:#54665A; font-variant-numeric:tabular-nums }
+input[type=range]{ width:100%; accent-color:#D9A441 }
+.controls{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:14px }
+button{
+  font:600 14px/1 inherit; padding:10px 16px; border-radius:999px; cursor:pointer;
+  border:1.5px solid #A9C7A6; background:#fff; color:#3E4A40;
+}
+button[aria-pressed="true"]{ background:#3E4A40; border-color:#3E4A40; color:#FAF7F1 }
+.sizes{ display:flex; align-items:flex-end; gap:22px; justify-content:center }
+.sizes figure{ margin:0; text-align:center }
+.sizes figcaption{ font-size:11px; color:#7C8A80; margin-top:6px }
+.note{ font-size:13px; color:#7C8A80; margin-top:26px; text-align:center }
+</style>
+</head>
+<body>
+<main>
+  <header style="text-align:center">
+    <div class="lockup">Br<span class="ai">ai</span>n <span class="g">Guardian</span></div>
+    <p class="motto">Someone you know.</p>
+  </header>
+
+  <section>
+    <div class="hero" id="heroMount"><svg class="quarter-orbit no-plate is-resting" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brain Guardian">
+  <defs>
+    <radialGradient id="qoHaloA" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0.85"/>
+      <stop offset="55%" stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- togglable backdrop (hidden with .no-plate) -->
+  <rect class="bg-plate" x="0" y="0" width="256" height="256" rx="56" fill="var(--bg-plate-fill, #FAF7F1)"/>
+
+  <!-- the four quarters — static track -->
+  <g class="orbit-track" stroke="var(--track-rest, #C6D6C4)" stroke-width="22" stroke-linecap="round">
+    <path class="arc arc-q1" d="M 146.39 54.26 A 76 76 0 0 1 201.74 109.61"/>
+    <path class="arc arc-q2" d="M 201.74 146.39 A 76 76 0 0 1 146.39 201.74"/>
+    <path class="arc arc-q3" d="M 109.61 201.74 A 76 76 0 0 1 54.26 146.39"/>
+    <path class="arc arc-q4" d="M 54.26 109.61 A 76 76 0 0 1 109.61 54.26"/>
+  </g>
+
+  <!-- the dial — everything that rides with the light.
+       Rotate via the orbit-angle CSS var (0deg = 06:00, top of day). -->
+  <g class="orbit-dial" transform="rotate(45 128 128)">
+    <circle class="jessica-halo" cx="128" cy="52" r="44" fill="url(#qoHaloA)"/>
+    <g class="jessica-ripple-group">
+      <circle class="ring-1" cx="128" cy="52" r="20"/>
+      <circle class="ring-2" cx="128" cy="52" r="20"/>
+      <circle class="ring-3" cx="128" cy="52" r="20"/>
+    </g>
+    <circle class="jessica-core" cx="128" cy="52" r="19" fill="var(--jessica-amber, #D9A441)"/>
+  </g>
+</svg>
+</div>
+    <p class="clockline"><span id="clockLabel">—</span></p>
+    <input id="scrub" type="range" min="0" max="1439" step="1" aria-label="Time of day">
+    <div class="controls">
+      <button id="btnNow">Now</button>
+      <button id="btnCall" aria-pressed="false">Jessica calling</button>
+      <button id="btnRest" aria-pressed="true">Resting breath</button>
+      <button id="btnPlate" aria-pressed="false">Plate</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Small sizes — same day state</h2>
+    <div class="sizes">
+      <figure><svg class="quarter-orbit no-plate small96" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brain Guardian">
+  <defs>
+    <radialGradient id="qoHaloB" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0.85"/>
+      <stop offset="55%" stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- togglable backdrop (hidden with .no-plate) -->
+  <rect class="bg-plate" x="0" y="0" width="256" height="256" rx="56" fill="var(--bg-plate-fill, #FAF7F1)"/>
+
+  <!-- the four quarters — static track -->
+  <g class="orbit-track" stroke="var(--track-rest, #C6D6C4)" stroke-width="22" stroke-linecap="round">
+    <path class="arc arc-q1" d="M 146.39 54.26 A 76 76 0 0 1 201.74 109.61"/>
+    <path class="arc arc-q2" d="M 201.74 146.39 A 76 76 0 0 1 146.39 201.74"/>
+    <path class="arc arc-q3" d="M 109.61 201.74 A 76 76 0 0 1 54.26 146.39"/>
+    <path class="arc arc-q4" d="M 54.26 109.61 A 76 76 0 0 1 109.61 54.26"/>
+  </g>
+
+  <!-- the dial — everything that rides with the light.
+       Rotate via the orbit-angle CSS var (0deg = 06:00, top of day). -->
+  <g class="orbit-dial" transform="rotate(45 128 128)">
+    <circle class="jessica-halo" cx="128" cy="52" r="44" fill="url(#qoHaloB)"/>
+    <g class="jessica-ripple-group">
+      <circle class="ring-1" cx="128" cy="52" r="20"/>
+      <circle class="ring-2" cx="128" cy="52" r="20"/>
+      <circle class="ring-3" cx="128" cy="52" r="20"/>
+    </g>
+    <circle class="jessica-core" cx="128" cy="52" r="19" fill="var(--jessica-amber, #D9A441)"/>
+  </g>
+</svg>
+<figcaption>96</figcaption></figure>
+      <figure><svg class="quarter-orbit no-plate small48" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brain Guardian">
+  <defs>
+    <radialGradient id="qoHaloC" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0.85"/>
+      <stop offset="55%" stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- togglable backdrop (hidden with .no-plate) -->
+  <rect class="bg-plate" x="0" y="0" width="256" height="256" rx="56" fill="var(--bg-plate-fill, #FAF7F1)"/>
+
+  <!-- the four quarters — static track -->
+  <g class="orbit-track" stroke="var(--track-rest, #C6D6C4)" stroke-width="22" stroke-linecap="round">
+    <path class="arc arc-q1" d="M 146.39 54.26 A 76 76 0 0 1 201.74 109.61"/>
+    <path class="arc arc-q2" d="M 201.74 146.39 A 76 76 0 0 1 146.39 201.74"/>
+    <path class="arc arc-q3" d="M 109.61 201.74 A 76 76 0 0 1 54.26 146.39"/>
+    <path class="arc arc-q4" d="M 54.26 109.61 A 76 76 0 0 1 109.61 54.26"/>
+  </g>
+
+  <!-- the dial — everything that rides with the light.
+       Rotate via the orbit-angle CSS var (0deg = 06:00, top of day). -->
+  <g class="orbit-dial" transform="rotate(45 128 128)">
+    <circle class="jessica-halo" cx="128" cy="52" r="44" fill="url(#qoHaloC)"/>
+    <g class="jessica-ripple-group">
+      <circle class="ring-1" cx="128" cy="52" r="20"/>
+      <circle class="ring-2" cx="128" cy="52" r="20"/>
+      <circle class="ring-3" cx="128" cy="52" r="20"/>
+    </g>
+    <circle class="jessica-core" cx="128" cy="52" r="19" fill="var(--jessica-amber, #D9A441)"/>
+  </g>
+</svg>
+<figcaption>48</figcaption></figure>
+      <figure><svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brain Guardian">
+  <path d="M 26.72 13.53 A 11 11 0 1 1 18.47 5.28" stroke="#7FA382" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+  <circle cx="23.78" cy="8.22" r="5" fill="#D9A441"/>
+</svg>
+<figcaption>32 · favicon</figcaption></figure>
+      <figure><svg width="16" height="16" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brain Guardian">
+  <path d="M 26.72 13.53 A 11 11 0 1 1 18.47 5.28" stroke="#7FA382" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+  <circle cx="23.78" cy="8.22" r="5" fill="#D9A441"/>
+</svg>
+<figcaption>16 · favicon</figcaption></figure>
+    </div>
+  </section>
+
+  <p class="note">Drag through the day. 06:00 sits at the top of the ring; the light crosses one quarter-gap at 12:00, 18:00 and 22:00. Night dims the core to a nightlight — it never goes out. Honors prefers-reduced-motion.</p>
+</main>
+
+<script>
+(() => {
+  const QUARTERS = [[360,360],[720,360],[1080,240],[1320,480]];
+  const quarterOf = m => (m>=360&&m<720)?1:(m>=720&&m<1080)?2:(m>=1080&&m<1320)?3:4;
+  const daypartOf = m => (m>=360&&m<660)?"morning":(m>=660&&m<900)?"midday":(m>=900&&m<1080)?"midafternoon":(m>=1080&&m<1320)?"evening":"night";
+  const stateOf = m => {
+    const q = quarterOf(m), [s,d] = QUARTERS[q-1];
+    const p = Math.min((((m-s)%1440)+1440)%1440/d, 1);
+    return { q, daypart: daypartOf(m), angle: (q-1)*90+p*90 };
+  };
+
+  const marks = [...document.querySelectorAll("svg.quarter-orbit")];
+  const scrub = document.getElementById("scrub");
+  const label = document.getElementById("clockLabel");
+  const hero = document.querySelector("#heroMount svg");
+
+  const fmt = m => String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+
+  function apply(m){
+    const s = stateOf(m);
+    for (const svg of marks){
+      svg.classList.remove("q1","q2","q3","q4","daypart-morning","daypart-midday","daypart-midafternoon","daypart-evening","daypart-night");
+      svg.classList.add("q"+s.q, "daypart-"+s.daypart);
+      svg.style.setProperty("--orbit-angle", s.angle+"deg");
+    }
+    label.textContent = fmt(m)+"  ·  Q"+s.q+"  ·  "+s.daypart.replace("midafternoon","mid-afternoon");
+  }
+
+  const nowMin = () => { const d=new Date(); return d.getHours()*60+d.getMinutes(); };
+  scrub.addEventListener("input", () => apply(+scrub.value));
+  document.getElementById("btnNow").addEventListener("click", () => { scrub.value = nowMin(); apply(+scrub.value); });
+
+  const toggle = (id, on, off) => {
+    const b = document.getElementById(id);
+    b.addEventListener("click", () => {
+      const next = b.getAttribute("aria-pressed") !== "true";
+      b.setAttribute("aria-pressed", String(next));
+      (next ? on : off)();
+    });
+  };
+  toggle("btnCall",
+    () => hero.classList.add("is-calling"),
+    () => hero.classList.remove("is-calling"));
+  toggle("btnRest",
+    () => hero.classList.add("is-resting"),
+    () => hero.classList.remove("is-resting"));
+  toggle("btnPlate",
+    () => marks.forEach(s => s.classList.remove("no-plate")),
+    () => marks.forEach(s => s.classList.add("no-plate")));
+
+  scrub.value = nowMin();
+  apply(+scrub.value);
+})();
+</script>
+</body>
+</html>
