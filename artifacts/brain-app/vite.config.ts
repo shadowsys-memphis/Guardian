@@ -5,8 +5,8 @@ import path from "path";
 import fs from "fs";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
+// Local defaults — Replit still injects PORT / BASE_PATH / VITE_PUBLIC_SITE_URL.
 const rawPort = process.env.PORT ?? "5173";
-
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
@@ -14,10 +14,11 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const basePath = process.env.BASE_PATH ?? "/";
+const apiProxyTarget =
+  process.env.API_PROXY_TARGET ?? `http://localhost:${process.env.API_PORT ?? "8080"}`;
 
-// Local dev default; production builds should set this to the real site origin
-// so Open Graph and Twitter share-preview tags resolve correctly.
-const rawSiteUrl = process.env.VITE_PUBLIC_SITE_URL ?? `http://localhost:${port}`;
+const rawSiteUrl =
+  process.env.VITE_PUBLIC_SITE_URL ?? `http://localhost:${port}`;
 
 // Validate that VITE_PUBLIC_SITE_URL is a well-formed absolute origin.
 // We parse it and require an http/https protocol, then normalise to url.origin
@@ -113,15 +114,16 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
-    proxy: {
-      "/api": {
-        target: `http://localhost:${process.env.API_PORT ?? 8080}`,
-        changeOrigin: true,
-      },
-    },
     fs: {
       strict: true,
       deny: ["**/.*"],
+    },
+    proxy: {
+      // Replit routes /api via artifacts; locally Vite must forward it.
+      "/api": {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
     },
   },
   preview: {
