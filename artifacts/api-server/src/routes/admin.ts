@@ -14,10 +14,20 @@ router.post("/admin/summary", async (req, res) => {
       notes: z.string().optional(),
     }).parse(req.body);
 
+    const todayDateStr = new Date().toISOString().split("T")[0];
+
+    // rotation_tasks has no daily reset yet — a task's `status` can still say
+    // "done" from a prior day. Only count it as done for THIS summary if it
+    // was actually completed today; otherwise the "today's tasks" section
+    // would silently reflect stale completions instead of today's progress.
     const tasksSummary = body.tasks
-      .map((t: any) =>
-        `- [${String(t.period).toUpperCase()}] ${t.timeSlot} | ${t.category} | ${t.title} → ${String(t.status).toUpperCase()}${t.medResponse ? ` (${t.medResponse})` : ""}${t.loggedNote ? ` — "${t.loggedNote}"` : ""}`
-      )
+      .map((t: any) => {
+        const completedToday = typeof t.completedAt === "string" && t.completedAt.startsWith(todayDateStr);
+        const effectiveStatus = t.status === "done" && !completedToday
+          ? `PENDING TODAY (last completed ${t.completedAt ? new Date(t.completedAt).toLocaleDateString() : "previously"})`
+          : String(t.status).toUpperCase();
+        return `- [${String(t.period).toUpperCase()}] ${t.timeSlot} | ${t.category} | ${t.title} → ${effectiveStatus}${t.medResponse ? ` (${t.medResponse})` : ""}${t.loggedNote ? ` — "${t.loggedNote}"` : ""}`;
+      })
       .join("\n");
 
     const logsSummary = body.logs

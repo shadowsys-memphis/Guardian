@@ -19,6 +19,7 @@ import {
   Activity,
   Calendar,
   ShieldAlert,
+  PhoneOff,
   Check,
   Plus,
   Edit2,
@@ -105,8 +106,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useVault } from "@/lib/vault-context";
+import { formatPacificTime, formatPacificDate, formatPacificDateTime, formatPacificShortDate } from "@/lib/time";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
 type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "documents" | "settings" | "devices";
@@ -238,7 +241,7 @@ function CycleDayHeatmap({ trends, haldolCycleDay }: { trends: any[]; haldolCycl
         <CardTitle className="text-sm font-display uppercase tracking-widest text-muted-foreground">
           📅 Cycle-Day Correlation Heatmap
         </CardTitle>
-        <CardDescription className="text-xs">Average health score per medication cycle day (1–14). Red = high-symptom zone.</CardDescription>
+        <CardDescription className="text-xs">Average health score per medication cycle day. Red = high-symptom zone.</CardDescription>
       </CardHeader>
       <CardContent className="pb-4 px-4 overflow-x-auto">
         <div className="min-w-[540px]">
@@ -941,6 +944,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { data: symptomLogs } = useGetSymptomLogs();
   const { data: todaySummary } = useGetTodaySummary();
   const { data: cart } = useGetCart();
+  const { data: rawInventory } = useListInventory({ query: { queryKey: getListInventoryQueryKey() } });
   const updateState = useUpdateAppState();
   const { toast } = useToast();
   const [broadcastValue, setBroadcastValue] = useState(state?.activeMessage ?? "");
@@ -970,6 +974,10 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const completionRate = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
 
   const hasOverride = !!state?.quarterOverride;
+
+  const today = new Date().toISOString().split("T")[0];
+  const inventoryList = (rawInventory as InventoryItem[]) ?? [];
+  const overdueInventory = inventoryList.filter((i) => !!(i.estimatedRunOutDate && i.estimatedRunOutDate < today));
 
   return (
     <div className="space-y-6">
@@ -1055,7 +1063,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={haldol?.isOverdue ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : undefined}>
           <CardHeader className="pb-2">
             <CardDescription className="uppercase tracking-widest font-bold">Haldol Cycle</CardDescription>
             <CardTitle className="text-5xl">Day {haldol?.cycleDay ?? "-"}</CardTitle>
@@ -1064,8 +1072,34 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             <p className="text-sm text-muted-foreground mt-2">
               Next: {haldol ? haldol.nextInjectionDate : "--"}
             </p>
-            {haldol?.isZombiePhase && (
+            {haldol?.isOverdue ? (
+              <Badge variant="destructive" className="mt-2 flex items-center gap-1 w-fit">
+                <ShieldAlert size={12} /> Injection Overdue — {haldol.daysOverdue} day{haldol.daysOverdue === 1 ? "" : "s"}
+              </Badge>
+            ) : haldol?.isZombiePhase ? (
               <Badge variant="destructive" className="mt-2">High Symptom Phase</Badge>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition-colors hover:border-primary/40 ${overdueInventory.length > 0 ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : ""}`}
+          onClick={() => onNavigate("inventory")}
+        >
+          <CardHeader className="pb-2">
+            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
+              <Package size={14} /> Inventory
+            </CardDescription>
+            <CardTitle className="text-5xl">{overdueInventory.length}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mt-2">
+              {overdueInventory.length > 0 ? "item(s) overdue for restock" : "all items on track"}
+            </p>
+            {overdueInventory.length > 0 && (
+              <Badge variant="destructive" className="mt-2 flex items-center gap-1 w-fit">
+                <ShieldAlert size={12} /> Restock Needed
+              </Badge>
             )}
           </CardContent>
         </Card>
@@ -1125,9 +1159,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
               {(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at) && (
                 <p className="text-[10px] text-muted-foreground/60">
                   Updated:{" "}
-                  {new Date(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at!).toLocaleDateString("en-US", {
-                    month: "short", day: "numeric", year: "numeric",
-                  })}
+                  {formatPacificDate(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at!)}
                 </p>
               )}
             </div>
@@ -1199,7 +1231,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                     <p className="text-xs text-muted-foreground italic border-t border-border/40 pt-2">{last.behaviorNotes}</p>
                   )}
                   <p className="text-[10px] text-muted-foreground/50 pt-1">
-                    Last log: {last.loggedAt ? new Date(last.loggedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Unknown"}
+                    Last log: {last.loggedAt ? formatPacificDateTime(last.loggedAt) : "Unknown"}
                   </p>
                 </>
               );
@@ -1209,7 +1241,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                 <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest mb-1">Last Check-in</p>
                 <p className="text-xs text-muted-foreground">
                   {(todaySummary as any).sessionCount ?? 0} session{(todaySummary as any).sessionCount !== 1 ? "s" : ""} today
-                  {(todaySummary as any).lastSessionTime ? ` · ${new Date((todaySummary as any).lastSessionTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+                  {(todaySummary as any).lastSessionTime ? ` · ${formatPacificTime((todaySummary as any).lastSessionTime)}` : ""}
                 </p>
               </div>
             )}
@@ -1271,7 +1303,6 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-sm uppercase tracking-widest ${
                     (cart as any).status === "approved" ? "bg-success/10 text-success" :
-                    (cart as any).status === "ordered" ? "bg-primary/10 text-primary" :
                     "bg-secondary text-muted-foreground"
                   }`}>
                     {(cart as any).status ?? "pending"}
@@ -1293,7 +1324,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                 </div>
                 <p className="text-[10px] text-muted-foreground/50">
                   Week of {(cart as any).weekStartDate}
-                  {(cart as any).approvedAt ? ` · Approved ${new Date((cart as any).approvedAt).toLocaleDateString()}` : ""}
+                  {(cart as any).approvedAt ? ` · Approved ${formatPacificDate((cart as any).approvedAt)}` : ""}
                 </p>
               </>
             )}
@@ -1523,8 +1554,8 @@ function SymptomsTab() {
                 <CardContent className="p-4 flex gap-4">
                   <div className="shrink-0 text-center w-20 p-2 bg-secondary rounded border border-border/50">
                     <div className="text-xs text-muted-foreground uppercase font-bold">Time</div>
-                    <div className="text-lg font-display text-primary">{format(new Date(log.loggedAt), "HH:mm")}</div>
-                    <div className="text-xs text-muted-foreground">{format(new Date(log.loggedAt), "MM/dd")}</div>
+                    <div className="text-lg font-display text-primary">{formatPacificTime(log.loggedAt)}</div>
+                    <div className="text-xs text-muted-foreground">{formatPacificShortDate(log.loggedAt)}</div>
                   </div>
                   <div className="flex-1">
                     <div className="flex gap-2 mb-2">
@@ -1967,7 +1998,7 @@ export function ShopperTab() {
     }
     const lines: string[] = [
       `br(AI)n Weekly Meal Plan — Week of ${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}`,
-      `Generated: ${new Date().toLocaleString()}`,
+      `Generated: ${formatPacificDateTime(new Date())}`,
       `Budget: $${((cart?.totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $${((cart?.budgetCents ?? 15000) / 100).toFixed(2)}`,
       `Status: ${(cart?.status ?? "pending").toUpperCase()}`,
       "",
@@ -2168,20 +2199,11 @@ export function ShopperTab() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-0">
-            {(["Draft", "Approved", "Ordered"] as const).map((step, idx) => {
-              const stepStatus = ["pending", "approved", "ordered"][idx];
-              // "ordered" is not yet a status the API emits (fulfillment lives in
-              // cart_fulfillments) — the stepper anticipates it, so compare as string.
-              const isDone =
-                (cartStatus as string) === "ordered"
-                  ? idx <= 2
-                  : cartStatus === "approved"
-                    ? idx <= 1
-                    : idx === 0;
+            {(["Draft", "Approved"] as const).map((step, idx) => {
+              const isDone = cartStatus === "approved" ? idx <= 1 : idx === 0;
               const isCurrent =
                 (step === "Draft" && cartStatus === "pending") ||
-                (step === "Approved" && cartStatus === "approved") ||
-                (step === "Ordered" && (cartStatus as string) === "ordered");
+                (step === "Approved" && cartStatus === "approved");
               const isCancelled = cartStatus === "dismissed" && step === "Draft";
               return (
                 <div key={step} className="flex items-center flex-1">
@@ -2201,7 +2223,7 @@ export function ShopperTab() {
                       {isCancelled ? "Cancelled" : step}
                     </span>
                   </div>
-                  {idx < 2 && (
+                  {idx < 1 && (
                     <div className={`h-0.5 flex-1 mx-1 rounded-full ${isDone && !isCurrent ? "bg-success/40" : "bg-border/30"}`} />
                   )}
                 </div>
@@ -2307,7 +2329,7 @@ export function ShopperTab() {
                 </a>
               )}
               {fulfillment.createdAt && (
-                <p className="text-[10px] text-muted-foreground/50">Last run: {new Date(fulfillment.createdAt).toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground/50">Last run: {formatPacificDateTime(fulfillment.createdAt)}</p>
               )}
             </div>
           )}
@@ -3224,7 +3246,7 @@ function DevicesTab() {
               {actionLogs.map((log) => (
                 <div key={log.id} className="grid grid-cols-[auto_1fr_auto] gap-x-4 px-4 py-2.5 text-xs hover:bg-secondary/20 items-center">
                   <span className="text-muted-foreground/70 font-display whitespace-nowrap tabular-nums">
-                    {format(new Date(log.createdAt), "MMM d HH:mm")}
+                    {formatPacificDateTime(log.createdAt)}
                   </span>
                   <div className="min-w-0">
                     <span className="font-display uppercase tracking-widest text-foreground/80 text-[11px]">
@@ -3277,12 +3299,10 @@ function RotationTab() {
   const taskList = tasks as RotationTask[];
   const logList = logs as HistoricalCareLog[];
 
-  const cycleDay = (() => {
-    const lastDate = (haldolData as any)?.lastInjectionDate;
-    if (!lastDate) return null;
-    const diff = Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000);
-    return Math.max(1, Math.min(14, (diff % 14) + 1));
-  })();
+  // Use the server's computed value — it reads the prescribed interval from
+  // haldol_cycle. Recomputing here previously hardcoded 14 AND clamped with
+  // Math.min/max, which CLAUDE.md explicitly forbids.
+  const cycleDay = (haldolData as any)?.cycleDay ?? null;
 
   const filtered = taskList.filter((t) => {
     if (period !== "all" && t.period !== period) return false;
@@ -3609,7 +3629,7 @@ function RotationTab() {
           <div className="max-h-[60vh] overflow-y-auto rounded-sm border border-border bg-secondary/10 p-4">
             <pre className="text-xs font-mono whitespace-pre-wrap text-foreground leading-relaxed">{summaryMarkdown || "Generating…"}</pre>
           </div>
-          {summaryDate && <p className="text-xs text-muted-foreground/40">Generated: {new Date(summaryDate).toLocaleString()}</p>}
+          {summaryDate && <p className="text-xs text-muted-foreground/40">Generated: {formatPacificDateTime(summaryDate)}</p>}
         </div>
       </Modal>
     </div>
@@ -4404,6 +4424,7 @@ function AppSettingsTab() {
   const { data: healthSettings } = useGetAssessmentSettings();
   const updateHealthSettings = useUpdateAssessmentSettings();
   const [quietForm, setQuietForm] = useState({ quietWindowStart: "22:00", quietWindowEnd: "07:00", engagementIntervalHours: 4 });
+  const [callForm, setCallForm] = useState({ dailyCallEnabled: false, dailyCallTime: "10:00" });
 
   useEffect(() => {
     if (healthSettings) {
@@ -4411,6 +4432,10 @@ function AppSettingsTab() {
         quietWindowStart: (healthSettings as any).quietWindowStart ?? "22:00",
         quietWindowEnd: (healthSettings as any).quietWindowEnd ?? "07:00",
         engagementIntervalHours: (healthSettings as any).engagementIntervalHours ?? 4,
+      });
+      setCallForm({
+        dailyCallEnabled: (healthSettings as any).dailyCallEnabled ?? false,
+        dailyCallTime: (healthSettings as any).dailyCallTime ?? "10:00",
       });
     }
   }, [healthSettings]);
@@ -4446,12 +4471,27 @@ function AppSettingsTab() {
     updateHealthSettings.mutate({ data: quietForm }, { onSuccess: () => toast({ title: "Quiet window saved" }) });
   };
 
+  const handleCallToggle = (dailyCallEnabled: boolean) => {
+    const next = { ...callForm, dailyCallEnabled };
+    setCallForm(next);
+    updateHealthSettings.mutate({ data: next }, {
+      onSuccess: () => toast({ title: dailyCallEnabled ? "Daily call enabled" : "Daily call disabled" }),
+    });
+  };
+
+  const handleCallTimeSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateHealthSettings.mutate({ data: callForm }, { onSuccess: () => toast({ title: "Daily call time saved" }) });
+  };
+
   return (
     <div className="space-y-6">
       <header className="mb-8 border-b border-border/50 pb-4">
         <h2 className="text-4xl font-display text-primary tracking-widest uppercase">App Settings</h2>
         <p className="text-muted-foreground">Shopper preferences, store configuration, and quiet hours.</p>
       </header>
+
+      <SystemJobsPanel />
 
       {/* Store Preferences */}
       <Card>
@@ -4516,6 +4556,36 @@ function AppSettingsTab() {
         </CardContent>
       </Card>
 
+      {/* Daily Call */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Clock size={14} /> Daily Call
+          </CardTitle>
+          <CardDescription>Jessica calls Pops automatically at this time every day (Pacific).</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between mb-4">
+            <label htmlFor="daily-call-toggle" className="text-sm font-medium">
+              {callForm.dailyCallEnabled ? "Automatic daily call is on" : "Automatic daily call is off"}
+            </label>
+            <Switch id="daily-call-toggle" checked={callForm.dailyCallEnabled} onCheckedChange={handleCallToggle} />
+          </div>
+          <form onSubmit={handleCallTimeSave} className="space-y-4 max-w-md">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Call Time (24h, Pacific)</label>
+              <Input
+                type="time"
+                value={callForm.dailyCallTime}
+                onChange={(e) => setCallForm({ ...callForm, dailyCallTime: e.target.value })}
+                className="max-w-[160px]"
+              />
+            </div>
+            <Button type="submit" disabled={updateHealthSettings.isPending}>Save Call Time</Button>
+          </form>
+        </CardContent>
+      </Card>
+
       {/* Quiet Window */}
       <Card>
         <CardHeader>
@@ -4543,6 +4613,229 @@ function AppSettingsTab() {
             <Button type="submit" disabled={updateHealthSettings.isPending}>Save Quiet Window</Button>
           </form>
         </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+type CronJobStatus = {
+  name: string;
+  title: string;
+  schedule: string;
+  lastRanAt: string | null;
+  lastOutcome: "ok" | "skipped" | "warn" | "error" | null;
+  lastDetail: string | null;
+};
+type CronStatus = {
+  jobs: CronJobStatus[];
+  alerts: {
+    medRefusal: any | null;
+    wellbeing: any | null;
+    missedCall: any | null;
+    haldol: any | null;
+    missedCallStreak: number;
+  };
+};
+
+function outcomeGlyph(outcome: CronJobStatus["lastOutcome"]) {
+  if (outcome === "ok") return <CheckCircle size={13} className="text-success shrink-0" />;
+  if (outcome === "warn") return <AlertTriangle size={13} className="text-amber-500 shrink-0" />;
+  if (outcome === "error") return <ShieldAlert size={13} className="text-destructive shrink-0" />;
+  return <Clock size={13} className="text-muted-foreground/40 shrink-0" />;
+}
+
+/** Live health + alert surface for the scheduled-jobs runner (lib/call-scheduler.ts). */
+export function SystemJobsPanel() {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<CronStatus | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/cron/status`);
+      if (res.ok) setStatus(await res.json());
+    } catch { /* transient — next poll retries */ }
+  };
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const acknowledge = async (kind: "med_refusal" | "wellbeing" | "missed_call") => {
+    setBusy(kind);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/cron/alerts/${kind}/ack`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      toast({ title: "Alert acknowledged" });
+      await load();
+    } catch {
+      toast({ title: "Could not acknowledge alert", variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runNow = async (name: string, label: string) => {
+    setBusy(name);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/cron/jobs/${name}/run`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const result = await res.json();
+      toast({
+        title: `${label}: ${result.outcome}`,
+        description: result.detail ?? undefined,
+        variant: result.outcome === "error" ? "destructive" : undefined,
+      });
+      await load();
+    } catch {
+      toast({ title: `Failed to run ${label}`, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const alerts = status?.alerts;
+  const haldolStatus = alerts?.haldol?.status as string | undefined;
+
+  return (
+    <div className="space-y-3">
+      {/* Wellbeing — stays until Ray acknowledges; deliberately has no dismiss-without-ack path */}
+      {alerts?.wellbeing && (
+        <Card className="border-destructive/70 bg-destructive/10">
+          <CardContent className="p-4 flex items-start gap-3">
+            <ShieldAlert size={18} className="text-destructive shrink-0 mt-0.5 animate-pulse" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-destructive uppercase tracking-widest">Wellbeing Alert</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {alerts.wellbeing.count > 1 ? `${alerts.wellbeing.count} flagged sessions. ` : ""}
+                Pops said something concerning on call session #{alerts.wellbeing.sessionId}.
+                {alerts.wellbeing.summary ? ` — ${alerts.wellbeing.summary}` : ""}
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">{formatPacificDateTime(alerts.wellbeing.at)}</p>
+            </div>
+            <Button size="sm" variant="destructive" disabled={busy === "wellbeing"} onClick={() => acknowledge("wellbeing")}>
+              I know
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {alerts?.medRefusal && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <AlertTriangle size={18} className="text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-destructive uppercase tracking-widest">Medication Refused</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {alerts.medRefusal.count > 1 ? `${alerts.medRefusal.count} refusals. ` : ""}
+                {alerts.medRefusal.detail ?? "Pops declined a medication."}
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">{formatPacificDateTime(alerts.medRefusal.at)}</p>
+            </div>
+            <Button size="sm" variant="outline" disabled={busy === "med_refusal"} onClick={() => acknowledge("med_refusal")}>
+              I know
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {alerts?.missedCall && (
+        <Card className="border-amber-500/60 bg-amber-500/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <PhoneOff size={18} className="text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">No Call Reached Pops Today</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {alerts.missedCall.reason === "no_session_today"
+                  ? "The daily call window passed with no completed call session."
+                  : `The scheduled call failed to start (${alerts.missedCall.reason}).`}
+                {alerts.missedCallStreak > 1 ? ` Missed ${alerts.missedCallStreak} days running.` : ""}
+              </p>
+            </div>
+            <Button size="sm" variant="outline" disabled={busy === "missed_call"} onClick={() => acknowledge("missed_call")}>
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {haldolStatus && haldolStatus !== "ok" && (
+        <Card className={haldolStatus === "overdue" ? "border-destructive/60 bg-destructive/5" : "border-amber-500/50 bg-amber-500/5"}>
+          <CardContent className="p-4 flex items-start gap-3">
+            <ShieldAlert size={18} className={`shrink-0 mt-0.5 ${haldolStatus === "overdue" ? "text-destructive" : "text-amber-500"}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-bold uppercase tracking-widest ${haldolStatus === "overdue" ? "text-destructive" : "text-amber-600 dark:text-amber-400"}`}>
+                {haldolStatus === "overdue" ? "Haldol Injection Overdue" : "Haldol Injection Due Tomorrow"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Cycle day {alerts?.haldol?.cycleDay} · last injection {alerts?.haldol?.lastInjectionDate}.
+                {haldolStatus === "overdue" ? " Clears automatically once a new injection date is logged." : ""}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <button className="w-full flex items-center justify-between text-left" onClick={() => setExpanded((e) => !e)}>
+            <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+              <Clock size={14} /> System Jobs
+              {status && (
+                <span className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+                  {status.jobs.filter((j) => j.lastOutcome === "error").length > 0
+                    ? `${status.jobs.filter((j) => j.lastOutcome === "error").length} erroring`
+                    : "all healthy"}
+                </span>
+              )}
+            </CardTitle>
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+          {!expanded && <CardDescription className="text-xs">Scheduled background jobs — last run status and manual overrides.</CardDescription>}
+        </CardHeader>
+        {expanded && (
+          <CardContent className="space-y-2">
+            {!status ? (
+              <p className="text-xs text-muted-foreground">Loading job status…</p>
+            ) : (
+              <>
+                {status.jobs.map((job) => (
+                  <div key={job.name} className="flex items-start gap-2.5 p-2.5 rounded-sm border border-border/30 bg-secondary/20">
+                    {outcomeGlyph(job.lastOutcome)}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold">{job.title}</p>
+                      <p className="text-[10px] text-muted-foreground/70">{job.schedule}</p>
+                      {job.lastDetail && <p className="text-[10px] text-muted-foreground mt-0.5">{job.lastDetail}</p>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-muted-foreground/60">
+                        {job.lastRanAt ? formatPacificDateTime(job.lastRanAt) : "never run"}
+                      </p>
+                      {(job.name === "daily_call" || job.name === "rotation_reset") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-1 h-6 text-[10px] gap-1"
+                          disabled={busy === job.name}
+                          onClick={() => runNow(job.name, job.title)}
+                        >
+                          <RefreshCw size={9} className={busy === job.name ? "animate-spin" : ""} />
+                          Run Now
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[10px] text-muted-foreground/50 pt-1">
+                  Jobs run in-process on a 60s tick. "Skipped" ticks (wrong time / nothing to do) aren't logged.
+                </p>
+              </>
+            )}
+          </CardContent>
+        )}
       </Card>
     </div>
   );
@@ -4623,6 +4916,18 @@ function DocumentsTab() {
     reader.readAsDataURL(file);
   };
 
+  const handleDeleteDoc = async (doc: any) => {
+    if (!window.confirm(`Delete "${doc.source_label}"? This only removes the scan — it won't undo anything already applied to the care plan.`)) return;
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/documents/${doc.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      toast({ title: "Document deleted" });
+    } catch {
+      toast({ title: "Delete failed", variant: "destructive" });
+    }
+  };
+
   const handleReapply = (doc: any) => {
     let structured: any = {};
     try { structured = JSON.parse(doc.structured_json); } catch { structured = {}; }
@@ -4659,6 +4964,11 @@ function DocumentsTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Already up to date", description: body.message ?? "This document already matches the active care plan.", variant: "destructive" });
+        return;
+      }
       if (!res.ok) throw new Error("Apply failed");
       const result = await res.json();
       setApplied(result);
@@ -4897,17 +5207,27 @@ function DocumentsTab() {
                             <p className="text-xs text-muted-foreground/70">📅 {structured.appointments.map((a: any) => `${a.date} w/ ${a.provider}`).join(", ")}</p>
                           )}
                         </div>
-                        {hasContent && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          {hasContent && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-xs"
+                              onClick={() => handleReapply(doc)}
+                            >
+                              <RotateCcw size={12} />
+                              Re-apply
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
-                            className="gap-1.5 shrink-0 text-xs"
-                            onClick={() => handleReapply(doc)}
+                            className="gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleDeleteDoc(doc)}
                           >
-                            <RotateCcw size={12} />
-                            Re-apply
+                            <Trash2 size={12} />
                           </Button>
-                        )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
+import { formatPacificClock, formatPacificTime } from "@/lib/time";
 import {
   useGetAppState,
   useGetHaldolCycle,
@@ -65,7 +66,7 @@ export function PopsView() {
         </div>
         <div className="text-right">
           <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums">
-            {format(currentTime, "HH:mm:ss")}
+            {formatPacificClock(currentTime)}
           </div>
           <div className="text-lg md:text-xl text-muted-foreground uppercase tracking-widest">
             {format(currentTime, "EEEE, MMM dd, yyyy")}
@@ -94,7 +95,7 @@ function ZombieScreen({ currentTime }: { currentTime: Date }) {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center">
       <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums mb-12">
-        {format(currentTime, "HH:mm:ss")}
+        {formatPacificClock(currentTime)}
       </div>
       <p className="text-[10vw] md:text-[8rem] font-display font-bold text-primary leading-none tracking-widest uppercase">
         REST
@@ -194,7 +195,7 @@ function CallTimeline({ todaySummary, assessmentSettings, currentTime }: { today
           <div className="flex items-center gap-2 shrink-0 px-3 py-1.5 rounded-sm border border-primary/20 bg-primary/5">
             <div className="h-1.5 w-1.5 rounded-full bg-primary/50" />
             <span className="text-xs font-display uppercase tracking-widest text-muted-foreground">
-              Next: <span className="text-primary">{format(nextExpected, "HH:mm")}</span>
+              Next: <span className="text-primary">{formatPacificTime(nextExpected)}</span>
             </span>
           </div>
         )}
@@ -211,7 +212,7 @@ function HaldolBar({ haldol, todaySummary }: { haldol: HaldolCycle; todaySummary
       <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
         <p className="text-lg font-display text-muted-foreground uppercase tracking-widest">
           Medication Cycle — Day{" "}
-          <span className="text-primary font-bold">{haldol.cycleDay}</span> of 14
+          <span className="text-primary font-bold">{haldol.cycleDay}</span> of {(haldol as any).intervalDays ?? 14}
         </p>
         <div className="flex items-center gap-4">
           {hasCheckin ? (

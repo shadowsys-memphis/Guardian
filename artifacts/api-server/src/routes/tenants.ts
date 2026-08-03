@@ -3,6 +3,8 @@ import { z } from "zod";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { loginRateLimit } from "../middlewares/rate-limit";
+import { requireLocalSession } from "../middlewares/tenant-auth";
 
 const router: IRouter = Router();
 
@@ -12,15 +14,23 @@ function getJwtSecret(): string {
   return secret;
 }
 
-function makeLocalToken() {
+async function getLocalSessionVersion(): Promise<number> {
+  const result = await pool.query(
+    `SELECT value FROM app_settings WHERE key = 'local_session_version' LIMIT 1`
+  );
+  return result.rows.length > 0 ? parseInt(result.rows[0].value, 10) : 1;
+}
+
+async function makeLocalToken() {
+  const sessionVersion = await getLocalSessionVersion();
   return jwt.sign(
-    { sub: "local", type: "local", plan: "local", status: "active" },
+    { sub: "local", type: "local", plan: "local", status: "active", sessionVersion },
     getJwtSecret(),
     { expiresIn: "24h" }
   );
 }
 
-router.post("/tenants/auth", async (req: Request, res: Response) => {
+router.post("/tenants/auth", loginRateLimit, async (req: Request, res: Response) => {
   try {
     const body = z.object({
       passphrase: z.string().min(1),
@@ -35,7 +45,7 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
       if (localHashResult.rows.length > 0) {
         const match = await bcrypt.compare(body.passphrase, localHashResult.rows[0].value as string);
         if (match) {
-          res.json({ token: makeLocalToken(), type: "local", plan: "local", status: "active" });
+          res.json({ token: await makeLocalToken(), type: "local", plan: "local", status: "active" });
         } else {
           res.status(401).json({ error: "Incorrect passphrase." });
         }
@@ -48,7 +58,7 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
     // 1. VAULT_PASSPHRASE configured — require exact match for Ray's local workspace
     if (vaultPassphrase) {
       if (body.passphrase === vaultPassphrase) {
-        res.json({ token: makeLocalToken(), type: "local", plan: "local", status: "active" });
+        res.json({ token: await makeLocalToken(), type: "local", plan: "local", status: "active" });
         return;
       }
       // Fall through to check tenants even if local passphrase doesn't match
@@ -56,7 +66,7 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
 
     // 2. Check bcrypt hashes of provisioned tenants (any that have completed setup)
     const tenantResult = await pool.query(
-      `SELECT id, plan, status, passphrase_hash
+      `SELECT id, plan, status, passphrase_hash, session_version
        FROM tenants
        WHERE passphrase_hash IS NOT NULL
          AND setup_completed_at IS NOT NULL`
@@ -66,7 +76,13 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
       const match = await bcrypt.compare(body.passphrase, tenant.passphrase_hash as string);
       if (match) {
         const token = jwt.sign(
-          { sub: tenant.id, type: "tenant", plan: tenant.plan, status: "active" },
+          {
+            sub: tenant.id,
+            type: "tenant",
+            plan: tenant.plan,
+            status: "active",
+            sessionVersion: tenant.session_version,
+          },
           getJwtSecret(),
           { expiresIn: "24h" }
         );
@@ -80,7 +96,7 @@ router.post("/tenants/auth", async (req: Request, res: Response) => {
     //    accept any passphrase ≥ 4 chars. This fallback automatically
     //    disables once VAULT_PASSPHRASE is configured.
     if (!vaultPassphrase && tenantResult.rows.length === 0 && body.passphrase.length >= 4) {
-      res.json({ token: makeLocalToken(), type: "local", plan: "local", status: "active" });
+      res.json({ token: await makeLocalToken(), type: "local", plan: "local", status: "active" });
       return;
     }
 
@@ -142,6 +158,31 @@ router.post("/tenants/setup", async (req: Request, res: Response) => {
     }
     req.log.error({ err }, "Tenant setup failed");
     res.status(500).json({ error: "Setup failed" });
+  }
+});
+
+/**
+ * POST /tenants/:id/revoke-sessions — invalidate every outstanding JWT for a
+ * tenant immediately (compromised session, offboarding) by bumping
+ * session_version. Requires a local session — this is Ray's admin action,
+ * not something a tenant can call on themselves via a tenant-scoped token.
+ */
+router.post("/tenants/:id/revoke-sessions", requireLocalSession, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `UPDATE tenants SET session_version = session_version + 1, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id`,
+      [req.params["id"]]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to revoke tenant sessions");
+    res.status(500).json({ error: "Failed to revoke sessions" });
   }
 });
 

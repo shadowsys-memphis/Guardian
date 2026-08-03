@@ -389,20 +389,63 @@ export const GetHaldolCycleResponse = zod.object({
     .number()
     .nullish()
     .describe("Injection dose in milligrams (null until confirmed)"),
-  cycleDay: zod.number().describe("Current day within the 14-day cycle (1-14)"),
+  cycleDay: zod
+    .number()
+    .describe(
+      "Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped)",
+    ),
+  intervalDays: zod
+    .number()
+    .optional()
+    .describe(
+      "Prescribed dosing interval in days (e.g. 14 biweekly, 28 monthly)",
+    ),
+  zombiePhaseDays: zod
+    .number()
+    .optional()
+    .describe("Length of the post-injection high-symptom window, in days"),
+  daysSinceInjection: zod
+    .number()
+    .optional()
+    .describe("Days elapsed since lastInjectionDate"),
   isZombiePhase: zod
     .boolean()
-    .describe("True on days 1-5 when symptoms are typically highest"),
+    .describe(
+      "True while cycleDay is within the post-injection high-symptom window",
+    ),
   nextInjectionDate: zod.date(),
+  isOverdue: zod
+    .boolean()
+    .describe(
+      "True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle",
+    ),
+  daysOverdue: zod
+    .number()
+    .describe("Days past the expected injection date; 0 when not overdue"),
   notes: zod.string().optional(),
 });
 
 /**
  * @summary Update Haldol cycle (set injection date, notes)
  */
+
+export const updateHaldolCycleBodyZombiePhaseDaysMin = 0;
+
 export const UpdateHaldolCycleBody = zod.object({
   lastInjectionDate: zod.date().optional(),
   doseMg: zod.number().nullish().describe("Injection dose in milligrams"),
+  intervalDays: zod
+    .number()
+    .min(1)
+    .optional()
+    .describe(
+      "Prescribed dosing interval in days — set when the prescriber changes the schedule",
+    ),
+  zombiePhaseDays: zod
+    .number()
+    .min(updateHaldolCycleBodyZombiePhaseDaysMin)
+    .optional()
+    .describe("Length of the post-injection high-symptom window, in days"),
   notes: zod.string().optional(),
 });
 
@@ -413,11 +456,39 @@ export const UpdateHaldolCycleResponse = zod.object({
     .number()
     .nullish()
     .describe("Injection dose in milligrams (null until confirmed)"),
-  cycleDay: zod.number().describe("Current day within the 14-day cycle (1-14)"),
+  cycleDay: zod
+    .number()
+    .describe(
+      "Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped)",
+    ),
+  intervalDays: zod
+    .number()
+    .optional()
+    .describe(
+      "Prescribed dosing interval in days (e.g. 14 biweekly, 28 monthly)",
+    ),
+  zombiePhaseDays: zod
+    .number()
+    .optional()
+    .describe("Length of the post-injection high-symptom window, in days"),
+  daysSinceInjection: zod
+    .number()
+    .optional()
+    .describe("Days elapsed since lastInjectionDate"),
   isZombiePhase: zod
     .boolean()
-    .describe("True on days 1-5 when symptoms are typically highest"),
+    .describe(
+      "True while cycleDay is within the post-injection high-symptom window",
+    ),
   nextInjectionDate: zod.date(),
+  isOverdue: zod
+    .boolean()
+    .describe(
+      "True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle",
+    ),
+  daysOverdue: zod
+    .number()
+    .describe("Days past the expected injection date; 0 when not overdue"),
   notes: zod.string().optional(),
 });
 
@@ -764,6 +835,12 @@ export const ListCallSessionsResponseItem = zod.object({
   endedAt: zod.date().nullish(),
   summary: zod.string().nullish(),
   flagged: zod.boolean(),
+  transcript: zod
+    .string()
+    .nullish()
+    .describe(
+      "Full call transcript (Jessica\/Pops turns), saved when the call ends",
+    ),
 });
 export const ListCallSessionsResponse = zod.array(ListCallSessionsResponseItem);
 
@@ -791,6 +868,12 @@ export const EndCallSessionResponse = zod.object({
   endedAt: zod.date().nullish(),
   summary: zod.string().nullish(),
   flagged: zod.boolean(),
+  transcript: zod
+    .string()
+    .nullish()
+    .describe(
+      "Full call transcript (Jessica\/Pops turns), saved when the call ends",
+    ),
 });
 
 /**
@@ -883,6 +966,16 @@ export const GetAssessmentSettingsResponse = zod.object({
     .number()
     .optional()
     .describe("Hours of inactivity before Jessica initiates a check-in"),
+  dailyCallEnabled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the server automatically places the daily Jessica call at dailyCallTime",
+    ),
+  dailyCallTime: zod
+    .string()
+    .optional()
+    .describe("HH:MM 24-hour format, Pacific time, e.g. 10:00"),
 });
 
 /**
@@ -898,6 +991,16 @@ export const UpdateAssessmentSettingsBody = zod.object({
     .number()
     .optional()
     .describe("Hours of inactivity before Jessica initiates a check-in"),
+  dailyCallEnabled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the server automatically places the daily Jessica call at dailyCallTime",
+    ),
+  dailyCallTime: zod
+    .string()
+    .optional()
+    .describe("HH:MM 24-hour format, Pacific time, e.g. 10:00"),
 });
 
 export const UpdateAssessmentSettingsResponse = zod.object({
@@ -910,6 +1013,16 @@ export const UpdateAssessmentSettingsResponse = zod.object({
     .number()
     .optional()
     .describe("Hours of inactivity before Jessica initiates a check-in"),
+  dailyCallEnabled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the server automatically places the daily Jessica call at dailyCallTime",
+    ),
+  dailyCallTime: zod
+    .string()
+    .optional()
+    .describe("HH:MM 24-hour format, Pacific time, e.g. 10:00"),
 });
 
 /**

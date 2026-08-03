@@ -41,6 +41,28 @@ async function getActiveModel(): Promise<typeof AI_MODELS[number]> {
   }
 }
 
+/**
+ * Checks whether LM Studio is actually reachable and returns the model id it
+ * currently has loaded — used to silently fall back off Gemini when Gemini's
+ * API is down, instead of just failing the whole check-in. Returns null if no
+ * local model is available (server not running / nothing loaded).
+ */
+async function findAvailableLocalModelId(): Promise<string | null> {
+  try {
+    const baseUrl = await getLmStudioBaseUrl();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch(`${baseUrl}/v1/models`, { signal: controller.signal }).finally(() => clearTimeout(timeout));
+    if (!response.ok) return null;
+    const data = await response.json() as { data?: Array<{ id: string }> };
+    return data.data?.[0]?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+import { computeHaldolCycle, DEFAULT_INTERVAL_DAYS } from "../lib/haldol-cycle";
+
 async function getLmStudioBaseUrl(): Promise<string> {
   try {
     const rows = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "lm_studio_url"));
@@ -49,10 +71,15 @@ async function getLmStudioBaseUrl(): Promise<string> {
   return process.env.LM_STUDIO_URL ?? "http://localhost:1234";
 }
 
-async function callLmStudio(
+/**
+ * Streams a chat completion from LM Studio's OpenAI-compatible SSE endpoint,
+ * yielding text deltas as they arrive (mirrors the Gemini generateContentStream
+ * shape used below so both providers can share the same delta-flush loop).
+ */
+async function* streamLmStudio(
   openaiMessages: Array<{ role: string; content: string }>,
   lmStudioModelId: string
-): Promise<string> {
+): AsyncGenerator<string> {
   const baseUrl = await getLmStudioBaseUrl();
   let response: Response;
   try {
@@ -64,22 +91,49 @@ async function callLmStudio(
         messages: openaiMessages,
         temperature: 0.7,
         max_tokens: 2048,
-        stream: false,
+        stream: true,
       }),
     });
   } catch {
     throw new Error("LM Studio not running — check that it's open and the model is loaded");
   }
-  if (!response.ok) {
+  if (!response.ok || !response.body) {
     throw new Error(`LM Studio not running — check that it's open and the model is loaded (HTTP ${response.status})`);
   }
-  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-  const content = data.choices?.[0]?.message?.content ?? "";
-  if (!content) throw new Error("LM Studio returned an empty response — is the model fully loaded?");
-  return content;
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let receivedAny = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const payload = trimmed.slice(5).trim();
+      if (payload === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> };
+        const delta = parsed.choices?.[0]?.delta?.content;
+        if (delta) {
+          receivedAny = true;
+          yield delta;
+        }
+      } catch {
+        // Ignore a malformed/partial SSE chunk — the next chunk will resync.
+      }
+    }
+  }
+
+  if (!receivedAny) throw new Error("LM Studio returned an empty response — is the model fully loaded?");
 }
 
-async function loadLiveContext(): Promise<string> {
+export async function loadLiveContext(): Promise<string> {
   try {
     const [meals, schedule, symptoms, carts] = await Promise.all([
       db.select({ id: mealsTable.id, name: mealsTable.name, estimatedCostCents: mealsTable.estimatedCostCents })
@@ -135,12 +189,16 @@ ${symptomStr}`;
   }
 }
 
-export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string): string {
-  const toneProfile = isZombiePhase
+export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string, overdue?: { isOverdue: boolean; daysOverdue: number; intervalDays?: number; zombiePhaseDays?: number }): string {
+  const toneProfile = overdue?.isOverdue
+    ? "Pops' Haldol injection is overdue — his caregiver has not logged a new dose within the expected 14-day window. Gently ask whether he's seen anyone about his injection recently, without alarming him, and keep the check-in soft and brief either way."
+    : isZombiePhase
     ? "Today is a rest day for Pops — his Haldol cycle is in the high-symptom phase (days 1-5). Keep everything soft, brief, and low-pressure. No long conversations. Gentle check-ins only."
     : "Today is a normal day for Pops. You can be warm, engaged, and conversational. Keep him anchored and positive.";
 
   const questionList = questions.slice(0, 12).map((q, i) => `${i + 1}. [${q.category}|qid:${q.id}] "${q.text}"`).join("\n");
+
+  const scriptSection = "";
 
   return `You are Jessica, the AI companion and care coordinator for a veteran named Pops who lives with his caregiver Ray (Raymo). You have a warm, grounding, and calm voice. You speak clearly and gently — never rushed, never clinical.
 
@@ -162,6 +220,7 @@ ${liveContext ? liveContext + "\n" : ""}YOUR JOB:
 - You know what meals are coming this week and can mention them casually ("we've got your favorites lined up")
 - Parse smart home commands and confirm them (e.g. "turn on the living room light")
 - Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.
+${scriptSection}
 HEALTH CHECK-IN (weave these naturally — pick 3-5 per call based on flow):
 ${questionList}
 
@@ -241,17 +300,17 @@ MED_CONFIRMED → {"type":"MED_CONFIRMED","title":"[medication] taken","details"
 MED_REFUSED → {"type":"MED_REFUSED","title":"[medication] skipped","details":"brief reason"}
 WELLBEING_ALERT → {"type":"WELLBEING_ALERT","title":"concern summary","details":"what was said"}
 
-Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.`;
+Haldol Cycle: Day ${cycleDay ?? "unknown"} of ${overdue?.intervalDays ?? DEFAULT_INTERVAL_DAYS}.${overdue?.isOverdue ? ` ⚠️ INJECTION OVERDUE — ${overdue.daysOverdue} day(s) past the expected ${overdue.intervalDays ?? DEFAULT_INTERVAL_DAYS}-day window. If Ray hasn't mentioned it, casually surface this to him next time you speak, but don't alarm Pops.` : ""}`;
 }
 
-function buildRaySystemPrompt(liveContext: string, cycleDay: number | null, isZombiePhase: boolean): string {
+function buildRaySystemPrompt(liveContext: string, cycleDay: number | null, isZombiePhase: boolean, overdue?: { isOverdue: boolean; daysOverdue: number; intervalDays?: number; zombiePhaseDays?: number }): string {
   return `You are Jessica — br(AI)n's operations AI for Ray, Pops' caregiver and son.
 
 RAY MODE: Direct and operational. Ray is the caregiver — he needs status, decisions, and results fast. No therapy-speak. No filler. Respond like a sharp ops partner to a busy family caregiver. Max 2-3 sentences unless Ray asks for detail.
 
 ${liveContext}
 
-Haldol Cycle: Day ${cycleDay ?? "unknown"} of 14.${isZombiePhase ? " ⚠️ ZOMBIE PHASE (days 1-5) — Pops is in high-symptom window. Keep all Pops-facing activities minimal and low-pressure." : ""}
+Haldol Cycle: Day ${cycleDay ?? "unknown"} of ${overdue?.intervalDays ?? DEFAULT_INTERVAL_DAYS}.${isZombiePhase ? ` ⚠️ ZOMBIE PHASE (days 1-${overdue?.zombiePhaseDays ?? 5}) — Pops is in high-symptom window. Keep all Pops-facing activities minimal and low-pressure.` : ""}${overdue?.isOverdue ? ` ⚠️ INJECTION OVERDUE — ${overdue.daysOverdue} day(s) past the expected ${overdue.intervalDays ?? DEFAULT_INTERVAL_DAYS}-day window. Lead with this — Ray needs to know his next Haldol injection is late.` : ""}
 
 ACTIONS — emit these blocks invisibly after your response when Ray gives instructions. JSON must be a single line. Never show delimiters to Ray.
 
@@ -437,18 +496,24 @@ function parseDeviceCommand(text: string): { device: string; action: string; val
   try { return JSON.parse(match[1]); } catch { return null; }
 }
 
-export async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; isZombiePhase: boolean }> {
+export async function getCurrentCycleInfo(): Promise<{ cycleDay: number | null; intervalDays: number; isZombiePhase: boolean; isOverdue: boolean; daysOverdue: number }> {
+  const unknown = { cycleDay: null, intervalDays: DEFAULT_INTERVAL_DAYS, isZombiePhase: false, isOverdue: false, daysOverdue: 0 };
   try {
     const rows = await db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1);
-    if (!rows[0]) return { cycleDay: null, isZombiePhase: false };
-    const injection = new Date(rows[0].lastInjectionDate);
-    const today = new Date();
-    const diffMs = today.getTime() - injection.getTime();
-    const diffDays = Math.floor(diffMs / 86400000);
-    const cycleDay = (diffDays % 14) + 1;
-    return { cycleDay, isZombiePhase: cycleDay <= 5 };
+    if (!rows[0]) return unknown;
+    const info = computeHaldolCycle(rows[0].lastInjectionDate, {
+      intervalDays: rows[0].intervalDays,
+      zombiePhaseDays: rows[0].zombiePhaseDays,
+    });
+    return {
+      cycleDay: info.cycleDay,
+      intervalDays: info.intervalDays,
+      isZombiePhase: info.isZombiePhase,
+      isOverdue: info.isOverdue,
+      daysOverdue: info.daysOverdue,
+    };
   } catch {
-    return { cycleDay: null, isZombiePhase: false };
+    return unknown;
   }
 }
 
@@ -613,12 +678,12 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       .where(eq(messagesTable.conversationId, conversationId))
       .orderBy(asc(messagesTable.createdAt));
 
-    const { cycleDay, isZombiePhase } = await getCurrentCycleInfo();
+    const { cycleDay, isZombiePhase, isOverdue, daysOverdue } = await getCurrentCycleInfo();
     const liveContext = await loadLiveContext();
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
     const systemPrompt = mode === "ray"
-      ? buildRaySystemPrompt(liveContext, cycleDay, isZombiePhase)
-      : buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext);
+      ? buildRaySystemPrompt(liveContext, cycleDay, isZombiePhase, { isOverdue, daysOverdue })
+      : buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue });
 
     const activeModel = await getActiveModel();
 
@@ -629,7 +694,7 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
     res.write(`data: ${JSON.stringify({ userMessageId: userMsg.id })}\n\n`);
 
     if (activeModel.provider === "lmstudio" && activeModel.lmStudioModelId) {
-      // LM Studio path — non-streaming
+      // LM Studio path — streamed word-by-word, same delta-flush pattern as Gemini below.
       const openaiMessages: Array<{ role: string; content: string }> = [
         { role: "system", content: systemPrompt },
         ...history.map((m) => ({
@@ -638,9 +703,18 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
         })),
       ];
 
-      let fullResponse: string;
+      let fullResponse = "";
+      let prevSafeLength = 0;
       try {
-        fullResponse = await callLmStudio(openaiMessages, activeModel.lmStudioModelId);
+        for await (const delta of streamLmStudio(openaiMessages, activeModel.lmStudioModelId)) {
+          fullResponse += delta;
+          const currentSafe = getStreamSafeVisible(fullResponse);
+          const safeDelta = currentSafe.slice(prevSafeLength);
+          if (safeDelta) {
+            res.write(`data: ${JSON.stringify({ content: safeDelta })}\n\n`);
+            prevSafeLength = currentSafe.length;
+          }
+        }
       } catch (lmErr: unknown) {
         const errMsg = lmErr instanceof Error ? lmErr.message : "LM Studio not running — check that it's open and the model is loaded";
         res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
@@ -649,8 +723,9 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       }
 
       const visibleContent = getStreamSafeVisible(fullResponse);
-      if (visibleContent) {
-        res.write(`data: ${JSON.stringify({ content: visibleContent })}\n\n`);
+      const finalDelta = visibleContent.slice(prevSafeLength);
+      if (finalDelta) {
+        res.write(`data: ${JSON.stringify({ content: finalDelta })}\n\n`);
       }
 
       const deviceCommand = parseDeviceCommand(fullResponse);
@@ -689,22 +764,53 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       let fullResponse = "";
       let prevSafeLength = 0;
 
-      const stream = await ai.models.generateContentStream({
-        model: "gemini-2.5-flash",
-        contents: chatMessages,
-        config: { maxOutputTokens: 8192 },
-      });
+      const flushDelta = (text: string) => {
+        fullResponse += text;
+        const currentSafe = getStreamSafeVisible(fullResponse);
+        const delta = currentSafe.slice(prevSafeLength);
+        if (delta) {
+          res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+          prevSafeLength = currentSafe.length;
+        }
+      };
 
-      for await (const chunk of stream) {
-        const text = chunk.text;
-        if (text) {
-          fullResponse += text;
-          const currentSafe = getStreamSafeVisible(fullResponse);
-          const delta = currentSafe.slice(prevSafeLength);
-          if (delta) {
-            res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
-            prevSafeLength = currentSafe.length;
+      try {
+        const stream = await ai.models.generateContentStream({
+          model: "gemini-2.5-flash",
+          contents: chatMessages,
+          config: { maxOutputTokens: 8192 },
+        });
+
+        for await (const chunk of stream) {
+          if (chunk.text) flushDelta(chunk.text);
+        }
+      } catch (geminiErr) {
+        // Gemini's API is down/erroring — don't let the whole check-in fail
+        // silently. Fall back to whatever LM Studio has loaded locally, if
+        // anything, and only give up if neither provider is reachable.
+        req.log.error({ err: geminiErr }, "Gemini stream failed — checking for a local model fallback");
+        const fallbackModelId = await findAvailableLocalModelId();
+        if (!fallbackModelId) {
+          res.write(`data: ${JSON.stringify({ error: "Jessica's main AI is temporarily unavailable, and no local backup model is running." })}\n\n`);
+          res.end();
+          return;
+        }
+        const fallbackMessages: Array<{ role: string; content: string }> = [
+          { role: "system", content: systemPrompt },
+          ...history.map((m) => ({
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: m.content,
+          })),
+        ];
+        try {
+          for await (const delta of streamLmStudio(fallbackMessages, fallbackModelId)) {
+            flushDelta(delta);
           }
+        } catch (lmErr) {
+          req.log.error({ err: lmErr }, "Local model fallback also failed");
+          res.write(`data: ${JSON.stringify({ error: "Jessica's main AI is temporarily unavailable, and the local backup model also failed to respond." })}\n\n`);
+          res.end();
+          return;
         }
       }
 

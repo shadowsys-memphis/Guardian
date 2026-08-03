@@ -81,7 +81,10 @@ function serializeLog(l: typeof historicalCareLogsTable.$inferSelect) {
 router.get("/rotation/tasks", async (req, res) => {
   await ensureSeeded();
   try {
-    const tasks = await db.select().from(rotationTasksTable).orderBy(asc(rotationTasksTable.createdAt));
+    // createdAt alone isn't a stable sort key — seeded rows share one bulk-insert
+    // timestamp, so ties can resort after an UPDATE and rows appear to jump
+    // around the list on refresh. id is unique and monotonic — use it to break ties.
+    const tasks = await db.select().from(rotationTasksTable).orderBy(asc(rotationTasksTable.createdAt), asc(rotationTasksTable.id));
     res.json(tasks.map(serializeTask));
   } catch (err) {
     req.log.error({ err }, "Failed to list rotation tasks");

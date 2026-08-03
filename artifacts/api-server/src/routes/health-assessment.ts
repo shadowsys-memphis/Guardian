@@ -17,6 +17,8 @@ const DEFAULT_SETTINGS = {
   quietWindowStart: "22:00",
   quietWindowEnd: "07:00",
   engagementIntervalHours: 4,
+  dailyCallEnabled: false,
+  dailyCallTime: "10:00",
 };
 
 const SEED_QUESTIONS = [
@@ -390,6 +392,8 @@ router.put("/health-assessment/settings", async (req, res) => {
       quietWindowStart: z.string().optional(),
       quietWindowEnd: z.string().optional(),
       engagementIntervalHours: z.number().optional(),
+      dailyCallEnabled: z.boolean().optional(),
+      dailyCallTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM 24-hour format").optional(),
     }).parse(req.body);
     const current = await getSettings();
     const merged = { ...current, ...body };

@@ -11,7 +11,7 @@ import {
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay } from "./health-assessment";
-import { buildJessicaSystemPrompt, getCurrentCycleInfo } from "./gemini";
+import { buildJessicaSystemPrompt, getCurrentCycleInfo, loadLiveContext } from "./gemini";
 
 const router: IRouter = Router();
 
@@ -27,6 +27,28 @@ function getAgentId(): string | null {
 
 function getPhoneNumberId(): string | null {
   return process.env["ELEVENLABS_PHONE_NUMBER_ID"] ?? null;
+}
+
+/**
+ * ElevenLabs needs its internal `phnum_…` ID, but the env var may hold the
+ * Twilio SID (starts with "PN"). This function fetches the phone-numbers list
+ * and resolves the correct internal ID automatically.
+ */
+async function resolveElevenLabsPhoneNumberId(apiKey: string, storedId: string): Promise<string> {
+  // Already an ElevenLabs internal ID — use it directly.
+  if (storedId.startsWith("phnum_")) return storedId;
+
+  try {
+    const res = await fetch(`${ELEVENLABS_BASE}/convai/phone-numbers`, {
+      headers: { "xi-api-key": apiKey },
+    });
+    if (!res.ok) return storedId;
+    const list = await res.json() as Array<{ phone_number: string; phone_number_id: string }>;
+    const match = list.find((p) => p.phone_number === storedId || p.phone_number_id === storedId);
+    if (match) return match.phone_number_id;
+  } catch {}
+
+  return storedId;
 }
 
 async function getPopsPhonenumber(): Promise<string | null> {
@@ -77,30 +99,53 @@ function parseCravingTag(text: string): string | null {
   try { return JSON.parse(match[1])?.meal ?? null; } catch { return null; }
 }
 
-router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, res: Response) => {
+export type OutboundCallResult =
+  | { ok: true; elevenLabsConversationId: string; sessionId: number; conversationId: number }
+  | { ok: false; status: number; error: string; message?: string };
+
+/**
+ * Core outbound-call logic shared by the manual "Call Now" route and the
+ * daily call scheduler (lib/call-scheduler.ts). Never throws — always
+ * resolves to a result object so the scheduler's tick loop can log and
+ * move on instead of crashing the interval.
+ */
+export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?: string }): Promise<OutboundCallResult> {
   try {
     const apiKey = getElevenLabsKey();
     const agentId = getAgentId();
-    const phoneNumberId = getPhoneNumberId();
+    const rawPhoneNumberId = getPhoneNumberId();
 
-    if (!apiKey || !agentId || !phoneNumberId) {
-      res.status(503).json({
+    if (!apiKey || !agentId || !rawPhoneNumberId) {
+      return {
+        ok: false,
+        status: 503,
         error: "elevenlabs_not_configured",
         message: "ElevenLabs credentials not configured. Set ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID, and ELEVENLABS_PHONE_NUMBER_ID.",
-      });
-      return;
+      };
     }
 
-    const popsPhone = await getPopsPhonenumber();
-    if (!popsPhone) {
-      res.status(400).json({
-        error: "no_phone_number",
-        message: "Pops' phone number is not set. Add it in Settings → Jessica.",
-      });
-      return;
+    const phoneNumberId = await resolveElevenLabsPhoneNumberId(apiKey, rawPhoneNumberId);
+
+    let targetPhone: string | null = null;
+
+    if (opts?.test) {
+      targetPhone = process.env["ADMIN_PHONE_NUMBER"] ?? null;
+      if (!targetPhone) {
+        return { ok: false, status: 400, error: "no_admin_phone", message: "ADMIN_PHONE_NUMBER secret is not set." };
+      }
+    } else {
+      targetPhone = await getPopsPhonenumber();
+      if (!targetPhone) {
+        return {
+          ok: false,
+          status: 400,
+          error: "no_phone_number",
+          message: "Pops' phone number is not set. Add it in Settings → Jessica.",
+        };
+      }
     }
 
-    const { cycleDay, isZombiePhase } = await getCurrentCycleInfo();
+    const { cycleDay, isZombiePhase, isOverdue, daysOverdue } = await getCurrentCycleInfo();
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
 
     const careContextLines: string[] = [];
@@ -128,16 +173,23 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
       }
     } catch {}
 
-    const liveContext = careContextLines.length > 0
-      ? `CURRENT CARE CONTEXT — IMPORTANT:\n${careContextLines.join("\n")}\n`
-      : undefined;
+    // Same live schedule/meals/symptoms context the web-chat Jessica gets —
+    // without this the phone call couldn't answer schedule questions.
+    const scheduleContext = await loadLiveContext();
+    const careContextBlock = careContextLines.length > 0
+      ? `CURRENT CARE CONTEXT — IMPORTANT:\n${careContextLines.join("\n")}\n\n`
+      : "";
+    // Scheduled jobs (appointment reminders, overdue-Haldol nudges) inject a
+    // purpose for the call here — see lib/call-scheduler.ts.
+    const extraBlock = opts?.extraContext ? `${opts.extraContext}\n\n` : "";
+    const liveContext = extraBlock + careContextBlock + scheduleContext;
 
-    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext);
+    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue });
 
     const elevenLabsBody = {
       agent_id: agentId,
       agent_phone_number_id: phoneNumberId,
-      to_number: popsPhone,
+      to_number: targetPhone,
       conversation_config_override: {
         agent: {
           prompt: {
@@ -147,7 +199,7 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
       },
     };
 
-    const elRes = await fetch(`${ELEVENLABS_BASE}/convai/conversations/outbound-call`, {
+    const elRes = await fetch(`${ELEVENLABS_BASE}/convai/twilio/outbound-call`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -158,9 +210,7 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
 
     if (!elRes.ok) {
       const errBody = await elRes.text().catch(() => "unknown");
-      req.log.error({ status: elRes.status, body: errBody }, "ElevenLabs outbound call failed");
-      res.status(502).json({ error: "ElevenLabs call failed", details: errBody });
-      return;
+      return { ok: false, status: 502, error: "ElevenLabs call failed", message: errBody };
     }
 
     const elData = await elRes.json() as { conversation_id: string };
@@ -176,6 +226,9 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
       conversationId: convo.id,
       sessionDate: today,
       cycleDay: cycleDay ?? null,
+      // Not yet confirmed reached — the webhook flips this to true once the
+      // transcript shows Pops actually responded.
+      reached: false,
     }).returning();
 
     await pool.query(
@@ -183,16 +236,25 @@ router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, 
       [conversationId, session.id]
     );
 
-    res.json({
+    return {
       ok: true,
       elevenLabsConversationId: conversationId,
       sessionId: session.id,
       conversationId: convo.id,
-    });
+    };
   } catch (err) {
-    req.log.error({ err }, "Failed to initiate outbound call");
-    res.status(500).json({ error: "Failed to initiate call" });
+    return { ok: false, status: 500, error: "Failed to initiate call", message: err instanceof Error ? err.message : String(err) };
   }
+}
+
+router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, res: Response) => {
+  const result = await triggerOutboundCall({ test: req.body?.test === true });
+  if (!result.ok) {
+    if (result.status >= 500) req.log.error({ result }, "Failed to initiate outbound call");
+    res.status(result.status).json({ error: result.error, message: result.message });
+    return;
+  }
+  res.json(result);
 });
 
 router.get("/jessica/call-status/:conversationId", requireLocalSession, async (req: Request, res: Response) => {
@@ -300,6 +362,12 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
       .map((t) => `${t.role === "agent" ? "Jessica" : "Pops"}: ${t.message}`)
       .join("\n");
 
+    // "Reached" means Pops actually said something back — not just that the
+    // call connected. A call that rings out to voicemail can still produce a
+    // webhook with an empty or agent-only transcript.
+    const popsSpoke = transcript.some((t) => t.role !== "agent" && t.message.trim().length > 0);
+    const reached = webhookData.status !== "failed" && popsSpoke;
+
     const healthDataTags = parseHealthDataTags(agentText);
     const cravingMeal = parseCravingTag(agentText);
 
@@ -342,11 +410,13 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
     const callSummary = summary
       ?? (categories.length > 0
         ? `Phone call with Pops. Covered: ${categories.join(", ")}. ${healthDataTags.length} data point(s) recorded.${flagged ? " ⚠️ Flagged." : ""}`
-        : "Phone call with Pops. No structured health data captured.");
+        : reached
+          ? "Phone call with Pops. No structured health data captured."
+          : "Call did not reach Pops (no answer or voicemail).");
 
     await pool.query(
-      `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2 WHERE id = $3`,
-      [callSummary, flagged, sessionId]
+      `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2, transcript = $3, reached = $4 WHERE id = $5`,
+      [callSummary, flagged, allText || null, reached, sessionId]
     );
 
     req.log.info({ sessionId, elevenLabsConversationId, healthDataCount: healthDataTags.length }, "ElevenLabs webhook processed");

@@ -1,2 +1,1 @@
-export { generateImage } from "./client";
-export { ai } from "../client";
+export { ai, generateImage } from "./client";

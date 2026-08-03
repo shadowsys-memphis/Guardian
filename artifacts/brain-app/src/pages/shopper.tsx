@@ -41,6 +41,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { formatPacificDateTime } from "@/lib/time";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -143,7 +144,7 @@ export function ShopperPage() {
     }
     const lines: string[] = [
       `br(AI)n Weekly Meal Plan — Week of ${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}`,
-      `Generated: ${new Date().toLocaleString()}`,
+      `Generated: ${formatPacificDateTime(new Date())}`,
       `Budget: $${((cart?.totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $${((cart?.budgetCents ?? 15000) / 100).toFixed(2)}`,
       `Status: ${(cart?.status ?? "pending").toUpperCase()}`,
       "",
@@ -209,8 +210,9 @@ export function ShopperPage() {
   })();
 
   const handleRemix = () => {
-    const plan = remixedPlan || currentPlanText;
-    if (!plan || !remixInput.trim()) return;
+    if (!remixInput.trim()) return;
+    // Cart can be empty — Gemini can still build a plan from scratch off the prompt.
+    const plan = remixedPlan || currentPlanText || "(No meals in the cart yet — build a new plan from scratch.)";
     remixMealPlanMutation.mutate({ data: { currentPlan: plan, remixPrompt: remixInput.trim() } });
   };
 
@@ -469,7 +471,7 @@ export function ShopperPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="p-3 rounded-sm border border-border/40 bg-secondary/20 min-h-[80px] text-sm text-muted-foreground whitespace-pre-wrap font-mono text-xs leading-relaxed">
-            {remixedPlan || currentPlanText || "Add meals to the cart to generate a plan for remix."}
+            {remixedPlan || currentPlanText || "Cart is empty — describe what you want and Gemini will build a plan from scratch."}
           </div>
           <div className="flex gap-2">
             <Input
@@ -479,7 +481,7 @@ export function ShopperPage() {
               className="flex-1 text-sm"
               onKeyDown={(e) => { if (e.key === "Enter" && remixInput.trim()) handleRemix(); }}
             />
-            <Button size="sm" onClick={handleRemix} disabled={!remixInput.trim() || !currentPlanText || remixMealPlanMutation.isPending}>
+            <Button size="sm" onClick={handleRemix} disabled={!remixInput.trim() || remixMealPlanMutation.isPending}>
               {remixMealPlanMutation.isPending ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Wand2 size={14} className="mr-1" />}
               Remix
             </Button>

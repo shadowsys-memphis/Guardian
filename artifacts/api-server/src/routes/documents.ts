@@ -8,7 +8,7 @@ import {
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { dispatch } from "../lib/hermes";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -60,9 +60,11 @@ Rules:
 
 router.get("/documents/care-context", async (req, res) => {
   try {
-    const keys = ["dietary_profile", "activity_restrictions"];
+    // inArray, not a raw `= ANY(${keys})` — Drizzle binds a JS array as a
+    // single scalar parameter, which Postgres rejects, so the raw form threw
+    // a 500 on every request and silently hid the dashboard's care alerts.
     const rows = await db.select().from(appSettingsTable).where(
-      sql`${appSettingsTable.key} = ANY(${keys})`
+      inArray(appSettingsTable.key, ["dietary_profile", "activity_restrictions"])
     );
     const result: Record<string, unknown> = {};
     for (const row of rows) {
@@ -87,6 +89,71 @@ router.get("/documents", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to list medical documents");
     res.status(500).json({ error: "Failed to list documents" });
+  }
+});
+
+// Gemini's responseMimeType:"application/json" only guarantees valid JSON
+// syntax — it doesn't guarantee our schema. A field can come back as the
+// wrong type (e.g. appointments: "none found" instead of []) or be missing
+// entirely. This coerces whatever comes back into the shape the rest of the
+// app (and the frontend's .map() calls) expect, instead of crashing on it.
+const looseString = z.union([z.string(), z.number(), z.boolean()]).transform(String).nullable().catch(null);
+const ExtractedAppointment = z.object({
+  date: looseString.catch(null),
+  time: looseString.catch(null),
+  provider: looseString.catch(null),
+  location: looseString.catch(null),
+  type: looseString.catch(null),
+}).catch({ date: null, time: null, provider: null, location: null, type: null });
+const ExtractedMedication = z.object({
+  name: looseString.catch(null),
+  dose: looseString.catch(null),
+  frequency: looseString.catch(null),
+  instructions: looseString.catch(null),
+  timeOfDay: looseString.catch(null),
+}).catch({ name: null, dose: null, frequency: null, instructions: null, timeOfDay: null });
+const ExtractedDocumentSchema = z.object({
+  source_label: looseString.catch("Medical Document"),
+  patient_name: looseString,
+  date: looseString,
+  physician: looseString,
+  facility: looseString,
+  appointments: z.array(ExtractedAppointment).catch([]),
+  medications: z.array(ExtractedMedication).catch([]),
+  dietary_restrictions: z.array(looseString).catch([]),
+  activity_restrictions: z.array(looseString).catch([]),
+  wound_care: z.array(looseString).catch([]),
+  clinical_notes: looseString.catch(""),
+  discharge_instructions: looseString,
+});
+
+function normalizeExtracted(parsed: unknown, rawText: string): Record<string, unknown> {
+  if (typeof parsed !== "object" || parsed === null) {
+    return { source_label: "Medical Document", raw_text: rawText };
+  }
+  return ExtractedDocumentSchema.parse(parsed);
+}
+
+router.delete("/documents/:id", async (req, res) => {
+  try {
+    await ensureMedicalDocsTable();
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      res.status(400).json({ error: "Invalid document id" });
+      return;
+    }
+    const deleted = await db
+      .delete(medicalDocumentsTable)
+      .where(eq(medicalDocumentsTable.id, id))
+      .returning({ id: medicalDocumentsTable.id });
+    if (deleted.length === 0) {
+      res.status(404).json({ error: "Document not found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete document");
+    res.status(500).json({ error: "Failed to delete document" });
   }
 });
 
@@ -115,12 +182,13 @@ router.post("/documents/scan", async (req, res) => {
     });
 
     const rawText = response.text ?? "{}";
-    let extracted: Record<string, unknown>;
+    let parsed: unknown;
     try {
-      extracted = JSON.parse(rawText);
+      parsed = JSON.parse(rawText);
     } catch {
-      extracted = { source_label: "Medical Document", raw_text: rawText };
+      parsed = null;
     }
+    const extracted = normalizeExtracted(parsed, rawText);
 
     const [doc] = await db.insert(medicalDocumentsTable).values({
       tenantId: "local",
@@ -164,6 +232,44 @@ router.post("/documents/apply", async (req, res) => {
       activity_restrictions: z.array(z.string()).default([]),
       clinical_notes: z.string().default(""),
     }).parse(req.body);
+
+    // Block re-applying a document that's already reflected in the active
+    // care plan — either because this exact doc row was already applied
+    // (and the caller isn't explicitly asking to update it via overwrite),
+    // or because another document with identical extracted text was applied
+    // earlier (same paperwork scanned/uploaded twice).
+    const thisDocRows = await db
+      .select({ appliedAt: medicalDocumentsTable.appliedAt, rawText: medicalDocumentsTable.rawText })
+      .from(medicalDocumentsTable)
+      .where(eq(medicalDocumentsTable.id, body.docId))
+      .limit(1);
+    const thisDoc = thisDocRows[0];
+
+    if (thisDoc?.appliedAt && !body.overwrite) {
+      res.status(409).json({
+        error: "already_applied",
+        message: "This document has already been applied to the care plan. Use \"Update Care Plan\" if you want to re-apply it.",
+      });
+      return;
+    }
+
+    if (thisDoc?.rawText) {
+      const dupeRows = await db
+        .select({ id: medicalDocumentsTable.id, sourceLabel: medicalDocumentsTable.sourceLabel })
+        .from(medicalDocumentsTable)
+        .where(
+          sql`${medicalDocumentsTable.rawText} = ${thisDoc.rawText} AND ${medicalDocumentsTable.id} != ${body.docId} AND ${medicalDocumentsTable.appliedAt} IS NOT NULL`
+        )
+        .limit(1);
+      if (dupeRows.length > 0 && !body.overwrite) {
+        res.status(409).json({
+          error: "duplicate_of_applied_document",
+          message: `This looks like the same document as "${dupeRows[0].sourceLabel}" (already applied to the care plan). Skipping to avoid duplicate entries.`,
+          matchingDocId: dupeRows[0].id,
+        });
+        return;
+      }
+    }
 
     const details: string[] = [];
 

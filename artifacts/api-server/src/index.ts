@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runTenantMigration } from "./lib/tenant-migration";
+import { startCronScheduler } from "./lib/call-scheduler";
 
 const rawPort = process.env["PORT"] ?? process.env["API_PORT"] ?? "8080";
 
@@ -24,6 +25,8 @@ async function start() {
     }
     logger.info({ port }, "Server listening");
   });
+
+  startCronScheduler();
 }
 
 start();

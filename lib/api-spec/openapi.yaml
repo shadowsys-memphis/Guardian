@@ -1604,13 +1604,28 @@ components:
           description: "Injection dose in milligrams (null until confirmed)"
         cycleDay:
           type: integer
-          description: "Current day within the 14-day cycle (1-14)"
+          description: "Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped)"
+        intervalDays:
+          type: integer
+          description: "Prescribed dosing interval in days (e.g. 14 biweekly, 28 monthly)"
+        zombiePhaseDays:
+          type: integer
+          description: "Length of the post-injection high-symptom window, in days"
+        daysSinceInjection:
+          type: integer
+          description: "Days elapsed since lastInjectionDate"
         isZombiePhase:
           type: boolean
-          description: "True on days 1-5 when symptoms are typically highest"
+          description: "True while cycleDay is within the post-injection high-symptom window"
         nextInjectionDate:
           type: string
           format: date
+        isOverdue:
+          type: boolean
+          description: "True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle"
+        daysOverdue:
+          type: integer
+          description: "Days past the expected injection date; 0 when not overdue"
         notes:
           type: string
       required:
@@ -1619,6 +1634,8 @@ components:
         - cycleDay
         - isZombiePhase
         - nextInjectionDate
+        - isOverdue
+        - daysOverdue
 
     UpdateHaldolCycleInput:
       type: object
@@ -1630,6 +1647,14 @@ components:
           type: integer
           nullable: true
           description: "Injection dose in milligrams"
+        intervalDays:
+          type: integer
+          minimum: 1
+          description: "Prescribed dosing interval in days — set when the prescriber changes the schedule"
+        zombiePhaseDays:
+          type: integer
+          minimum: 0
+          description: "Length of the post-injection high-symptom window, in days"
         notes:
           type: string
 
@@ -1901,6 +1926,10 @@ components:
           nullable: true
         flagged:
           type: boolean
+        transcript:
+          type: string
+          nullable: true
+          description: "Full call transcript (Jessica/Pops turns), saved when the call ends"
       required:
         - id
         - sessionDate
@@ -2256,6 +2285,12 @@ components:
         engagementIntervalHours:
           type: integer
           description: "Hours of inactivity before Jessica initiates a check-in"
+        dailyCallEnabled:
+          type: boolean
+          description: "When true, the server automatically places the daily Jessica call at dailyCallTime"
+        dailyCallTime:
+          type: string
+          description: "HH:MM 24-hour format, Pacific time, e.g. 10:00"
       required: []
 
     FlaggedEvent:

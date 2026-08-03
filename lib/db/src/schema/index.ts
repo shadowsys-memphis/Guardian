@@ -54,6 +54,11 @@ export const haldolCycleTable = pgTable("haldol_cycle", {
   id: serial("id").primaryKey(),
   lastInjectionDate: date("last_injection_date").notNull(),
   doseMg: integer("dose_mg"),
+  // Prescriber-set dosing interval. Default 14 preserves the historical
+  // biweekly assumption; set per-cycle when the prescription changes.
+  intervalDays: integer("interval_days").notNull().default(14),
+  // Post-injection high-symptom window, in days from the injection.
+  zombiePhaseDays: integer("zombie_phase_days").notNull().default(5),
   notes: text("notes"),
 });
 
@@ -116,6 +121,12 @@ export const callSessionsTable = pgTable("call_sessions", {
   summary: text("summary"),
   flagged: boolean("flagged").notNull().default(false),
   elevenlabsConversationId: text("elevenlabs_conversation_id"),
+  // Whether this specific outbound call was actually answered/engaged with
+  // (Pops spoke), not just dialed. Defaults true so historical rows (created
+  // before this column existed) aren't retroactively flagged as missed; new
+  // outbound-call rows explicitly start false until the webhook confirms it.
+  reached: boolean("reached").notNull().default(true),
+  transcript: text("transcript"),
 });
 
 export const healthDataPointsTable = pgTable("health_data_points", {

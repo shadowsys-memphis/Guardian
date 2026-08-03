@@ -1,3 +1,4 @@
 - [DB migration via raw SQL](db-migration-raw-sql.md) — drizzle-kit push needs interactive TTY; use `node -e` with pg Pool for non-interactive migrations.
 - [Brain Guardian tenant auth](tenant-auth-pattern.md) — multi-tenant auth uses JWT + bcrypt; VAULT_PASSPHRASE env var gates Ray's local access; legacy fallback if neither set.
 - [Hermes adapter + careEventsTable](hermes-care-events.md) — task agents can add new DB tables to hermes.ts without adding the schema; always check lib/db/src/schema/index.ts export when API server build fails on missing import.
+- [api-server has no backend hot-reload](api-server-hot-reload.md) — dev script is build+start; restart the workflow to make backend source changes take effect.

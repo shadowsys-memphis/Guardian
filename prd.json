@@ -2,16 +2,19 @@
   {
     "id": "BR-001",
     "title": "Fix buttonVariants missing export from button.tsx",
+    "lane": "foundation",
     "acceptanceCriteria": [
-      "button.tsx exports a `buttonVariants` cva helper alongside the Button component",
+      "button.tsx exports a `buttonVariants` helper alongside the Button component",
       "`pnpm run typecheck` reports zero errors in alert-dialog.tsx, calendar.tsx, and pagination.tsx",
       "No existing Button usage is broken"
     ],
-    "passes": false
+    "passes": true,
+    "verified": "2026-07-25 — export present; tsc shows no buttonVariants/alert-dialog/calendar/pagination errors"
   },
   {
     "id": "BR-002",
     "title": "Delete conflicting public/guardian.html static file",
+    "lane": "foundation",
     "acceptanceCriteria": [
       "`artifacts/brain-app/public/guardian.html` is deleted",
       "The MPA entry at `artifacts/brain-app/guardian.html` still exists and is unchanged",
@@ -23,6 +26,7 @@
   {
     "id": "BR-003",
     "title": "Add /guardian/success production rewrite to artifact.toml",
+    "lane": "foundation",
     "acceptanceCriteria": [
       "`artifacts/brain-app/.replit-artifact/artifact.toml` has an explicit rewrite for `/guardian/success` → `/guardian-success.html`",
       "`artifacts/brain-app/.replit-artifact/artifact.toml` has an explicit rewrite for `/guardian/success/` → `/guardian-success.html`",
@@ -30,17 +34,96 @@
       "`artifacts/brain-app/guardian-success.html` exists as an MPA entry (create if missing)",
       "A production HTTP fetch of `/guardian/success` returns the guardian-success-specific `<title>` and meta tags, not the generic SPA shell"
     ],
-    "passes": false
+    "passes": true,
+    "verified": "2026-07-25 — rewrites + guardian-success.html present (commit 72ecff5)"
   },
   {
     "id": "BR-004",
     "title": "Add uncomplete schedule task endpoint",
+    "lane": "foundation",
     "acceptanceCriteria": [
       "A new endpoint exists (e.g. `DELETE /api/schedule/:id/complete`) that sets `is_completed = false` and `completed_at = null`",
       "The endpoint is documented in `lib/api-spec/openapi.yaml` with operationId `uncompleteScheduleTask`",
       "Codegen runs clean: `pnpm --filter @workspace/api-spec run codegen` produces a `useUncompleteScheduleTask` hook",
       "The Done badge in `schedule-dnd.tsx` toggles back to Pending when clicked, calling the new hook",
       "`pnpm run typecheck` passes with zero new errors"
+    ],
+    "passes": false
+  },
+  {
+    "id": "MV-001",
+    "title": "Prove rules generalize beyond one household",
+    "lane": "market-validation",
+    "acceptanceCriteria": [
+      "A second caregiver configures a different care profile end-to-end without code changes for that household",
+      "No personal names are required in schema defaults, seeds, or prompts for the test",
+      "Evidence noted in progress.txt"
+    ],
+    "passes": false
+  },
+  {
+    "id": "MV-002",
+    "title": "Prove another caregiver can configure without the builder",
+    "lane": "market-validation",
+    "acceptanceCriteria": [
+      "A non-builder caregiver completes setup using only in-product guidance (or a one-page script)",
+      "Builder does not intervene during the timed attempt",
+      "Blockers are logged in progress.txt"
+    ],
+    "passes": false
+  },
+  {
+    "id": "MV-003",
+    "title": "Prove measurable burden reduction or fewer missed actions",
+    "lane": "market-validation",
+    "acceptanceCriteria": [
+      "Before/after metrics defined for one week (missed meds/meals/appointments and/or caregiver hours)",
+      "At least one household run completes with recorded numbers",
+      "Result and method noted in progress.txt"
+    ],
+    "passes": false
+  },
+  {
+    "id": "MV-004",
+    "title": "Prove trust posture for sensitive household and health data",
+    "lane": "market-validation",
+    "acceptanceCriteria": [
+      "Written trust interview with at least 3 caregivers (what must stay local vs cloud)",
+      "Map findings to current vault/session/Hermes boundaries",
+      "Gaps listed without implementing new crypto unless scoped"
+    ],
+    "passes": false
+  },
+  {
+    "id": "MV-005",
+    "title": "Prove voice automation safety around meds, purchasing, crisis",
+    "lane": "market-validation",
+    "acceptanceCriteria": [
+      "Written safety rules: what voice may do alone vs requires caregiver approval vs must refuse",
+      "Exercise approval/refusal paths for medication, purchase, and crisis-adjacent prompts",
+      "Findings noted in progress.txt; no unsafe auto-actions added"
+    ],
+    "passes": false
+  },
+  {
+    "id": "MV-006",
+    "title": "Prove willingness to pay (price probe)",
+    "lane": "market-validation",
+    "acceptanceCriteria": [
+      "5–10 caregiver problem interviews with an explicit price probe",
+      "Stripe revive is not required for this story",
+      "Summary of who would pay what, and objections, in progress.txt"
+    ],
+    "passes": false
+  },
+  {
+    "id": "MV-007",
+    "title": "Define essential experience slice (no full architecture required)",
+    "lane": "market-validation",
+    "acceptanceCriteria": [
+      "One-page essential slice written: surfaces, APIs, and data needed to own the market seam",
+      "Explicit exclusion list of modules deferred",
+      "Slice aligns with docs/core-guardian/market-thesis.md positioning statement"
     ],
     "passes": false
   }

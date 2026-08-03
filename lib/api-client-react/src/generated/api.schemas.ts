@@ -264,11 +264,21 @@ export interface HaldolCycle {
   lastInjectionDate: string;
   /** Injection dose in milligrams (null until confirmed) */
   doseMg?: number | null;
-  /** Current day within the 14-day cycle (1-14) */
+  /** Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped) */
   cycleDay: number;
-  /** True on days 1-5 when symptoms are typically highest */
+  /** Prescribed dosing interval in days (e.g. 14 biweekly, 28 monthly) */
+  intervalDays?: number;
+  /** Length of the post-injection high-symptom window, in days */
+  zombiePhaseDays?: number;
+  /** Days elapsed since lastInjectionDate */
+  daysSinceInjection?: number;
+  /** True while cycleDay is within the post-injection high-symptom window */
   isZombiePhase: boolean;
   nextInjectionDate: string;
+  /** True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle */
+  isOverdue: boolean;
+  /** Days past the expected injection date; 0 when not overdue */
+  daysOverdue: number;
   notes?: string;
 }
 
@@ -276,6 +286,16 @@ export interface UpdateHaldolCycleInput {
   lastInjectionDate?: string;
   /** Injection dose in milligrams */
   doseMg?: number | null;
+  /**
+   * Prescribed dosing interval in days — set when the prescriber changes the schedule
+   * @minimum 1
+   */
+  intervalDays?: number;
+  /**
+   * Length of the post-injection high-symptom window, in days
+   * @minimum 0
+   */
+  zombiePhaseDays?: number;
   notes?: string;
 }
 
@@ -417,6 +437,8 @@ export interface CallSession {
   endedAt?: string | null;
   summary?: string | null;
   flagged: boolean;
+  /** Full call transcript (Jessica/Pops turns), saved when the call ends */
+  transcript?: string | null;
 }
 
 export interface StartCallSessionInput {
@@ -610,6 +632,10 @@ export interface AssessmentSettings {
   quietWindowEnd?: string;
   /** Hours of inactivity before Jessica initiates a check-in */
   engagementIntervalHours?: number;
+  /** When true, the server automatically places the daily Jessica call at dailyCallTime */
+  dailyCallEnabled?: boolean;
+  /** HH:MM 24-hour format, Pacific time, e.g. 10:00 */
+  dailyCallTime?: string;
 }
 
 export interface FlaggedEvent {

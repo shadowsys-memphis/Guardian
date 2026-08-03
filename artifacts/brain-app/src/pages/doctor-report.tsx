@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { format } from "date-fns";
+import { formatPacificDateTime, formatPacificLongDate } from "@/lib/time";
 import { Printer, FileText, TrendingUp, AlertTriangle, CheckCircle2, XCircle, MinusCircle, Activity, ChevronLeft } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { useGetWeeklyReport, useGetMonthlyReport } from "@workspace/api-client-react";
@@ -118,7 +118,7 @@ function WeeklyTab() {
             {r.symptomLogs.map((log: any, i: number) => (
               <div key={i} className="border rounded-lg p-3 bg-white text-sm print:border-gray-300">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-xs text-gray-500">{format(new Date(log.loggedAt), "MMM d, h:mm a")}</span>
+                  <span className="text-xs text-gray-500">{formatPacificDateTime(log.loggedAt)}</span>
                   {log.ptsdTrigger && <span className="text-xs bg-red-100 text-red-700 px-1.5 rounded font-semibold">PTSD Trigger</span>}
                   <span className="text-xs text-gray-600">Hallucination intensity: <strong>{log.hallucinationIntensity}/10</strong></span>
                   <span className="text-xs text-gray-600">Motivation: <strong>{log.motivationLevel}/5</strong></span>
@@ -357,7 +357,7 @@ export function DoctorReport() {
                   {tab === "weekly" ? "Weekly" : "Monthly"} Health Report — Ray's Pops
                 </h1>
                 <p className="text-sm text-gray-500 print:block hidden mt-1">
-                  Generated {format(new Date(), "MMMM d, yyyy")} · Confidential — For Medical Review Only
+                  Generated {formatPacificLongDate(new Date())} · Confidential — For Medical Review Only
                 </p>
               </div>
             </div>
