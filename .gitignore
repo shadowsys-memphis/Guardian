@@ -51,3 +51,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# local env & agent settings — never commit secrets
+.env
+.env.*
+!.env.example
+.claude/settings.local.json

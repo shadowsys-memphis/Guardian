@@ -2,13 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runTenantMigration } from "./lib/tenant-migration";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+const rawPort = process.env["PORT"] ?? process.env["API_PORT"] ?? "8080";
 
 const port = Number(rawPort);
 

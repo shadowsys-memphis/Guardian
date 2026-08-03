@@ -36,7 +36,9 @@ app.use(
         origin.endsWith(".replit.dev") ||
         origin.endsWith(".repl.co") ||
         origin === "http://localhost:5173" ||
+        origin === "http://127.0.0.1:5173" ||
         origin === "http://localhost:3000" ||
+        origin === "http://localhost:23920" ||
         origin === process.env["VITE_PUBLIC_SITE_URL"]
       ) {
         callback(null, true);
