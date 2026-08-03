@@ -21,7 +21,7 @@ Then open **http://localhost:5173**
 
 ## What `pnpm setup` does
 1. Creates `.env` if missing  
-2. Starts Postgres (`docker compose up -d`)  
+2. Uses the Postgres `DATABASE_URL` points at — starts Docker only if nothing answers there  
 3. `pnpm install`  
 4. Pushes DB schema  
 
@@ -29,7 +29,7 @@ Then open **http://localhost:5173**
 Starts API (`:8080`) + app (`:5173`) with `/api` proxied automatically.
 
 ## Requirements
-- Docker Desktop running  
+- A Postgres: native (point `DATABASE_URL` at it) **or** Docker Desktop (auto-fallback)  
 - pnpm (`npm i -g pnpm`)  
 - Gemini API key → https://aistudio.google.com/apikey  
 
