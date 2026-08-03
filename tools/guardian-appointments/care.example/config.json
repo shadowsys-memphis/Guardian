@@ -1,0 +1,16 @@
+{
+  "_comment": "SCHEMA EXAMPLE ONLY — no real care data. Copy to $GUARDIAN_CARE_DIR (default ~/.guardian/care) and fill in there, outside this repo.",
+  "apiBase": "http://localhost:5000",
+  "timeZone": "America/Los_Angeles",
+  "eveningHeadsUpTime": "19:00",
+  "compileTime": "17:00",
+  "stallMinutes": 20,
+  "minAppointmentGapMinutes": 90,
+  "ntfyTopic": "",
+  "psychProviders": [],
+  "anchors": {
+    "after_breakfast": { "phrase": "after breakfast", "earliest": "08:00", "latest": "10:30" },
+    "after_lunch":     { "phrase": "after lunch",     "earliest": "12:30", "latest": "14:30" },
+    "late_afternoon":  { "phrase": "later this afternoon", "earliest": "15:00", "latest": "17:30" }
+  }
+}

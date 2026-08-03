@@ -45,6 +45,7 @@ Edits to this repo do not touch OpenClaw, ClawX, or LM Studio unless explicitly 
    ```
    pwd
    git rev-parse --show-toplevel
+   git branch --show-current
    git remote -v
    git status --short
    ```

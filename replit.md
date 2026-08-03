@@ -105,3 +105,14 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 - `emitDeclarationOnly` — we only emit `.d.ts` files during typecheck
 - Run codegen: `pnpm --filter @workspace/api-spec run codegen`
 - Push DB schema: `pnpm --filter @workspace/db run push`
+
+## Fleet ground rules (added 2026-07-27)
+
+This repo is worked by a multi-agent fleet. `AGENTS.md` outranks your defaults — read it before any edit. For the Replit Agent specifically:
+
+- Never push from this workspace to GitHub. Platform auto-commits are tolerated; nothing more.
+- Never add git remotes or extra branches beyond platform behavior.
+- Never run DB migrations or schema pushes on your own — they require an approved plan.
+- Secrets are platform-injected; never print, log, or echo env values.
+- This workspace is a deployment copy, not the source of truth. If it disagrees with GitHub or Ray's local machines, report the disagreement — do not resolve it.
+- Multiple distinct systems share the names Hermes, OpenClaw, and Guardian — see `NAMING_CENSUS.md` before touching anything so named.
