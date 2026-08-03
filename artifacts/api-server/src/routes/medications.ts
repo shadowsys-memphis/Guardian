@@ -73,7 +73,10 @@ router.put("/medications/:id", async (req, res) => {
       active: z.boolean().optional(),
     }).parse(req.body);
     const [updated] = await db.update(medicationsTable).set(body).where(eq(medicationsTable.id, id)).returning();
-    if (!updated) return res.status(404).json({ error: "Not found" });
+    if (!updated) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     res.json(updated);
   } catch (err) {
     if (err instanceof z.ZodError) {

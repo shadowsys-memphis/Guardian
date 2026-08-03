@@ -2170,8 +2170,10 @@ export function ShopperTab() {
           <div className="flex items-center gap-0">
             {(["Draft", "Approved", "Ordered"] as const).map((step, idx) => {
               const stepStatus = ["pending", "approved", "ordered"][idx];
+              // "ordered" is not yet a status the API emits (fulfillment lives in
+              // cart_fulfillments) — the stepper anticipates it, so compare as string.
               const isDone =
-                cartStatus === "ordered"
+                (cartStatus as string) === "ordered"
                   ? idx <= 2
                   : cartStatus === "approved"
                     ? idx <= 1
@@ -2179,7 +2181,7 @@ export function ShopperTab() {
               const isCurrent =
                 (step === "Draft" && cartStatus === "pending") ||
                 (step === "Approved" && cartStatus === "approved") ||
-                (step === "Ordered" && cartStatus === "ordered");
+                (step === "Ordered" && (cartStatus as string) === "ordered");
               const isCancelled = cartStatus === "dismissed" && step === "Draft";
               return (
                 <div key={step} className="flex items-center flex-1">

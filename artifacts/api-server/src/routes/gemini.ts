@@ -142,10 +142,6 @@ export function buildJessicaSystemPrompt(questions: { id: number; text: string; 
 
   const questionList = questions.slice(0, 12).map((q, i) => `${i + 1}. [${q.category}|qid:${q.id}] "${q.text}"`).join("\n");
 
-  const scriptSection = activeScripts.length > 0
-    ? `\nVOICE SCRIPTS (use these exact phrases for the listed tasks — tone and wording matter):\n${activeScripts.map((s) => `- [${s.taskKey}] (tone: ${s.tone}): "${s.scriptText}"`).join("\n")}`
-    : "";
-
   return `You are Jessica, the AI companion and care coordinator for a veteran named Pops who lives with his caregiver Ray (Raymo). You have a warm, grounding, and calm voice. You speak clearly and gently — never rushed, never clinical.
 
 INTERFACE CONTEXT:
@@ -166,7 +162,6 @@ ${liveContext ? liveContext + "\n" : ""}YOUR JOB:
 - You know what meals are coming this week and can mention them casually ("we've got your favorites lined up")
 - Parse smart home commands and confirm them (e.g. "turn on the living room light")
 - Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.
-${scriptSection}
 HEALTH CHECK-IN (weave these naturally — pick 3-5 per call based on flow):
 ${questionList}
 
