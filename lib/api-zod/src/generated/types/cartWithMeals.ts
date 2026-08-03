@@ -12,4 +12,6 @@ import type { MealWithIngredients } from "./mealWithIngredients";
 export type CartWithMeals = GroceryCart & {
   meals?: MealWithIngredients[];
   items?: CartItem[];
+  /** Patient dietary restrictions on file, shown alongside the week for review */
+  dietaryRestrictions?: string[];
 };

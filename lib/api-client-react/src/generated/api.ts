@@ -31,6 +31,8 @@ import type {
   CalendarEventResult,
   CallSession,
   CartWithMeals,
+  CookbookImportInput,
+  CookbookImportResult,
   CreateCareLogInput,
   CreateCravingInput,
   CreateHealthQuestionInput,
@@ -75,8 +77,12 @@ import type {
   SetLmStudioUrlInput,
   SheetsSyncInput,
   SheetsSyncResult,
+  ShuffleCartInput,
+  ShuffleCartResult,
   SmartHomeDevice,
   StartCallSessionInput,
+  SwapCartMealInput,
+  SwapCartMealResult,
   SymptomLog,
   TestLmStudioConnectionParams,
   TrendDataPoint,
@@ -4192,6 +4198,92 @@ export const useSyncFromSheets = <
 };
 
 /**
+ * @summary Import recipe documents exported from a Drive cookbook folder
+ */
+export const getImportCookbookUrl = () => {
+  return `/api/shopper/import-cookbook`;
+};
+
+export const importCookbook = async (
+  cookbookImportInput: CookbookImportInput,
+  options?: RequestInit,
+): Promise<CookbookImportResult> => {
+  return customFetch<CookbookImportResult>(getImportCookbookUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(cookbookImportInput),
+  });
+};
+
+export const getImportCookbookMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importCookbook>>,
+    TError,
+    { data: BodyType<CookbookImportInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importCookbook>>,
+  TError,
+  { data: BodyType<CookbookImportInput> },
+  TContext
+> => {
+  const mutationKey = ["importCookbook"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importCookbook>>,
+    { data: BodyType<CookbookImportInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importCookbook(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportCookbookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importCookbook>>
+>;
+export type ImportCookbookMutationBody = BodyType<CookbookImportInput>;
+export type ImportCookbookMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Import recipe documents exported from a Drive cookbook folder
+ */
+export const useImportCookbook = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importCookbook>>,
+    TError,
+    { data: BodyType<CookbookImportInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importCookbook>>,
+  TError,
+  { data: BodyType<CookbookImportInput> },
+  TContext
+> => {
+  return useMutation(getImportCookbookMutationOptions(options));
+};
+
+/**
  * @summary Get or create this week's grocery cart
  */
 export const getGetCartUrl = () => {
@@ -4426,6 +4518,179 @@ export const useRemoveMealFromCart = <
   TContext
 > => {
   return useMutation(getRemoveMealFromCartMutationOptions(options));
+};
+
+/**
+ * @summary Auto-fill this week's cart with meals from the catalog
+ */
+export const getShuffleCartUrl = () => {
+  return `/api/shopper/cart/shuffle`;
+};
+
+export const shuffleCart = async (
+  shuffleCartInput?: ShuffleCartInput,
+  options?: RequestInit,
+): Promise<ShuffleCartResult> => {
+  return customFetch<ShuffleCartResult>(getShuffleCartUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(shuffleCartInput),
+  });
+};
+
+export const getShuffleCartMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof shuffleCart>>,
+    TError,
+    { data: BodyType<ShuffleCartInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof shuffleCart>>,
+  TError,
+  { data: BodyType<ShuffleCartInput> },
+  TContext
+> => {
+  const mutationKey = ["shuffleCart"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof shuffleCart>>,
+    { data: BodyType<ShuffleCartInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return shuffleCart(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ShuffleCartMutationResult = NonNullable<
+  Awaited<ReturnType<typeof shuffleCart>>
+>;
+export type ShuffleCartMutationBody = BodyType<ShuffleCartInput>;
+export type ShuffleCartMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Auto-fill this week's cart with meals from the catalog
+ */
+export const useShuffleCart = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof shuffleCart>>,
+    TError,
+    { data: BodyType<ShuffleCartInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof shuffleCart>>,
+  TError,
+  { data: BodyType<ShuffleCartInput> },
+  TContext
+> => {
+  return useMutation(getShuffleCartMutationOptions(options));
+};
+
+/**
+ * @summary Replace one meal in this week's cart with another from the catalog
+ */
+export const getSwapCartMealUrl = (cartMealId: number) => {
+  return `/api/shopper/cart/meals/${cartMealId}/swap`;
+};
+
+export const swapCartMeal = async (
+  cartMealId: number,
+  swapCartMealInput: SwapCartMealInput,
+  options?: RequestInit,
+): Promise<SwapCartMealResult> => {
+  return customFetch<SwapCartMealResult>(getSwapCartMealUrl(cartMealId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(swapCartMealInput),
+  });
+};
+
+export const getSwapCartMealMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof swapCartMeal>>,
+    TError,
+    { cartMealId: number; data: BodyType<SwapCartMealInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof swapCartMeal>>,
+  TError,
+  { cartMealId: number; data: BodyType<SwapCartMealInput> },
+  TContext
+> => {
+  const mutationKey = ["swapCartMeal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof swapCartMeal>>,
+    { cartMealId: number; data: BodyType<SwapCartMealInput> }
+  > = (props) => {
+    const { cartMealId, data } = props ?? {};
+
+    return swapCartMeal(cartMealId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SwapCartMealMutationResult = NonNullable<
+  Awaited<ReturnType<typeof swapCartMeal>>
+>;
+export type SwapCartMealMutationBody = BodyType<SwapCartMealInput>;
+export type SwapCartMealMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Replace one meal in this week's cart with another from the catalog
+ */
+export const useSwapCartMeal = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof swapCartMeal>>,
+    TError,
+    { cartMealId: number; data: BodyType<SwapCartMealInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof swapCartMeal>>,
+  TError,
+  { cartMealId: number; data: BodyType<SwapCartMealInput> },
+  TContext
+> => {
+  return useMutation(getSwapCartMealMutationOptions(options));
 };
 
 /**

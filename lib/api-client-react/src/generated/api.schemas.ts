@@ -537,6 +537,41 @@ export interface SheetsSyncResult {
   rowsProcessed: number;
 }
 
+export type CookbookImportInputFilesItem = {
+  fileName: string;
+  /** Base64-encoded file bytes */
+  contentBase64: string;
+};
+
+export interface CookbookImportInput {
+  /** Uploaded documents. A .zip is expanded server-side into its members. */
+  files: CookbookImportInputFilesItem[];
+}
+
+export interface CookbookImportedMeal {
+  name: string;
+  fileName: string;
+  ingredientCount: number;
+  /** Ingredients left blank because the source document stated no quantity */
+  ingredientsMissingQuantity: number;
+}
+
+export interface CookbookSkippedFile {
+  fileName: string;
+  /** One of meal-plan-directive, no-recipe-structure, no-ingredients, unsupported-file, unreadable, duplicate */
+  reason: string;
+  detail: string;
+}
+
+export interface CookbookImportResult {
+  ok: boolean;
+  filesScanned: number;
+  mealsImported: number;
+  mealsSkipped: number;
+  imported: CookbookImportedMeal[];
+  skipped: CookbookSkippedFile[];
+}
+
 export type GroceryCartStatus =
   (typeof GroceryCartStatus)[keyof typeof GroceryCartStatus];
 
@@ -568,7 +603,31 @@ export interface CartItem {
 export type CartWithMeals = GroceryCart & {
   meals?: MealWithIngredients[];
   items?: CartItem[];
+  /** Patient dietary restrictions on file, shown alongside the week for review */
+  dietaryRestrictions?: string[];
 };
+
+export interface ShuffleCartInput {
+  mealCount?: number;
+}
+
+export interface SwapCartMealInput {
+  mealId: number;
+}
+
+export interface SwapCartMealResult {
+  ok: boolean;
+  mealId: number;
+  name: string;
+}
+
+export interface ShuffleCartResult {
+  ok: boolean;
+  mealsChosen: number;
+  catalogSize: number;
+  /** How many picks had to reuse a meal from the last few weeks */
+  repeatsFromRecentWeeks: number;
+}
 
 export interface AddMealToCartInput {
   mealId: number;

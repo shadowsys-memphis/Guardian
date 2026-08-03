@@ -889,6 +889,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/SheetsSyncResult"
 
+  /shopper/import-cookbook:
+    post:
+      operationId: importCookbook
+      tags: [shopper]
+      summary: Import recipe documents exported from a Drive cookbook folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CookbookImportInput"
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CookbookImportResult"
+
   /shopper/cart:
     get:
       operationId: getCart
@@ -931,6 +950,50 @@ paths:
       responses:
         "204":
           description: Removed
+
+  /shopper/cart/shuffle:
+    post:
+      operationId: shuffleCart
+      tags: [shopper]
+      summary: Auto-fill this week's cart with meals from the catalog
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShuffleCartInput"
+      responses:
+        "200":
+          description: Shuffle result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShuffleCartResult"
+
+  /shopper/cart/meals/{cartMealId}/swap:
+    post:
+      operationId: swapCartMeal
+      tags: [shopper]
+      summary: Replace one meal in this week's cart with another from the catalog
+      parameters:
+        - name: cartMealId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwapCartMealInput"
+      responses:
+        "200":
+          description: Swapped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwapCartMealResult"
 
   /shopper/cart/approve:
     post:
@@ -2154,6 +2217,88 @@ components:
         - mealsImported
         - rowsProcessed
 
+    CookbookImportInput:
+      type: object
+      properties:
+        files:
+          type: array
+          description: Uploaded documents. A .zip is expanded server-side into its members.
+          items:
+            type: object
+            properties:
+              fileName:
+                type: string
+              contentBase64:
+                type: string
+                description: Base64-encoded file bytes
+            required:
+              - fileName
+              - contentBase64
+      required:
+        - files
+
+    CookbookImportedMeal:
+      type: object
+      properties:
+        name:
+          type: string
+        fileName:
+          type: string
+        ingredientCount:
+          type: integer
+        ingredientsMissingQuantity:
+          type: integer
+          description: Ingredients left blank because the source document stated no quantity
+      required:
+        - name
+        - fileName
+        - ingredientCount
+        - ingredientsMissingQuantity
+
+    CookbookSkippedFile:
+      type: object
+      properties:
+        fileName:
+          type: string
+        reason:
+          type: string
+          description: >-
+            One of meal-plan-directive, no-recipe-structure, no-ingredients,
+            unsupported-file, unreadable, duplicate
+        detail:
+          type: string
+      required:
+        - fileName
+        - reason
+        - detail
+
+    CookbookImportResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        filesScanned:
+          type: integer
+        mealsImported:
+          type: integer
+        mealsSkipped:
+          type: integer
+        imported:
+          type: array
+          items:
+            $ref: "#/components/schemas/CookbookImportedMeal"
+        skipped:
+          type: array
+          items:
+            $ref: "#/components/schemas/CookbookSkippedFile"
+      required:
+        - ok
+        - filesScanned
+        - mealsImported
+        - mealsSkipped
+        - imported
+        - skipped
+
     GroceryCart:
       type: object
       properties:
@@ -2220,6 +2365,58 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/CartItem"
+            dietaryRestrictions:
+              type: array
+              description: Patient dietary restrictions on file, shown alongside the week for review
+              items:
+                type: string
+
+    ShuffleCartInput:
+      type: object
+      properties:
+        mealCount:
+          type: integer
+          default: 7
+
+    SwapCartMealInput:
+      type: object
+      properties:
+        mealId:
+          type: integer
+      required:
+        - mealId
+
+    SwapCartMealResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        mealId:
+          type: integer
+        name:
+          type: string
+      required:
+        - ok
+        - mealId
+        - name
+
+    ShuffleCartResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        mealsChosen:
+          type: integer
+        catalogSize:
+          type: integer
+        repeatsFromRecentWeeks:
+          type: integer
+          description: How many picks had to reuse a meal from the last few weeks
+      required:
+        - ok
+        - mealsChosen
+        - catalogSize
+        - repeatsFromRecentWeeks
 
     AddMealToCartInput:
       type: object

@@ -19,6 +19,7 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "fflate": "^0.8.3",
     "jsonwebtoken": "^9.0.3",
     "pino": "^9",
     "pino-http": "^10",

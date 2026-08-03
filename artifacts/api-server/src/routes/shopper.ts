@@ -14,8 +14,31 @@ import {
 import { ai } from "@workspace/integrations-gemini-ai";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
+import {
+  expandUploads,
+  parseCookbookFile,
+  type ParsedRecipe,
+  type UploadedFile,
+} from "../lib/cookbook-parser";
 
 const router: IRouter = Router();
+
+/** Ray's cookbook export is a single ~450KB zip; these bound a pathological upload. */
+const MAX_UPLOAD_FILES = 200;
+const MAX_EXPANDED_FILES = 500;
+
+/**
+ * `meals` stores a single description column, so the recipe blurb and its steps
+ * are folded together rather than dropping the instructions on the floor.
+ */
+function buildMealDescription(recipe: ParsedRecipe): string {
+  const parts: string[] = [];
+  if (recipe.description) parts.push(recipe.description);
+  if (recipe.instructions.length > 0) {
+    parts.push(["Instructions:", ...recipe.instructions.map((step, i) => `${i + 1}. ${step}`)].join("\n"));
+  }
+  return parts.join("\n\n");
+}
 
 const SEED_MEALS = [
   {
@@ -167,6 +190,26 @@ export async function ensureMealsSeeded() {
         estimatedCostCents: ing.estimatedCostCents,
       }))
     );
+  }
+}
+
+/**
+ * Dietary restrictions recorded for the patient (same `dietary_profile` blob
+ * the Jessica call prompt reads). The shuffle can't judge whether a recipe
+ * honors these, so they ride along with the cart for the caregiver to check
+ * before approving.
+ */
+async function getDietaryRestrictions(): Promise<string[]> {
+  try {
+    const rows = await db.select().from(appSettingsTable)
+      .where(eq(appSettingsTable.key, "dietary_profile")).limit(1);
+    if (!rows[0]?.value) return [];
+    const parsed = JSON.parse(rows[0].value) as { restrictions?: unknown };
+    return Array.isArray(parsed.restrictions)
+      ? parsed.restrictions.filter((r): r is string => typeof r === "string")
+      : [];
+  } catch {
+    return [];
   }
 }
 
@@ -357,6 +400,111 @@ router.post("/shopper/sync", async (req, res) => {
   }
 });
 
+// POST /shopper/import-cookbook — import recipe documents exported from Ray's Drive cookbook folder
+router.post("/shopper/import-cookbook", async (req, res) => {
+  try {
+    const body = z.object({
+      files: z.array(z.object({
+        fileName: z.string().min(1),
+        contentBase64: z.string().min(1),
+      })).min(1).max(MAX_UPLOAD_FILES),
+    }).parse(req.body);
+
+    const uploads: UploadedFile[] = body.files.map((f) => ({
+      fileName: f.fileName,
+      bytes: new Uint8Array(Buffer.from(f.contentBase64, "base64")),
+    }));
+
+    const members = expandUploads(uploads);
+    if (members.length > MAX_EXPANDED_FILES) {
+      res.status(422).json({ error: `That upload holds ${members.length} files — the importer handles up to ${MAX_EXPANDED_FILES} at a time.` });
+      return;
+    }
+
+    await ensureMealsSeeded();
+
+    const imported: Array<{ name: string; fileName: string; ingredientCount: number; ingredientsMissingQuantity: number }> = [];
+    const skipped: Array<{ fileName: string; reason: string; detail: string }> = [];
+
+    // Guards against a zip that contains the same recipe twice, which would
+    // otherwise slip past the DB check since neither copy is committed yet.
+    const seenNames = new Set<string>();
+
+    for (const member of members) {
+      const outcome = parseCookbookFile(member);
+
+      if (outcome.kind === "skipped") {
+        skipped.push({ fileName: outcome.fileName, reason: outcome.reason, detail: outcome.detail });
+        continue;
+      }
+
+      const { recipe } = outcome;
+      const nameKey = recipe.name.trim().toLowerCase();
+
+      if (seenNames.has(nameKey)) {
+        skipped.push({
+          fileName: outcome.fileName,
+          reason: "duplicate",
+          detail: `"${recipe.name}" appeared more than once in this upload — only the first copy was imported.`,
+        });
+        continue;
+      }
+
+      const existing = await db.select().from(mealsTable)
+        .where(sql`lower(${mealsTable.name}) = ${nameKey}`)
+        .limit(1);
+      if (existing[0]) {
+        seenNames.add(nameKey);
+        skipped.push({
+          fileName: outcome.fileName,
+          reason: "duplicate",
+          detail: `"${recipe.name}" is already in the Meal Catalog — left untouched so your edits aren't overwritten.`,
+        });
+        continue;
+      }
+
+      const [meal] = await db.insert(mealsTable).values({
+        name: recipe.name,
+        description: buildMealDescription(recipe),
+        // Per-ingredient cost estimates are out of scope for the import.
+        estimatedCostCents: 0,
+        active: true,
+      }).returning();
+
+      await db.insert(mealIngredientsTable).values(
+        recipe.ingredients.map((ing) => ({
+          mealId: meal.id,
+          name: ing.name,
+          // Blank, not a fabricated "1"/"each" — the source document didn't say.
+          quantity: ing.quantity,
+          unit: ing.unit,
+          estimatedCostCents: 0,
+        }))
+      );
+
+      seenNames.add(nameKey);
+      imported.push({
+        name: recipe.name,
+        fileName: outcome.fileName,
+        ingredientCount: recipe.ingredients.length,
+        ingredientsMissingQuantity: recipe.ingredients.filter((i) => !i.quantity).length,
+      });
+    }
+
+    res.json({
+      ok: true,
+      filesScanned: members.length,
+      mealsImported: imported.length,
+      mealsSkipped: skipped.length,
+      imported,
+      skipped,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to import cookbook");
+    res.status(400).json({ error: "Cookbook import failed — check that the upload is a zip or recipe document." });
+  }
+});
+
 // GET /shopper/cart
 router.get("/shopper/cart", async (req, res) => {
   try {
@@ -383,7 +531,9 @@ router.get("/shopper/cart", async (req, res) => {
       }));
     }
     const items = await db.select().from(cartItemsTable).where(eq(cartItemsTable.cartId, cart.id));
-    res.json({ ...cart, meals, items });
+    // Surfaced with the week so the caregiver sees the patient's dietary
+    // restrictions at the moment they confirm, not buried in a settings tab.
+    res.json({ ...cart, meals, items, dietaryRestrictions: await getDietaryRestrictions() });
   } catch (err) {
     req.log.error({ err }, "Failed to get cart");
     res.status(500).json({ error: "Failed to get cart" });
@@ -418,6 +568,129 @@ router.delete("/shopper/cart/meals/:cartMealId", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to remove meal from cart");
     res.status(500).json({ error: "Failed to remove meal" });
+  }
+});
+
+/**
+ * Meals used in the most recent completed weeks, newest first. Used to keep the
+ * shuffle from serving the same dinners two weeks running.
+ */
+async function recentlyUsedMealIds(excludeCartId: number, weeks = 3): Promise<Set<number>> {
+  const rows = await db
+    .select({ mealId: cartMealsTable.mealId, weekStartDate: groceryCartsTable.weekStartDate })
+    .from(cartMealsTable)
+    .innerJoin(groceryCartsTable, eq(cartMealsTable.cartId, groceryCartsTable.id))
+    .where(sql`${groceryCartsTable.id} <> ${excludeCartId}`)
+    .orderBy(desc(groceryCartsTable.weekStartDate));
+
+  const recentWeeks: string[] = [];
+  const used = new Set<number>();
+  for (const row of rows) {
+    const week = String(row.weekStartDate);
+    if (!recentWeeks.includes(week)) {
+      if (recentWeeks.length >= weeks) break;
+      recentWeeks.push(week);
+    }
+    used.add(row.mealId);
+  }
+  return used;
+}
+
+function pickRandom<T>(items: T[], count: number): T[] {
+  const pool = [...items];
+  const picked: T[] = [];
+  while (pool.length > 0 && picked.length < count) {
+    picked.push(...pool.splice(Math.floor(Math.random() * pool.length), 1));
+  }
+  return picked;
+}
+
+/**
+ * Chooses `count` meals, preferring ones not eaten in the last few weeks and
+ * only reusing recent meals once the fresh pool runs dry — so a small catalog
+ * still fills a full week instead of returning short.
+ */
+function chooseMeals(catalogIds: number[], avoid: Set<number>, count: number): number[] {
+  const fresh = catalogIds.filter((id) => !avoid.has(id));
+  const chosen = pickRandom(fresh, count);
+  if (chosen.length < count) {
+    const remaining = catalogIds.filter((id) => !chosen.includes(id));
+    chosen.push(...pickRandom(remaining, count - chosen.length));
+  }
+  return chosen;
+}
+
+// POST /shopper/cart/shuffle — auto-fill this week's cart from the meal catalog
+router.post("/shopper/cart/shuffle", async (req, res) => {
+  try {
+    const { mealCount } = z.object({
+      mealCount: z.number().int().min(1).max(21).default(7),
+    }).parse(req.body ?? {});
+
+    await ensureMealsSeeded();
+    const cart = await getOrCreateCart();
+    if (cart.status !== "pending") {
+      res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
+      return;
+    }
+
+    const catalog = await db.select().from(mealsTable).where(eq(mealsTable.active, true));
+    if (catalog.length === 0) {
+      res.status(422).json({ error: "No meals in the catalog yet — import your cookbook first." });
+      return;
+    }
+
+    const avoid = await recentlyUsedMealIds(cart.id);
+    const chosen = chooseMeals(catalog.map((m) => m.id), avoid, mealCount);
+
+    await db.delete(cartMealsTable).where(eq(cartMealsTable.cartId, cart.id));
+    await db.insert(cartMealsTable).values(chosen.map((mealId) => ({ cartId: cart.id, mealId })));
+    await rebuildCartItems(cart.id);
+
+    res.json({
+      ok: true,
+      mealsChosen: chosen.length,
+      catalogSize: catalog.length,
+      repeatsFromRecentWeeks: chosen.filter((id) => avoid.has(id)).length,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to shuffle cart");
+    res.status(500).json({ error: "Shuffle failed" });
+  }
+});
+
+// POST /shopper/cart/meals/:cartMealId/swap — replace one meal in the cart
+router.post("/shopper/cart/meals/:cartMealId/swap", async (req, res) => {
+  try {
+    const cartMealId = parseInt(req.params.cartMealId, 10);
+    const { mealId } = z.object({ mealId: z.number().int() }).parse(req.body);
+
+    const cart = await getOrCreateCart();
+    if (cart.status !== "pending") {
+      res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
+      return;
+    }
+
+    const [existing] = await db.select().from(cartMealsTable).where(eq(cartMealsTable.id, cartMealId)).limit(1);
+    if (!existing || existing.cartId !== cart.id) {
+      res.status(404).json({ error: "That meal isn't in this week's cart." });
+      return;
+    }
+
+    const [replacement] = await db.select().from(mealsTable)
+      .where(and(eq(mealsTable.id, mealId), eq(mealsTable.active, true)))
+      .limit(1);
+    if (!replacement) {
+      res.status(404).json({ error: "That meal isn't in the catalog." });
+      return;
+    }
+
+    await db.update(cartMealsTable).set({ mealId }).where(eq(cartMealsTable.id, cartMealId));
+    await rebuildCartItems(cart.id);
+    res.json({ ok: true, mealId, name: replacement.name });
+  } catch (err) {
+    req.log.error({ err }, "Failed to swap cart meal");
+    res.status(400).json({ error: "Swap failed" });
   }
 });
 

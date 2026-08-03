@@ -1099,6 +1099,52 @@ export const SyncFromSheetsResponse = zod.object({
 });
 
 /**
+ * @summary Import recipe documents exported from a Drive cookbook folder
+ */
+export const ImportCookbookBody = zod.object({
+  files: zod
+    .array(
+      zod.object({
+        fileName: zod.string(),
+        contentBase64: zod.string().describe("Base64-encoded file bytes"),
+      }),
+    )
+    .describe(
+      "Uploaded documents. A .zip is expanded server-side into its members.",
+    ),
+});
+
+export const ImportCookbookResponse = zod.object({
+  ok: zod.boolean(),
+  filesScanned: zod.number(),
+  mealsImported: zod.number(),
+  mealsSkipped: zod.number(),
+  imported: zod.array(
+    zod.object({
+      name: zod.string(),
+      fileName: zod.string(),
+      ingredientCount: zod.number(),
+      ingredientsMissingQuantity: zod
+        .number()
+        .describe(
+          "Ingredients left blank because the source document stated no quantity",
+        ),
+    }),
+  ),
+  skipped: zod.array(
+    zod.object({
+      fileName: zod.string(),
+      reason: zod
+        .string()
+        .describe(
+          "One of meal-plan-directive, no-recipe-structure, no-ingredients, unsupported-file, unreadable, duplicate",
+        ),
+      detail: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Get or create this week's grocery cart
  */
 export const GetCartResponse = zod
@@ -1154,6 +1200,12 @@ export const GetCartResponse = zod
           }),
         )
         .optional(),
+      dietaryRestrictions: zod
+        .array(zod.string())
+        .optional()
+        .describe(
+          "Patient dietary restrictions on file, shown alongside the week for review",
+        ),
     }),
   );
 
@@ -1169,6 +1221,41 @@ export const AddMealToCartBody = zod.object({
  */
 export const RemoveMealFromCartParams = zod.object({
   cartMealId: zod.coerce.number(),
+});
+
+/**
+ * @summary Auto-fill this week's cart with meals from the catalog
+ */
+export const shuffleCartBodyMealCountDefault = 7;
+
+export const ShuffleCartBody = zod.object({
+  mealCount: zod.number().default(shuffleCartBodyMealCountDefault),
+});
+
+export const ShuffleCartResponse = zod.object({
+  ok: zod.boolean(),
+  mealsChosen: zod.number(),
+  catalogSize: zod.number(),
+  repeatsFromRecentWeeks: zod
+    .number()
+    .describe("How many picks had to reuse a meal from the last few weeks"),
+});
+
+/**
+ * @summary Replace one meal in this week's cart with another from the catalog
+ */
+export const SwapCartMealParams = zod.object({
+  cartMealId: zod.coerce.number(),
+});
+
+export const SwapCartMealBody = zod.object({
+  mealId: zod.number(),
+});
+
+export const SwapCartMealResponse = zod.object({
+  ok: zod.boolean(),
+  mealId: zod.number(),
+  name: zod.string(),
 });
 
 /**

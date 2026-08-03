@@ -20,15 +20,23 @@ import {
   Plus,
   Trash2,
   Check,
+  Upload,
+  FileWarning,
+  Shuffle,
+  Repeat,
 } from "lucide-react";
 import {
   useListMeals,
   useCreateMeal,
   useDeleteMeal,
   useSyncFromSheets,
+  useImportCookbook,
+  type CookbookImportResult,
   useGetCart,
   useAddMealToCart,
   useRemoveMealFromCart,
+  useShuffleCart,
+  useSwapCartMeal,
   useApproveCart,
   useDismissCart,
   useListCravings,
@@ -45,11 +53,33 @@ import { formatPacificDateTime } from "@/lib/time";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+const SKIP_REASON_LABELS: Record<string, string> = {
+  "meal-plan-directive": "Meal plan / grocery list",
+  "no-recipe-structure": "Not a recipe",
+  "no-ingredients": "No ingredients listed",
+  "unsupported-file": "Unsupported file type",
+  unreadable: "Could not be read",
+  duplicate: "Already in catalog",
+};
+
+async function readFileAsBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  // Chunked so a multi-MB zip doesn't blow the argument limit on String.fromCharCode.
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
 export function ShopperPage() {
   const { toast } = useToast();
   const [sheetId, setSheetId] = useState("");
   const [showAddMeal, setShowAddMeal] = useState(false);
   const [newMealName, setNewMealName] = useState("");
+  const [importResult, setImportResult] = useState<CookbookImportResult | null>(null);
+  const [swappingCartMealId, setSwappingCartMealId] = useState<number | null>(null);
 
   const { data: meals, refetch: refetchMeals } = useListMeals();
   const { data: cart, refetch: refetchCart } = useGetCart();
@@ -191,6 +221,31 @@ export function ShopperPage() {
     onSuccess: (data) => { refetchMeals(); toast({ title: `Synced! ${data.mealsImported} meal(s) imported, ${data.rowsProcessed} rows processed.` }); setSheetId(""); },
     onError: () => toast({ title: "Sync failed", description: "Make sure the sheet is publicly shared.", variant: "destructive" }),
   }});
+  const shuffleCart = useShuffleCart({ mutation: {
+    onSuccess: (data) => {
+      refetchCart();
+      setSwappingCartMealId(null);
+      toast({
+        title: `Picked ${data.mealsChosen} meal(s) from ${data.catalogSize} in the catalog.`,
+        description: data.repeatsFromRecentWeeks > 0
+          ? `${data.repeatsFromRecentWeeks} repeat(s) from recent weeks — the catalog ran out of fresh options.`
+          : undefined,
+      });
+    },
+    onError: () => toast({ title: "Shuffle failed", description: "Add meals to the catalog first.", variant: "destructive" }),
+  }});
+  const swapCartMeal = useSwapCartMeal({ mutation: {
+    onSuccess: (data) => { refetchCart(); setSwappingCartMealId(null); toast({ title: `Swapped in ${data.name}.` }); },
+    onError: () => toast({ title: "Swap failed", variant: "destructive" }),
+  }});
+  const importCookbook = useImportCookbook({ mutation: {
+    onSuccess: (data) => {
+      setImportResult(data);
+      refetchMeals();
+      toast({ title: `Imported ${data.mealsImported} meal(s)${data.mealsSkipped > 0 ? `, skipped ${data.mealsSkipped}` : ""}.` });
+    },
+    onError: () => toast({ title: "Import failed", description: "Upload a .zip of the cookbook folder, or the recipe documents themselves.", variant: "destructive" }),
+  }});
   const createMeal = useCreateMeal({ mutation: { onSuccess: () => { refetchMeals(); setNewMealName(""); setShowAddMeal(false); toast({ title: "Meal added." }); } } });
   const deleteMeal = useDeleteMeal({ mutation: { onSuccess: () => { refetchMeals(); refetchCart(); } } });
   const updateCraving = useUpdateCraving({ mutation: { onSuccess: () => refetchCravings() } });
@@ -198,6 +253,22 @@ export function ShopperPage() {
     onSuccess: (data) => { setRemixedPlan((data as any).updatedPlan ?? ""); setRemixInput(""); toast({ title: "Meal plan remixed!" }); },
     onError: () => toast({ title: "Remix failed", description: "Gemini could not remix the plan.", variant: "destructive" }),
   }});
+
+  const handleCookbookFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setImportResult(null);
+    try {
+      const files = await Promise.all(
+        Array.from(fileList).map(async (file) => ({
+          fileName: file.name,
+          contentBase64: await readFileAsBase64(file),
+        }))
+      );
+      importCookbook.mutate({ data: { files } });
+    } catch {
+      toast({ title: "Could not read those files", description: "Try re-downloading the folder from Drive.", variant: "destructive" });
+    }
+  };
 
   const currentPlanText = (() => {
     const mealsInCart = (cart?.meals ?? []) as any[];
@@ -222,6 +293,11 @@ export function ShopperPage() {
   const cartMealIds = new Set((cart?.meals ?? []).map((m: any) => m.id));
   const cartStatus = cart?.status ?? "pending";
   const cartIsLocked = cartStatus !== "pending";
+  // Everything in the catalog that isn't already on this week's lineup — the
+  // "what else could I have" list Ray wants when swapping a meal out.
+  const swapChoices = ((meals ?? []) as MealWithIngredients[])
+    .filter((m) => !cartMealIds.has(m.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const fmtDollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
@@ -310,12 +386,39 @@ export function ShopperPage() {
             <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
               <ShoppingCart size={16} /> This Week's Meal Lineup
             </CardTitle>
-            <span className="text-xs text-muted-foreground">Week of {cart?.weekStartDate ?? "..."}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground">Week of {cart?.weekStartDate ?? "..."}</span>
+              {!cartIsLocked && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => shuffleCart.mutate({ data: {} })}
+                  disabled={shuffleCart.isPending || (meals ?? []).length === 0}
+                >
+                  <Shuffle size={12} className={`mr-1 ${shuffleCart.isPending ? "animate-spin" : ""}`} />
+                  {(cart?.meals ?? []).length > 0 ? "Reshuffle" : "Shuffle week"}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
+          {(cart?.dietaryRestrictions ?? []).length > 0 && (
+            <div className="mb-3 flex items-start gap-2 rounded-sm border border-amber-500/30 bg-amber-500/10 p-2.5">
+              <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+              <p className="text-xs">
+                <span className="font-bold uppercase tracking-wider text-amber-500">On file: </span>
+                <span className="text-foreground">{(cart?.dietaryRestrictions ?? []).join(" · ")}</span>
+                <span className="text-muted-foreground"> — check this week's meals against these before approving.</span>
+              </p>
+            </div>
+          )}
+
           {(cart?.meals ?? []).length === 0 ? (
-            <p className="text-muted-foreground italic text-sm text-center py-4">No meals added yet. Browse the catalog below to add meals.</p>
+            <p className="text-muted-foreground italic text-sm text-center py-4">
+              No meals picked yet. Hit <span className="font-semibold text-foreground">Shuffle week</span> to fill it from the catalog, or add meals by hand below.
+            </p>
           ) : (
             <div className="space-y-2">
               {(cart?.meals ?? []).map((meal: any) => (
@@ -338,18 +441,64 @@ export function ShopperPage() {
                     </div>
                   </div>
                   {!cartIsLocked && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-muted-foreground hover:text-destructive h-7 w-7 p-0 shrink-0"
-                      onClick={() => removeMealFromCart.mutate({ cartMealId: meal.cartMealId })}
-                      disabled={removeMealFromCart.isPending}
-                    >
-                      <X size={14} />
-                    </Button>
+                    <div className="flex gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-primary h-7 px-2 text-xs"
+                        onClick={() => setSwappingCartMealId(swappingCartMealId === meal.cartMealId ? null : meal.cartMealId)}
+                      >
+                        <Repeat size={12} className="mr-1" /> Swap
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
+                        onClick={() => removeMealFromCart.mutate({ cartMealId: meal.cartMealId })}
+                        disabled={removeMealFromCart.isPending}
+                      >
+                        <X size={14} />
+                      </Button>
+                    </div>
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {swappingCartMealId !== null && !cartIsLocked && (
+            <div className="mt-3 rounded-sm border border-primary/30 bg-secondary/20 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Swap in — {swapChoices.length} other meal{swapChoices.length === 1 ? "" : "s"} available
+                </p>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setSwappingCartMealId(null)}>
+                  <X size={12} />
+                </Button>
+              </div>
+              {swapChoices.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">Every meal in the catalog is already in this week's lineup.</p>
+              ) : (
+                <div className="space-y-1 max-h-64 overflow-y-auto">
+                  {swapChoices.map((choice) => (
+                    <button
+                      key={choice.id}
+                      type="button"
+                      disabled={swapCartMeal.isPending}
+                      onClick={() => swapCartMeal.mutate({ cartMealId: swappingCartMealId, data: { mealId: choice.id } })}
+                      className="w-full text-left p-2 rounded-sm hover:bg-primary/10 border border-transparent hover:border-primary/30 disabled:opacity-50"
+                    >
+                      <span className="text-sm font-semibold">{choice.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        {(choice.ingredients ?? []).length} ingredients
+                      </span>
+                      {choice.description && (
+                        <p className="text-xs text-muted-foreground/80 truncate">{choice.description.split("\n")[0]}</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -574,6 +723,91 @@ export function ShopperPage() {
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Drive Cookbook Import */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Upload size={16} /> Import from Drive Cookbook
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Download your Drive "cookbook" folder (Drive → right-click the folder → Download) and drop the .zip here.
+            Individual .docx / .md files work too. One recipe per document; the Koda-safe variant is skipped.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <input
+            type="file"
+            multiple
+            accept=".zip,.docx,.md,.markdown,.txt"
+            disabled={importCookbook.isPending}
+            onChange={(e) => {
+              void handleCookbookFiles(e.target.files);
+              e.target.value = "";
+            }}
+            className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-xs file:font-semibold file:text-primary-foreground hover:file:opacity-90 disabled:opacity-50"
+          />
+
+          {importCookbook.isPending && (
+            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-2">
+              <RefreshCw size={12} className="animate-spin" /> Reading documents…
+            </p>
+          )}
+
+          {importResult && (
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-wrap gap-3 text-xs">
+                <span className="font-bold text-primary">{importResult.mealsImported} imported</span>
+                <span className="text-muted-foreground">{importResult.mealsSkipped} skipped</span>
+                <span className="text-muted-foreground/70">{importResult.filesScanned} file(s) scanned</span>
+              </div>
+
+              {importResult.imported.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Added to catalog</p>
+                  <ul className="space-y-0.5 max-h-48 overflow-y-auto">
+                    {importResult.imported.map((m) => (
+                      <li key={m.fileName} className="text-xs flex items-start gap-2">
+                        <Check size={12} className="text-primary mt-0.5 shrink-0" />
+                        <span>
+                          <span className="font-semibold">{m.name}</span>{" "}
+                          <span className="text-muted-foreground">
+                            — {m.ingredientCount} ingredient{m.ingredientCount === 1 ? "" : "s"}
+                            {m.ingredientsMissingQuantity > 0 && `, ${m.ingredientsMissingQuantity} without a stated quantity`}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {importResult.skipped.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Skipped</p>
+                  <ul className="space-y-1 max-h-48 overflow-y-auto">
+                    {importResult.skipped.map((s) => (
+                      <li key={s.fileName} className="text-xs flex items-start gap-2">
+                        <FileWarning size={12} className="text-muted-foreground mt-0.5 shrink-0" />
+                        <span>
+                          <span className="font-semibold">{SKIP_REASON_LABELS[s.reason] ?? s.reason}</span>{" "}
+                          <span className="text-muted-foreground">— {s.detail}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {importResult.imported.some((m) => m.ingredientsMissingQuantity > 0) && (
+                <p className="text-xs text-muted-foreground/80 border-t border-border pt-2">
+                  Quantities were left blank wherever the recipe document didn't state one — nothing was guessed.
+                </p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

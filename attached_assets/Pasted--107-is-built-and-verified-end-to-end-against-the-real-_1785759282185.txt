@@ -1,0 +1,916 @@
+
+● #107 is built and verified end-to-end against the real 52-file export.
+
+  What landed
+
+  artifacts/api-server/src/lib/cookbook-parser.ts (new) — normalizes .docx and .md/.txt into a
+  common block list, then classifies. A docx is just a zip, so fflate (new dep, pure JS,
+  bundles cleanly) unwraps it and the Google-exported word/document.xml subset is read
+  directly.
+
+  POST /shopper/import-cookbook — accepts base64 files; a .zip is expanded server-side. No
+  multer needed: the 443KB zip is ~0.58MB base64, well under the existing 15mb body limit.
+
+  Shopper page — upload card above the Sheets sync, with the post-import summary.
+
+  Results on Ray's actual export
+
+  ┌─────────────────────────────┬─────────────────────────────────────────────────────────┐
+  │                             │                                                         │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Files scanned               │ 52                                                      │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Imported                    │ 51                                                      │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Skipped                     │ 1 — week_1_randomized_directive, correctly caught as a  │
+  │                             │ meal-plan/grocery-list doc                              │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Pet-section leaks           │ 0                                                       │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Recipes missing description │ 0                                                       │
+  │  or instructions            │                                                         │
+  └─────────────────────────────┴─────────────────────────────────────────────────────────┘
+
+  Verified through the API against a scratch Postgres, not the live DB — DATABASE_URL here
+  points at production, and I wasn't going to insert 51 meals into Ray's real catalog as a
+  test. Re-importing the same zip yields 0 imported, 51 duplicates and leaves the meal count
+  unchanged, so it's safe to run twice. Adding an imported meal to the cart works (blank
+  quantities fall through parseFloat("") || 1 to ×1).
+
+  Since meals has one description column, instructions are folded in beneath the blurb as a
+  numbered list rather than dropped.
+
+  One thing you should know
+
+  All 352 ingredient lines import with blank quantity and unit — not a parser gap, the source
+  documents genuinely don't state them (Salmon Fillets, Honey & Dijon Mustard). Per the spec
+  nothing was invented. The extractor does work when quantities are present (1 1/2 cups 
+  jasmine rice → 1 1/2 / cups), so future documents aren't penalized. Practically: imported
+  meals contribute $0 to the cart budget total until quantities and costs are filled in.
+
+  Which runs into a scope question I'd flag rather than decide for you: there is no 
+  ingredient-editing UI, and no API to support one — /shopper/meals has only POST (name-only)
+  and DELETE, no PATCH. "Left blank and editable" is satisfied in the storage sense (blank,
+  not a fabricated 1/each), but Ray can't currently edit those blanks in the app. Building
+  that editor is a real chunk of work that isn't in the five Steps, so I left it out. Say the
+  word and I'll add it as a follow-up.
+
+  Also still open from earlier: the unmerged ElevenLabs webhook security branch, and master is
+  10 commits unpushed. Nothing here is committed yet.
+
+✻ Crunched for 11m 56s
+
+❯ You're gonna have to simplify that. That was hard to understand. The way you presented it.  
+
+● You can now upload your cookbook folder into the app.
+
+  How you'd use it: go to the Shopper page, download your "cookbook" folder from Google Drive
+  as a zip, and drop it in the new upload box. That's it.
+
+  What happened when I tested it with your actual folder:
+
+  - 51 recipes went in
+  - 1 file was left out on purpose — the "Week 1 Meal Plan" doc, because it's a weekly plan
+  and grocery list, not a recipe. It tells you that on screen instead of jamming it in as a
+  fake meal.
+  - The Koda versions were ignored, as you wanted. Only the human recipes.
+
+  If you upload the same zip twice, nothing gets duplicated. It just tells you they're already
+  there.
+
+  The one catch: your recipes don't list amounts. They say "Salmon Fillets," not "2 salmon
+  fillets." So every ingredient comes in with a blank amount. I left them blank on purpose
+  rather than making numbers up. The downside is imported meals show $0 toward your grocery
+  budget until amounts and prices get filled in.
+
+  The one thing I need you to decide: right now there's no way to fill in those blanks from
+  inside the app — the meal editor doesn't exist yet. Building it is a separate job. Want me
+  to?
+
+  Nothing is committed yet. Also still waiting on you from earlier: whether to merge that
+  webhook security fix.
+
+  Wrote 2 memories (ctrl+o to expand)
+
+● Noted for next time — I'll keep these summaries plain.
+
+✻ Churned for 25s
+
+❯ The cookbook is supposed to in the long goal or over sight of what's going on is to be able 
+  to randomize options and let me confirm them on the page for shopper eventually going to    
+  be automated to Walgreens and stater brothers am I missing something here because it        
+  doesn't seem like we're going down that path this isn't supposed to be a meal editor this   
+  is supposed to be something that is automated and randomized                                
+
+● You're not missing anything — I built the on-ramp, not the road. Let me check what's
+  actually there for the randomize path before I answer properly.
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+● You're right, and the path is real — you're just missing one piece, and it's the piece
+  you're describing.
+
+  Here's what's already in the app:
+
+  - Recipe catalog — now has your 51 real recipes. That's what I just did.
+  - Weekly cart — exists, but you add meals one at a time by clicking "Add" on each.
+  - Confirm step — exists. You approve the week's cart.
+  - Store ordering — already partly built. There's Walmart product search and Stater Bros
+  through Instacart in there now.
+
+  What's missing is the randomizer. Nothing in the app picks meals for you. There's a "remix"
+  button, but it just asks Gemini to reword a plan as text — it doesn't actually fill your
+  cart. So today you'd still hand-pick all seven dinners.
+
+  So the chain you want is: 51 recipes → shuffle picks the week → you confirm → it orders.
+  Everything is there except the shuffle.
+
+  That also answers the editor question — you're right that it's beside the point. Amounts
+  don't need hand-editing if the shuffle picks meals and the store lookup finds the products.
+
+  Two things before I build it:
+
+  Walgreens isn't in the code anywhere — only Walmart and Stater Bros. Is Walgreens for
+  prescriptions rather than groceries, or do you want it replacing Walmart?
+
+  How should the shuffle work? A few options:
+
+● User answered Claude's questions:
+  ⎿  · How should the weekly shuffle pick meals? → Gemini picks the week
+     · How much control do you want when it shuffles? → Shuffle, then swap what you don't like
+     (Recommended)
+
+● Gemini picks the week, with per-meal rerolls. Let me look at how the existing Gemini call
+  and the cravings/restrictions context work so I match them.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Bash(sed -n '385,400p' artifacts/api-server/src/routes/documents.ts && echo "===
+      dietary_profile shape ===" && grep -rn "dietary_profile" artifacts/api-server/src --…)
+  ⎿          name: med.name,
+             dose: med.dose ?? "as prescribed",
+             frequency: med.frequency ?? "as directed",
+     … +21 lines (ctrl+o to expand)
+
+  Read 2 files (ctrl+o to expand)
+
+❯ Honestly I don't care about the meal selector part that was before I realized I was going   
+  to do zero touch. It really doesn't matter, I just need to be able to see what is being     
+  chosen and what can be chosen if I want to switch something out.                            
+
+● Good — that simplifies things. Dropping the Gemini selector then: for a zero-touch path that
+  runs unattended, a plain shuffle that avoids recent weeks is more reliable than one that
+  depends on Gemini being up. The effort goes into the two things you actually named — seeing
+  the picks, and seeing what else you could swap in.
+
+● Update(artifacts/api-server/src/routes/shopper.ts)
+  ⎿  Added 123 lines
+      549    }
+      550  });
+      551  
+      552 +/**                                                                         
+      553 + * Meals used in the most recent completed weeks, newest first. Used to keep
+          + the                                                                        
+      554 + * shuffle from serving the same dinners two weeks running.                 
+      555 + */                                                                         
+      556 +async function recentlyUsedMealIds(excludeCartId: number, weeks = 3): Promis
+          +e<Set<number>> {                                                            
+      557 +  const rows = await db                                                     
+      558 +    .select({ mealId: cartMealsTable.mealId, weekStartDate: groceryCartsTabl
+          +e.weekStartDate })                                                          
+      559 +    .from(cartMealsTable)                                                   
+      560 +    .innerJoin(groceryCartsTable, eq(cartMealsTable.cartId, groceryCartsTabl
+          +e.id))                                                                      
+      561 +    .where(sql`${groceryCartsTable.id} <> ${excludeCartId}`)                
+      562 +    .orderBy(desc(groceryCartsTable.weekStartDate));                        
+      563 +                                                                            
+      564 +  const recentWeeks: string[] = [];                                         
+      565 +  const used = new Set<number>();                                           
+      566 +  for (const row of rows) {                                                 
+      567 +    const week = String(row.weekStartDate);                                 
+      568 +    if (!recentWeeks.includes(week)) {                                      
+      569 +      if (recentWeeks.length >= weeks) break;                               
+      570 +      recentWeeks.push(week);                                               
+      571 +    }                                                                       
+      572 +    used.add(row.mealId);                                                   
+      573 +  }                                                                         
+      574 +  return used;                                                              
+      575 +}                                                                           
+      576 +                                                                            
+      577 +function pickRandom<T>(items: T[], count: number): T[] {                    
+      578 +  const pool = [...items];                                                  
+      579 +  const picked: T[] = [];                                                   
+      580 +  while (pool.length > 0 && picked.length < count) {                        
+      581 +    picked.push(...pool.splice(Math.floor(Math.random() * pool.length), 1));
+      582 +  }                                                                         
+      583 +  return picked;                                                            
+      584 +}                                                                           
+      585 +                                                                            
+      586 +/**                                                                         
+      587 + * Chooses `count` meals, preferring ones not eaten in the last few weeks an
+          +d                                                                           
+      588 + * only reusing recent meals once the fresh pool runs dry — so a small catal
+          +og                                                                          
+      589 + * still fills a full week instead of returning short.                      
+      590 + */                                                                         
+      591 +function chooseMeals(catalogIds: number[], avoid: Set<number>, count: number
+          +): number[] {                                                               
+      592 +  const fresh = catalogIds.filter((id) => !avoid.has(id));                  
+      593 +  const chosen = pickRandom(fresh, count);                                  
+      594 +  if (chosen.length < count) {                                              
+      595 +    const remaining = catalogIds.filter((id) => !chosen.includes(id));      
+      596 +    chosen.push(...pickRandom(remaining, count - chosen.length));           
+      597 +  }                                                                         
+      598 +  return chosen;                                                            
+      599 +}                                                                           
+      600 +                                                                            
+      601 +// POST /shopper/cart/shuffle — auto-fill this week's cart from the meal cat
+          +alog                                                                        
+      602 +router.post("/shopper/cart/shuffle", async (req, res) => {                  
+      603 +  try {                                                                     
+      604 +    const { mealCount } = z.object({                                        
+      605 +      mealCount: z.number().int().min(1).max(21).default(7),                
+      606 +    }).parse(req.body ?? {});                                               
+      607 +                                                                            
+      608 +    await ensureMealsSeeded();                                              
+      609 +    const cart = await getOrCreateCart();                                   
+      610 +    if (cart.status !== "pending") {                                        
+      611 +      res.status(409).json({ error: "Cart is already approved or dismissed. 
+          +Create a new week." });                                                     
+      612 +      return;                                                               
+      613 +    }                                                                       
+      614 +                                                                            
+      615 +    const catalog = await db.select().from(mealsTable).where(eq(mealsTable.a
+          +ctive, true));                                                              
+      616 +    if (catalog.length === 0) {                                             
+      617 +      res.status(422).json({ error: "No meals in the catalog yet — import yo
+          +ur cookbook first." });                                                     
+      618 +      return;                                                               
+      619 +    }                                                                       
+      620 +                                                                            
+      621 +    const avoid = await recentlyUsedMealIds(cart.id);                       
+      622 +    const chosen = chooseMeals(catalog.map((m) => m.id), avoid, mealCount); 
+      623 +                                                                            
+      624 +    await db.delete(cartMealsTable).where(eq(cartMealsTable.cartId, cart.id)
+          +);                                                                          
+      625 +    await db.insert(cartMealsTable).values(chosen.map((mealId) => ({ cartId:
+          + cart.id, mealId })));                                                      
+      626 +    await rebuildCartItems(cart.id);                                        
+      627 +                                                                            
+      628 +    res.json({                                                              
+      629 +      ok: true,                                                             
+      630 +      mealsChosen: chosen.length,                                           
+      631 +      catalogSize: catalog.length,                                          
+      632 +      repeatsFromRecentWeeks: chosen.filter((id) => avoid.has(id)).length,  
+      633 +    });                                                                     
+      634 +  } catch (err) {                                                           
+      635 +    req.log.error({ err }, "Failed to shuffle cart");                       
+      636 +    res.status(500).json({ error: "Shuffle failed" });                      
+      637 +  }                                                                         
+      638 +});                                                                         
+      639 +                                                                            
+      640 +// POST /shopper/cart/meals/:cartMealId/swap — replace one meal in the cart 
+      641 +router.post("/shopper/cart/meals/:cartMealId/swap", async (req, res) => {   
+      642 +  try {                                                                     
+      643 +    const cartMealId = parseInt(req.params.cartMealId, 10);                 
+      644 +    const { mealId } = z.object({ mealId: z.number().int() }).parse(req.body
+          +);                                                                          
+      645 +                                                                            
+      646 +    const cart = await getOrCreateCart();                                   
+      647 +    if (cart.status !== "pending") {                                        
+      648 +      res.status(409).json({ error: "Cart is already approved or dismissed. 
+          +Create a new week." });                                                     
+      649 +      return;                                                               
+      650 +    }                                                                       
+      651 +                                                                            
+      652 +    const [existing] = await db.select().from(cartMealsTable).where(eq(cartM
+          +ealsTable.id, cartMealId)).limit(1);                                        
+      653 +    if (!existing || existing.cartId !== cart.id) {                         
+      654 +      res.status(404).json({ error: "That meal isn't in this week's cart." }
+          +);                                                                          
+      655 +      return;                                                               
+      656 +    }                                                                       
+      657 +                                                                            
+      658 +    const [replacement] = await db.select().from(mealsTable)                
+      659 +      .where(and(eq(mealsTable.id, mealId), eq(mealsTable.active, true)))   
+      660 +      .limit(1);                                                            
+      661 +    if (!replacement) {                                                     
+      662 +      res.status(404).json({ error: "That meal isn't in the catalog." });   
+      663 +      return;                                                               
+      664 +    }                                                                       
+      665 +                                                                            
+      666 +    await db.update(cartMealsTable).set({ mealId }).where(eq(cartMealsTable.
+          +id, cartMealId));                                                           
+      667 +    await rebuildCartItems(cart.id);                                        
+      668 +    res.json({ ok: true, mealId, name: replacement.name });                 
+      669 +  } catch (err) {                                                           
+      670 +    req.log.error({ err }, "Failed to swap cart meal");                     
+  ⎿  Added 3 lines, removed 1 line
+      511        }));
+      512      }
+      513      const items = await db.select().from(cartItemsTable).where(eq(cartItemsT
+           able.cartId, cart.id));
+      514 -    res.json({ ...cart, meals, items });                                    
+      514 +    // Surfaced with the week so the caregiver sees the patient's dietary   
+      515 +    // restrictions at the moment they confirm, not buried in a settings tab
+          +.                                                                           
+      516 +    res.json({ ...cart, meals, items, dietaryRestrictions: await getDietaryR
+          +estrictions() });                                                           
+      517    } catch (err) {
+      518      req.log.error({ err }, "Failed to get cart");
+      519      res.status(500).json({ error: "Failed to get cart" });
+
+● Update(artifacts/api-server/src/routes/shopper.ts)
+  ⎿  Added 20 lines
+      193    }
+      194  }
+      195  
+      196 +/**                                                                         
+      197 + * Dietary restrictions recorded for the patient (same `dietary_profile` blo
+          +b                                                                           
+      198 + * the Jessica call prompt reads). The shuffle can't judge whether a recipe 
+      199 + * honors these, so they ride along with the cart for the caregiver to check
+      200 + * before approving.                                                        
+      201 + */                                                                         
+      202 +async function getDietaryRestrictions(): Promise<string[]> {                
+      203 +  try {                                                                     
+      204 +    const rows = await db.select().from(appSettingsTable)                   
+      205 +      .where(eq(appSettingsTable.key, "dietary_profile")).limit(1);         
+      206 +    if (!rows[0]?.value) return [];                                         
+      207 +    const parsed = JSON.parse(rows[0].value) as { restrictions?: unknown }; 
+      208 +    return Array.isArray(parsed.restrictions)                               
+      209 +      ? parsed.restrictions.filter((r): r is string => typeof r === "string"
+          +)                                                                           
+      210 +      : [];                                                                 
+      211 +  } catch {                                                                 
+      212 +    return [];                                                              
+      213 +  }                                                                         
+      214 +}                                                                           
+      215 +                                                                            
+      216  function getMondayOfWeek(date: Date): string {
+      217    const d = new Date(date);
+      218    const day = d.getDay();
+
+● Now the OpenAPI entries:
+
+● Update(lib/api-spec/openapi.yaml)
+  ⎿  Added 64 lines
+       951          "204":
+       952            description: Removed
+       953  
+       954 +  /shopper/cart/shuffle:                                                   
+       955 +    post:                                                                  
+       956 +      operationId: shuffleCart                                             
+       957 +      tags: [shopper]                                                      
+       958 +      summary: Auto-fill this week's cart with meals from the catalog      
+       959 +      requestBody:                                                         
+       960 +        required: false                                                    
+       961 +        content:                                                           
+       962 +          application/json:                                                
+       963 +            schema:                                                        
+       964 +              type: object                                                 
+       965 +              properties:                                                  
+       966 +                mealCount:                                                 
+       967 +                  type: integer                                            
+       968 +                  default: 7                                               
+       969 +      responses:                                                           
+       970 +        "200":                                                             
+       971 +          description: Shuffle result                                      
+       972 +          content:                                                         
+       973 +            application/json:                                              
+       974 +              schema:                                                      
+       975 +                $ref: "#/components/schemas/ShuffleCartResult"             
+       976 +                                                                           
+       977 +  /shopper/cart/meals/{cartMealId}/swap:                                   
+       978 +    post:                                                                  
+       979 +      operationId: swapCartMeal                                            
+       980 +      tags: [shopper]                                                      
+       981 +      summary: Replace one meal in this week's cart with another from the c
+           +atalog                                                                     
+       982 +      parameters:                                                          
+       983 +        - name: cartMealId                                                 
+       984 +          in: path                                                         
+       985 +          required: true                                                   
+       986 +          schema:                                                          
+       987 +            type: integer                                                  
+       988 +      requestBody:                                                         
+       989 +        required: true                                                     
+       990 +        content:                                                           
+       991 +          application/json:                                                
+       992 +            schema:                                                        
+       993 +              type: object                                                 
+       994 +              properties:                                                  
+       995 +                mealId:                                                    
+       996 +                  type: integer                                            
+       997 +              required:                                                    
+       998 +                - mealId                                                   
+       999 +      responses:                                                           
+      1000 +        "200":                                                             
+      1001 +          description: Swapped                                             
+      1002 +          content:                                                         
+      1003 +            application/json:                                              
+      1004 +              schema:                                                      
+      1005 +                type: object                                               
+      1006 +                properties:                                                
+      1007 +                  ok:                                                      
+      1008 +                    type: boolean                                          
+      1009 +                  mealId:                                                  
+      1010 +                    type: integer                                          
+      1011 +                  name:                                                    
+      1012 +                    type: string                                           
+      1013 +                required:                                                  
+      1014 +                  - ok                                                     
+      1015 +                  - mealId                                                 
+      1016 +                  - name                                                   
+      1017 +                                                                           
+      1018    /shopper/cart/approve:
+      1019      post:
+      1020        operationId: approveCart
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Update(lib/api-spec/openapi.yaml)
+  ⎿  Added 23 lines
+      2385                type: array
+      2386                items:
+      2387                  $ref: "#/components/schemas/CartItem"
+      2388 +            dietaryRestrictions:                                           
+      2389 +              type: array                                                  
+      2390 +              description: Patient dietary restrictions on file, shown alon
+           +gside the week for review                                                  
+      2391 +              items:                                                       
+      2392 +                type: string                                               
+      2393  
+      2394 +    ShuffleCartResult:                                                     
+      2395 +      type: object                                                         
+      2396 +      properties:                                                          
+      2397 +        ok:                                                                
+      2398 +          type: boolean                                                    
+      2399 +        mealsChosen:                                                       
+      2400 +          type: integer                                                    
+      2401 +        catalogSize:                                                       
+      2402 +          type: integer                                                    
+      2403 +        repeatsFromRecentWeeks:                                            
+      2404 +          type: integer                                                    
+      2405 +          description: How many picks had to reuse a meal from the last few
+           + weeks                                                                     
+      2406 +      required:                                                            
+      2407 +        - ok                                                               
+      2408 +        - mealsChosen                                                      
+      2409 +        - catalogSize                                                      
+      2410 +        - repeatsFromRecentWeeks                                           
+      2411 +                                                                           
+      2412      AddMealToCartInput:
+      2413        type: object
+      2414        properties:
+
+● Bash(pnpm --filter @workspace/api-spec run codegen 2>&1 | tail -4 && cd lib/api-client-react
+      && npx tsc -p tsconfig.json 2>&1 | tail -3; cd /home/runner/workspace &&…)
+  ⎿  api-client-react Cleaning output folder
+     🎉 api-client-react - Your OpenAPI spec has been converted into ready to use orval!
+     zod Cleaning output folder
+     … +2 lines (ctrl+o to expand)
+     
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Now the UI — shuffle button, per-meal swap picker, and the restrictions banner:
+
+● Update(artifacts/brain-app/src/pages/shopper.tsx)
+  ⎿  Added 29 lines, removed 2 lines
+      359              <CardTitle className="text-sm font-display uppercase tracking-wi
+           dest flex items-center gap-2">
+      360                <ShoppingCart size={16} /> This Week's Meal Lineup
+      361              </CardTitle>
+      362 -            <span className="text-xs text-muted-foreground">Week of {cart?.w
+          -eekStartDate ?? "..."}</span>                                               
+      362 +            <div className="flex items-center gap-3">                       
+      363 +              <span className="text-xs text-muted-foreground">Week of {cart?
+          +.weekStartDate ?? "..."}</span>                                             
+      364 +              {!cartIsLocked && (                                           
+      365 +                <Button                                                     
+      366 +                  size="sm"                                                 
+      367 +                  variant="outline"                                         
+      368 +                  className="h-7 text-xs"                                   
+      369 +                  onClick={() => shuffleCart.mutate({ data: {} })}          
+      370 +                  disabled={shuffleCart.isPending || (meals ?? []).length ==
+          += 0}                                                                        
+      371 +                >                                                           
+      372 +                  <Shuffle size={12} className={`mr-1 ${shuffleCart.isPendin
+          +g ? "animate-spin" : ""}`} />                                               
+      373 +                  {(cart?.meals ?? []).length > 0 ? "Reshuffle" : "Shuffle w
+          +eek"}                                                                       
+      374 +                </Button>                                                   
+      375 +              )}                                                            
+      376 +            </div>                                                          
+      377            </div>
+      378          </CardHeader>
+      379          <CardContent>
+      380 +          {(cart?.dietaryRestrictions ?? []).length > 0 && (                
+      381 +            <div className="mb-3 flex items-start gap-2 rounded-sm border bo
+          +rder-amber-500/30 bg-amber-500/10 p-2.5">                                   
+      382 +              <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink
+          +-0" />                                                                      
+      383 +              <p className="text-xs">                                       
+      384 +                <span className="font-bold uppercase tracking-wider text-amb
+          +er-500">On file: </span>                                                    
+      385 +                <span className="text-foreground">{(cart?.dietaryRestriction
+          +s ?? []).join(" · ")}</span>                                                
+      386 +                <span className="text-muted-foreground"> — check this week's
+          + meals against these before approving.</span>                               
+      387 +              </p>                                                          
+      388 +            </div>                                                          
+      389 +          )}                                                                
+      390 +                                                                            
+      391            {(cart?.meals ?? []).length === 0 ? (
+      367 -            <p className="text-muted-foreground italic text-sm text-center p
+          -y-4">No meals added yet. Browse the catalog below to add meals.</p>         
+      392 +            <p className="text-muted-foreground italic text-sm text-center p
+          +y-4">                                                                       
+      393 +              No meals picked yet. Hit <span className="font-semibold text-f
+          +oreground">Shuffle week</span> to fill it from the catalog, or add meals by 
+          +hand below.                                                                 
+      394 +            </p>                                                            
+      395            ) : (
+      396              <div className="space-y-2">
+      397                {(cart?.meals ?? []).map((meal: any) => (
+
+● Update(artifacts/brain-app/src/pages/shopper.tsx)
+
+──────────────────────────────────────────────────────────────────────────────────────────────
+ Edit file
+ artifacts/brain-app/src/pages/shopper.tsx
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ 414                      </div>
+ 415                    </div>
+ 416                    {!cartIsLocked && (
+ 417 -                    <Button                                                             
+ 418 -                      size="sm"                                                         
+ 419 -                      variant="ghost"                                                   
+ 420 -                      className="text-muted-foreground hover:text-destructive h-7 w-7 p-
+     -0 shrink-0"                                                                             
+ 421 -                      onClick={() => removeMealFromCart.mutate({ cartMealId: meal.cartMe
+     -alId })}                                                                                
+ 422 -                      disabled={removeMealFromCart.isPending}                           
+ 423 -                    >                                                                   
+ 424 -                      <X size={14} />                                                   
+ 425 -                    </Button>                                                           
+ 417 +                    <div className="flex gap-1 shrink-0">                               
+ 418 +                      <Button                                                           
+ 419 +                        size="sm"                                                       
+ 420 +                        variant="ghost"                                                 
+ 421 +                        className="text-muted-foreground hover:text-primary h-7 px-2 tex
+     +t-xs"                                                                                   
+ 422 +                        onClick={() => setSwappingCartMealId(swappingCartMealId === meal
+     +.cartMealId ? null : meal.cartMealId)}                                                  
+ 423 +                      >                                                                 
+ 424 +                        <Repeat size={12} className="mr-1" /> Swap                      
+ 425 +                      </Button>                                                         
+ 426 +                      <Button                                                           
+ 427 +                        size="sm"                                                       
+ 428 +                        variant="ghost"                                                 
+ 429 +                        className="text-muted-foreground hover:text-destructive h-7 w-7 
+     +p-0"                                                                                    
+ 430 +                        onClick={() => removeMealFromCart.mutate({ cartMealId: meal.cart
+     +MealId })}                                                                              
+ 431 +                        disabled={removeMealFromCart.isPending}                         
+ 432 +                      >                                                                 
+ 433 +                        <X size={14} />                                                 
+ 434 +                      </Button>                                                         
+ 435 +                    </div>                                                              
+ 436                    )}
+ 437                  </div>
+ 438                ))}
+ 439              </div>
+ 440            )}
+ 441  
+ 442 +          {swappingCartMealId !== null && !cartIsLocked && (                            
+ 443 +            <div className="mt-3 rounded-sm border border-primary/30 bg-secondary/20 p-3
+     +">                                                                                      
+ 444 +              <div className="flex items-center justify-between mb-2">                  
+ 445 +                <p className="text-xs font-bold uppercase tracking-wider text-muted-fore
+     +ground">                                                                                
+ 446 +                  Swap in — {swapChoices.length} other meal{swapChoices.length === 1 ? "
+     +" : "s"} available                                                                      
+ 447 +                </p>                                                                    
+ 448 +                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() =>
+      375 +              )}                                                            
+      376 +            </div>                                                          
+      377            </div>
+      378          </CardHeader>
+      379          <CardContent>
+      380 +          {(cart?.dietaryRestrictions ?? []).length > 0 && (                
+      381 +            <div className="mb-3 flex items-start gap-2 rounded-sm border bo
+          +rder-amber-500/30 bg-amber-500/10 p-2.5">                                   
+      382 +              <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink
+          +-0" />                                                                      
+      383 +              <p className="text-xs">                                       
+      384 +                <span className="font-bold uppercase tracking-wider text-amb
+          +er-500">On file: </span>                                                    
+      385 +                <span className="text-foreground">{(cart?.dietaryRestriction
+          +s ?? []).join(" · ")}</span>                                                
+      386 +                <span className="text-muted-foreground"> — check this week's
+          + meals against these before approving.</span>                               
+      387 +              </p>                                                          
+      388 +            </div>                                                          
+      389 +          )}                                                                
+      390 +                                                                            
+      391            {(cart?.meals ?? []).length === 0 ? (
+      367 -            <p className="text-muted-foreground italic text-sm text-center p
+          -y-4">No meals added yet. Browse the catalog below to add meals.</p>         
+      392 +            <p className="text-muted-foreground italic text-sm text-center p
+          +y-4">                                                                       
+      393 +              No meals picked yet. Hit <span className="font-semibold text-f
+          +oreground">Shuffle week</span> to fill it from the catalog, or add meals by 
+          +hand below.                                                                 
+      394 +            </p>                                                            
+      395            ) : (
+      396              <div className="space-y-2">
+      397                {(cart?.meals ?? []).map((meal: any) => (
+
+● Update(artifacts/brain-app/src/pages/shopper.tsx)
+  ⎿  Added 55 lines, removed 9 lines
+      414                      </div>
+      415                    </div>
+      416                    {!cartIsLocked && (
+      417 -                    <Button                                                 
+      418 -                      size="sm"                                             
+      419 -                      variant="ghost"                                       
+      420 -                      className="text-muted-foreground hover:text-destructiv
+          -e h-7 w-7 p-0 shrink-0"                                                     
+      421 -                      onClick={() => removeMealFromCart.mutate({ cartMealId:
+          - meal.cartMealId })}                                                        
+      422 -                      disabled={removeMealFromCart.isPending}               
+      423 -                    >                                                       
+      424 -                      <X size={14} />                                       
+      425 -                    </Button>                                               
+      417 +                    <div className="flex gap-1 shrink-0">                   
+      418 +                      <Button                                               
+      419 +                        size="sm"                                           
+      420 +                        variant="ghost"                                     
+      421 +                        className="text-muted-foreground hover:text-primary 
+          +h-7 px-2 text-xs"                                                           
+      422 +                        onClick={() => setSwappingCartMealId(swappingCartMea
+          +lId === meal.cartMealId ? null : meal.cartMealId)}                          
+      423 +                      >                                                     
+      424 +                        <Repeat size={12} className="mr-1" /> Swap          
+      425 +                      </Button>                                             
+      426 +                      <Button                                               
+      427 +                        size="sm"                                           
+      428 +                        variant="ghost"                                     
+      429 +                        className="text-muted-foreground hover:text-destruct
+          +ive h-7 w-7 p-0"                                                            
+      430 +                        onClick={() => removeMealFromCart.mutate({ cartMealI
+          +d: meal.cartMealId })}                                                      
+      431 +                        disabled={removeMealFromCart.isPending}             
+      432 +                      >                                                     
+      433 +                        <X size={14} />                                     
+      434 +                      </Button>                                             
+      435 +                    </div>                                                  
+      436                    )}
+      437                  </div>
+      438                ))}
+      439              </div>
+      440            )}
+      441  
+      442 +          {swappingCartMealId !== null && !cartIsLocked && (                
+      443 +            <div className="mt-3 rounded-sm border border-primary/30 bg-seco
+          +ndary/20 p-3">                                                              
+      444 +              <div className="flex items-center justify-between mb-2">      
+      445 +                <p className="text-xs font-bold uppercase tracking-wider tex
+          +t-muted-foreground">                                                        
+      446 +                  Swap in — {swapChoices.length} other meal{swapChoices.leng
+          +th === 1 ? "" : "s"} available                                              
+      447 +                </p>                                                        
+      448 +                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" on
+          +Click={() => setSwappingCartMealId(null)}>                                  
+      449 +                  <X size={12} />                                           
+      450 +                </Button>                                                   
+      451 +              </div>                                                        
+      452 +              {swapChoices.length === 0 ? (                                 
+      453 +                <p className="text-xs text-muted-foreground italic">Every me
+      455 +                <div className="space-y-1 max-h-64 overflow-y-auto">        
+      456 +                  {swapChoices.map((choice) => (                            
+      457 +                    <button                                                 
+      458 +                      key={choice.id}                                       
+      459 +                      type="button"                                         
+      460 +                      disabled={swapCartMeal.isPending}                     
+      461 +                      onClick={() => swapCartMeal.mutate({ cartMealId: swapp
+          +ingCartMealId, data: { mealId: choice.id } })}                              
+      462 +                      className="w-full text-left p-2 rounded-sm hover:bg-pr
+          +imary/10 border border-transparent hover:border-primary/30 disabled:opacity-
+          +50"                                                                         
+      463 +                    >                                                       
+      464 +                      <span className="text-sm font-semibold">{choice.name}<
+          +/span>                                                                      
+      465 +                      <span className="text-xs text-muted-foreground ml-2"> 
+      466 +                        {(choice.ingredients ?? []).length} ingredients     
+      467 +                      </span>                                               
+      468 +                      {choice.description && (                              
+      469 +                        <p className="text-xs text-muted-foreground/80 trunc
+          +ate">{choice.description.split("\n")[0]}</p>                                
+      470 +                      )}                                                    
+      471 +                    </button>                                               
+      472 +                  ))}                                                       
+      473 +                </div>                                                      
+      474 +              )}                                                            
+      475 +            </div>                                                          
+      476 +          )}                                                                
+      477 +                                                                            
+      478            {!cartIsLocked && (cart?.meals ?? []).length > 0 && (
+      479              <div className="flex gap-2 mt-4 pt-4 border-t border-border/30">
+      480                <Button
+
+● Now wiring the state, mutations, and imports:
+
+● Update(artifacts/brain-app/src/pages/shopper.tsx)
+  ⎿  Added 2 lines
+      22    Check,
+      23    Upload,
+      24    FileWarning,
+      25 +  Shuffle,                                                                   
+      26 +  Repeat,                                                                    
+      27  } from "lucide-react";
+      28  import {
+      29    useListMeals,
+
+● Update(artifacts/brain-app/src/pages/shopper.tsx)
+  ⎿  Added 2 lines
+      35    useGetCart,
+      36    useAddMealToCart,
+      37    useRemoveMealFromCart,
+      38 +  useShuffleCart,                                                            
+      39 +  useSwapCartMeal,                                                           
+      40    useApproveCart,
+      41    useDismissCart,
+      42    useListCravings,
+
+● Update(artifacts/brain-app/src/pages/shopper.tsx)
+  ⎿  Added 1 line
+      79    const [showAddMeal, setShowAddMeal] = useState(false);
+      80    const [newMealName, setNewMealName] = useState("");
+      81    const [importResult, setImportResult] = useState<CookbookImportResult | nul
+          l>(null);
+      82 +  const [swappingCartMealId, setSwappingCartMealId] = useState<number | null>
+         +(null);                                                                      
+      83  
+      84    const { data: meals, refetch: refetchMeals } = useListMeals();
+      85    const { data: cart, refetch: refetchCart } = useGetCart();
+
+● Update(artifacts/brain-app/src/pages/shopper.tsx)
+  ⎿  Added 17 lines
+      221      onSuccess: (data) => { refetchMeals(); toast({ title: `Synced! ${data.me
+           alsImported} meal(s) imported, ${data.rowsProcessed} rows processed.` }); se
+           tSheetId(""); },
+      222      onError: () => toast({ title: "Sync failed", description: "Make sure the
+            sheet is publicly shared.", variant: "destructive" }),
+      223    }});
+      224 +  const shuffleCart = useShuffleCart({ mutation: {                          
+      225 +    onSuccess: (data) => {                                                  
+      226 +      refetchCart();                                                        
+      227 +      setSwappingCartMealId(null);                                          
+      228 +      toast({                                                               
+      229 +        title: `Picked ${data.mealsChosen} meal(s) from ${data.catalogSize} 
+          +in the catalog.`,                                                           
+      230 +        description: data.repeatsFromRecentWeeks > 0                        
+      231 +          ? `${data.repeatsFromRecentWeeks} repeat(s) from recent weeks — th
+          +e catalog ran out of fresh options.`                                        
+      232 +          : undefined,                                                      
+      233 +      });                                                                   
+      234 +    },                                                                      
+      235 +    onError: () => toast({ title: "Shuffle failed", description: "Add meals 
+          +to the catalog first.", variant: "destructive" }),                          
+      236 +  }});                                                                      
+      237 +  const swapCartMeal = useSwapCartMeal({ mutation: {                        
+      238 +    onSuccess: (data) => { refetchCart(); setSwappingCartMealId(null); toast
+          +({ title: `Swapped in ${data.name}.` }); },                                 
+      239 +    onError: () => toast({ title: "Swap failed", variant: "destructive" }), 
+      240 +  }});                                                                      
+      241    const importCookbook = useImportCookbook({ mutation: {
+      242      onSuccess: (data) => {
+      243        setImportResult(data);
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(artifacts/brain-app/src/pages/shopper.tsx)
+  ⎿  Added 5 lines
+      293    const cartMealIds = new Set((cart?.meals ?? []).map((m: any) => m.id));
+      294    const cartStatus = cart?.status ?? "pending";
+      295    const cartIsLocked = cartStatus !== "pending";
+      296 +  // Everything in the catalog that isn't already on this week's lineup — th
+          +e                                                                           
+      297 +  // "what else could I have" list Ray wants when swapping a meal out.      
+      298 +  const swapChoices = ((meals ?? []) as MealWithIngredients[])              
+      299 +    .filter((m) => !cartMealIds.has(m.id))                                  
+      300 +    .sort((a, b) => a.name.localeCompare(b.name));                          
+      301  
+      302    const fmtDollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+      303  
+
+● Bash(pnpm run typecheck 2>&1 | grep -E "error|Done|Failed" | head -20)
+  ⎿  lib/api-zod/src/index.ts(2,1): error TS2308: Module "./generated/api" has already ex
+     ported a member named 'ShuffleCartBody'. Consider explicitly re-exporting to resolve
+      the ambiguity.
+     … +3 lines (ctrl+o to expand)
+
+● Inline request bodies collided with generated type names. Giving them named schemas like the
+  other endpoints:
+
+● Update(lib/api-spec/openapi.yaml)
+  ⎿  Added 1 line, removed 5 lines
+      961          content:
+      962            application/json:
+      963              schema:
+      964 -              type: object                                                  
+      965 -              properties:                                                   
+      966 -                mealCount:                                                  
+      967 -                  type: integer                                             
+      968 -                  default: 7                                                
+      964 +              $ref: "#/components/schemas/ShuffleCartInput"                 
+      965        responses:   
+      966          "200":
+      967            description: Shuffle result
+
+● Update(lib/api-spec/openapi.yaml)
+  ⎿  Added 2 lines, removed 18 lines
+       986          content:
+       987            application/json:
+       988              schema:
+       989 -              type: object                                                 
+       990 -              properties:                                                  
+       991 -                mealId:                                                    
+       992 -                  type: integer                                            
+       993 -              required:                                                    
+       994 -                - mealId                                                   
+       989 +              $ref: "#/components/schemas/SwapCartMealInput"               
+       990        responses:
+       991          "200":
+       992            description: Swapped
+       993            content:
+       994              application/json:
+       995                schema:
+      1001 -                type: object                                               
+      1002 -                properties:                                                
+      1003 -                  ok:                                                      
+      1004 -                    type: boolean                                          
+      1005 -                  mealId:                                                  
+      1006 -                    type: integer                                          
+      1007 -                  name:                                                    
+      1008 -                    type: string                                           
+      1009 -                required:                                                  
+      1010 -                  - ok                                                     
+      1011 -                  - mealId                                                 
+      1012 -                  - name                                                   
+       996 +                $ref: "#/components/schemas/SwapCartMealResult"            
+       997  
+       998    /shopper/cart/approve:
+       999      post:
+
+● Update(lib/api-spec/openapi.yaml)
+  ⎿  Added 29 lines
+      2371                items:
+      2372                  type: string
+      2373  
+      2374 +    ShuffleCartInput:                                                      
+      2375 +      type: object                                                         
+      2376 +      properties:                                                          
+      2377 +        mealCount:                                                         
+      2378 +          type: integer                                                    
+      2379 +          default: 7                                                       
+      2380 +                                                                           
+      2381 +    SwapCartMealInput:                                                     
+      2382 +      type: object                                                         
+      2383 +      properties:                                                          
+      2384 +        mealId:                                                            
+      2385 +          type: integer                                                    
+      2386 +      required:                                                            
+      2387 +        - mealId                                                           
+      2388 +                                                                           
+      2389 +    SwapCartMealResult:                                                    
+      2390 +      type: object                                                         
+      2391 +      properties:                                                          
+      2392 +        ok:                                                                
+      2393 +          type: boolean                                                    
+      2394 +        mealId:                                                            
+      2395 +          type: integer                                                    
+      2396 +        name:                                                              
+      2397 +          type: string                                                     
+      2398 +      required:                                                            
+      2399 +        - ok                                                               
+      2400 +        - mealId                                                           
+      2401 +        - name                                                             
+      2402 +                                                                           
+      2403      ShuffleCartResult:
+      2404        type: object
+      2405        properties:
+
+● Bash(pnpm --filter @workspace/api-spec run codegen 2>&1 | tail -3 && cd lib/api-client-react
+      && npx tsc -p tsconfig.json 2>&1 | tail -3; pnpm run typecheck 2>&1 | gr…)
+  ⎿  🎉 api-client-react - Your OpenAPI spec has been converted into ready to use orval!
+     zod Cleaning output folder
+     🎉 zod - Your OpenAPI spec has been converted into ready to use orval!
+     
+● Bash(cd /home/runner/workspace && pnpm run typecheck 2>&1 | grep -E "error|Done" | head -20)
+  ⎿  scripts typecheck: Done
+     artifacts/api-server typecheck: Done
+     artifacts/mockup-sandbox typecheck: Done
+     artifacts/brain-app typecheck: Done
