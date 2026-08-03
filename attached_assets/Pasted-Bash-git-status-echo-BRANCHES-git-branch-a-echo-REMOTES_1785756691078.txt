@@ -1,0 +1,118 @@
+Bash(git status && echo "---BRANCHES---" && git branch -a && echo "---REMOTES---" && git
+      remote -v)
+  ⎿  On branch master
+     nothing to commit, working tree clean
+     ---BRANCHES---
+     … +115 lines (ctrl+o to expand)
+
+● Bash(git log --oneline -25 && echo "---STAT LAST 5---" && git log --stat -5 --format="%n===
+      %h %ad %s" --date=short)
+  ⎿  30e2107 Update health check route, admin view, and package dependencies
+     ab9b74c Add screenshot asset
+     f2d8a5e Add quarter orbit demo files and assets
+     … +72 lines (ctrl+o to expand)
+
+● Bash(git log --oneline origin/master -3 && echo "--- ahead/behind vs origin/master ---" &&
+      git rev-list --left-right --count origin/master...master && echo "--- audi…)
+  ⎿  6ed3fe4 Update API server scheduling logic and add hot-reload documentation
+     f17daf8 Make Haldol dosing interval configurable; complete cron job system
+     a9f0b2d Update Claude instructions and add reference asset for call scheduler logic
+     … +7 lines (ctrl+o to expand)
+
+  Listed 3 directories (ctrl+o to expand)
+
+● Bash(echo "=== UNPUSHED (origin/master..master) ===" && git log --oneline
+      origin/master..master && echo && git diff --stat origin/master..master)
+  ⎿  === UNPUSHED (origin/master..master) ===
+     30e2107 Update health check route, admin view, and package dependencies
+     ab9b74c Add screenshot asset
+     … +63 lines (ctrl+o to expand)
+
+● Bash(echo "=== audit branch diff ===" && git show --stat
+      origin/claude/brain-full-scale-audit-utt9pc && echo && echo "=== guardian-care-skill
+      diffstat vs master ==="…)
+  ⎿  === audit branch diff ===
+     commit 1ee7d563e52c2a986906eb8f752e01d7a8fb7d1c
+     Author: Claude <noreply@anthropic.com>
+     … +27 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Bash(git show 30e2107 -- artifacts/api-server/src/routes/health-assessment.ts package.json
+      artifacts/brain-app/src/pages/admin-view.tsx | head -120)
+  ⎿  commit 30e21070729cb20133c790596ba980268dfdd289
+     Author: Replit Agent <agent@replit.com>
+     Date:   Mon Aug 3 02:19:58 2026 +0000
+     … +59 lines (ctrl+o to expand)
+
+● Bash(git ls-files .claude/ | head && echo "--- ignored? ---" && git check-ignore -v
+      .claude/skills/guardian-care/SKILL.md; echo "--- diff skill files vs branch ---"…)
+  ⎿  .claude/CLAUDE.md
+     .claude/settings.local.json
+     .claude/skills/guardian-care/SKILL.md
+     … +5 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(echo "=== .gitignore ===" && cat .gitignore && echo "=== tracked env files ===" && git
+      ls-files | grep -iE "(^|/)\.env" ; echo "(none if blank)" && echo "=== en…)
+  ⎿  === .gitignore ===
+     # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+      for more about ignoring files.
+     … +56 lines (ctrl+o to expand)
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Bash(grep -rn "startCronScheduler" artifacts/api-server/src --include=*.ts && echo "===
+      scheduler head ===" && sed -n '600,640p' artifacts/api-server/src/lib/call-sc…)
+  ⎿  artifacts/api-server/src/index.ts:4:import { startCronScheduler } from "./lib/call-s
+     cheduler";
+     artifacts/api-server/src/index.ts:35:  startCronScheduler();
+     … +42 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+● I'm caught up. Here's the state of things:
+
+  Repo state
+
+  - Branch: master, working tree clean, but 10 commits unpushed to origin/master
+  (github.com/shadowsys-memphis/Guardian). Latest local work is from today (Aug 3).
+  - Two unmerged remote branches:
+    - claude/guardian-care-skill-n2qeh6 — already effectively merged; both skills
+  (guardian-care, spec-first-routing) are in master. Only 2 lines of AGENTS.md differ. Safe to
+  delete.
+    - claude/brain-full-scale-audit-utt9pc — NOT merged, and it's a real security fix (see
+  below).
+  - ~35 subrepl-* local branches + remotes — Replit checkpoint noise, not real work.
+
+  What's shipped since the last doc update
+
+  - Cron/scheduled-jobs layer is live, not "pending review" as .claude/CLAUDE.md still claims.
+  call-scheduler.ts now has 8 registered jobs (daily_call, appointment_reminder,
+  haldol_alert, med_refusal_escalation, wellbeing_escalation, rotation_reset,
+  missed_call_detection, quarter_auto_advance), a cron_log table, a routes/cron.ts status/ack
+  surface, and startCronScheduler() is wired into index.ts:35. New lib/pacific-time.ts handles
+  the timezone math.
+  - Today's commit (30e2107) clamps dailyCallTime to 06:00–20:00 server- and client-side, to
+  keep the call + its +2h missed-call check clear of the midnight Pacific/UTC boundary.
+  - Billing is genuinely gone — no billing.ts route, no STRIPE_* vars; one dead reference
+  remains in lib/tenant-migration.ts.
+
+  Two things worth your attention
+
+  1. The ElevenLabs webhook is still unauthenticated on master. POST 
+  /jessica/elevenlabs-webhook (jessica.ts:325) parses and persists whatever it's handed —
+  anyone who knows or guesses a conversation_id can write forged health data, flags, and
+  cravings into Pops' record. The fix exists on claude/brain-full-scale-audit-utt9pc (HMAC
+  signature verification, 30-min replay window, fail-closed if ELEVENLABS_WEBHOOK_SECRET is
+  unset) but was never merged. That branch also adds .env/.env.* to .gitignore — currently 
+  .gitignore has no env entries at all. No .env file is tracked or on disk right now, so
+  nothing has leaked, but there's no guard.
+
+  2. Docs have drifted. .claude/CLAUDE.md still describes the Stripe subscription flow,
+  /billing/* public routes, and setup-token lifecycle as current, and says the scheduler is
+  "implemented but held pending final review." Root CLAUDE.md says the opposite on billing.
+  The root file is the accurate one.
+
+  Want me to merge the security branch, or push master first?
