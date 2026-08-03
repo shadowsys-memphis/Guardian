@@ -394,7 +394,14 @@ router.put("/health-assessment/settings", async (req, res) => {
       quietWindowEnd: z.string().optional(),
       engagementIntervalHours: z.number().optional(),
       dailyCallEnabled: z.boolean().optional(),
-      dailyCallTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM 24-hour format").optional(),
+      dailyCallTime: z.string()
+        .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM 24-hour format")
+        .refine((v) => {
+          const [h, m] = v.split(":").map(Number);
+          const mins = h * 60 + m;
+          return mins >= 360 && mins <= 1200; // 06:00–20:00 — keeps the call, and the +2h missed-call check, safely clear of the midnight UTC/Pacific boundary
+        }, "Daily call time must be between 6:00 AM and 8:00 PM")
+        .optional(),
     }).parse(req.body);
     const current = await getSettings();
     const merged = { ...current, ...body };

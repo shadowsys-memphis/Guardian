@@ -4578,10 +4578,13 @@ function AppSettingsTab() {
               <label className="text-xs font-bold uppercase text-muted-foreground">Call Time (24h, Pacific)</label>
               <Input
                 type="time"
+                min="06:00"
+                max="20:00"
                 value={callForm.dailyCallTime}
                 onChange={(e) => setCallForm({ ...callForm, dailyCallTime: e.target.value })}
                 className="max-w-[160px]"
               />
+              <p className="text-xs text-muted-foreground">Must be between 6:00 AM and 8:00 PM.</p>
             </div>
             <Button type="submit" disabled={updateHealthSettings.isPending}>Save Call Time</Button>
           </form>
