@@ -1,0 +1,17 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brain Guardian app icon">
+  <defs>
+    <radialGradient id="qoIconHalo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#E8BC6A" stop-opacity="0.8"/>
+      <stop offset="55%" stop-color="#E8BC6A" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#E8BC6A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Full-bleed square — the OS applies its own mask. -->
+  <rect x="0" y="0" width="1024" height="1024" fill="#FAF7F1"/>
+  <path d="M 585.54 217.03 A 304 304 0 0 1 806.97 438.46" stroke="#7FA382" stroke-width="88" stroke-linecap="round" fill="none"/>
+  <path d="M 806.97 585.54 A 304 304 0 0 1 585.54 806.97" stroke="#C6D6C4" stroke-width="88" stroke-linecap="round" fill="none"/>
+  <path d="M 438.46 806.97 A 304 304 0 0 1 217.03 585.54" stroke="#C6D6C4" stroke-width="88" stroke-linecap="round" fill="none"/>
+  <path d="M 217.03 438.46 A 304 304 0 0 1 438.46 217.03" stroke="#C6D6C4" stroke-width="88" stroke-linecap="round" fill="none"/>
+  <circle cx="726.96" cy="297.04" r="176" fill="url(#qoIconHalo)"/>
+  <circle cx="726.96" cy="297.04" r="76" fill="#D9A441"/>
+</svg>

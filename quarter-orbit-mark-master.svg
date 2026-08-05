@@ -1,0 +1,32 @@
+<svg class="quarter-orbit" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brain Guardian">
+  <defs>
+    <radialGradient id="qoHaloA" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0.85"/>
+      <stop offset="55%" stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="var(--jessica-glow, #E8BC6A)" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- togglable backdrop (hidden with .no-plate) -->
+  <rect class="bg-plate" x="0" y="0" width="256" height="256" rx="56" fill="var(--bg-plate-fill, #FAF7F1)"/>
+
+  <!-- the four quarters — static track -->
+  <g class="orbit-track" stroke="var(--track-rest, #C6D6C4)" stroke-width="22" stroke-linecap="round">
+    <path class="arc arc-q1" d="M 146.39 54.26 A 76 76 0 0 1 201.74 109.61"/>
+    <path class="arc arc-q2" d="M 201.74 146.39 A 76 76 0 0 1 146.39 201.74"/>
+    <path class="arc arc-q3" d="M 109.61 201.74 A 76 76 0 0 1 54.26 146.39"/>
+    <path class="arc arc-q4" d="M 54.26 109.61 A 76 76 0 0 1 109.61 54.26"/>
+  </g>
+
+  <!-- the dial — everything that rides with the light.
+       Rotate via the orbit-angle CSS var (0deg = 06:00, top of day). -->
+  <g class="orbit-dial" transform="rotate(45 128 128)">
+    <circle class="jessica-halo" cx="128" cy="52" r="44" fill="url(#qoHaloA)"/>
+    <g class="jessica-ripple-group">
+      <circle class="ring-1" cx="128" cy="52" r="20"/>
+      <circle class="ring-2" cx="128" cy="52" r="20"/>
+      <circle class="ring-3" cx="128" cy="52" r="20"/>
+    </g>
+    <circle class="jessica-core" cx="128" cy="52" r="19" fill="var(--jessica-amber, #D9A441)"/>
+  </g>
+</svg>

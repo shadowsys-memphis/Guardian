@@ -5,37 +5,20 @@ import path from "path";
 import fs from "fs";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
+// Local defaults — Replit still injects PORT / BASE_PATH / VITE_PUBLIC_SITE_URL.
+const rawPort = process.env.PORT ?? "5173";
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
+const basePath = process.env.BASE_PATH ?? "/";
+const apiProxyTarget =
+  process.env.API_PROXY_TARGET ?? `http://localhost:${process.env.API_PORT ?? "8080"}`;
 
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
-
-const rawSiteUrl = process.env.VITE_PUBLIC_SITE_URL;
-
-if (!rawSiteUrl) {
-  throw new Error(
-    "VITE_PUBLIC_SITE_URL environment variable is required but was not provided. " +
-      "Set it to the absolute origin of the site (e.g. https://example.com) so that " +
-      "Open Graph and Twitter share-preview tags resolve correctly.",
-  );
-}
+const rawSiteUrl =
+  process.env.VITE_PUBLIC_SITE_URL ?? `http://localhost:${port}`;
 
 // Validate that VITE_PUBLIC_SITE_URL is a well-formed absolute origin.
 // We parse it and require an http/https protocol, then normalise to url.origin
@@ -134,6 +117,13 @@ export default defineConfig({
     fs: {
       strict: true,
       deny: ["**/.*"],
+    },
+    proxy: {
+      // Replit routes /api via artifacts; locally Vite must forward it.
+      "/api": {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
     },
   },
   preview: {

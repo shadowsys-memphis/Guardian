@@ -25,6 +25,7 @@ import authRouter from "./auth";
 import jessicaRouter from "./jessica";
 import documentsRouter from "./documents";
 import cronRouter from "./cron";
+import labsRouter from "./labs";
 
 const router: IRouter = Router();
 
@@ -46,6 +47,7 @@ coreRouter.use(stateRouter);
 coreRouter.use(scheduleRouter);
 coreRouter.use(symptomsRouter);
 coreRouter.use(inventoryRouter);
+coreRouter.use(labsRouter);             // blood-work tracker, tenant-scoped from day one
 coreRouter.use(adminRouter);            // no direct DB queries (AI proxy)
 coreRouter.use(workspaceRouteHandler);  // no direct DB queries (proxy)
 coreRouter.use(intakeRouter);           // no direct DB queries (AI proxy)

@@ -1,0 +1,22 @@
+# Local Postgres for Guardian. One command: docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: guardian-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: guardian
+      POSTGRES_PASSWORD: guardian
+      POSTGRES_DB: guardian
+    ports:
+      - "5432:5432"
+    volumes:
+      - guardian_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guardian -d guardian"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  guardian_pg:

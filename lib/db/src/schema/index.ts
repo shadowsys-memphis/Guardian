@@ -366,3 +366,45 @@ export const medicalDocumentsTable = pgTable("medical_documents", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 export type MedicalDocument = typeof medicalDocumentsTable.$inferSelect;
+
+// ─── Blood-work tracker (lab_protocols / lab_phases / lab_draws) ─────────────
+// Two invariants (tasks/lab-tracker-spec.md): drawn ≠ resulted, and overdue
+// never auto-clears. Status holds human-actioned state ONLY — due/overdue are
+// computed at read time from due_date + window_days, never stored.
+
+export const labProtocolsTable = pgTable("lab_protocols", {
+  id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
+  label: text("label").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type LabProtocol = typeof labProtocolsTable.$inferSelect;
+export const insertLabProtocolSchema = createInsertSchema(labProtocolsTable).omit({ id: true });
+
+// Cadence steps down by date-bounded rows (7 → 14 days), never a counter and
+// never a hand edit of existing rows.
+export const labPhasesTable = pgTable("lab_phases", {
+  id: serial("id").primaryKey(),
+  protocolId: integer("protocol_id").notNull(),
+  intervalDays: integer("interval_days").notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type LabPhase = typeof labPhasesTable.$inferSelect;
+export const insertLabPhaseSchema = createInsertSchema(labPhasesTable).omit({ id: true });
+
+export const labDrawsTable = pgTable("lab_draws", {
+  id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
+  protocolId: integer("protocol_id").notNull(),
+  dueDate: date("due_date").notNull(), // date, not timestamp — tz drift moves a draw by a day
+  windowDays: integer("window_days").notNull().default(2),
+  drawnAt: timestamp("drawn_at"), // completion 1: went to the lab
+  resultReceivedAt: timestamp("result_received_at"), // completion 2: result actually came back
+  status: text("status").notNull().default("pending"), // pending | drawn | resulted | skipped | rescheduled
+  reason: text("reason"), // required for skip/reschedule
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type LabDraw = typeof labDrawsTable.$inferSelect;
+export const insertLabDrawSchema = createInsertSchema(labDrawsTable).omit({ id: true });
