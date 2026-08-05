@@ -9,7 +9,9 @@
       "Bash(cp /tmp/claude-1000/-home-runner-workspace/c59a1a29-bd38-4c25-a663-ebd8186c96d3/scratchpad/test-normalize.mjs /home/runner/workspace/artifacts/api-server/test-normalize.mjs)",
       "Bash(node test-normalize.mjs)",
       "Bash(rm -f /home/runner/workspace/artifacts/api-server/test-normalize.mjs)",
-      "Bash(pnpm --filter @workspace/api-server run typecheck)"
+      "Bash(pnpm --filter @workspace/api-server run typecheck)",
+      "Bash(git merge *)",
+      "Bash(echo \"--- exit: $? ---\")"
     ]
   }
 }
