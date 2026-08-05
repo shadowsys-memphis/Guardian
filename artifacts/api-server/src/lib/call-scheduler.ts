@@ -248,6 +248,11 @@ const appointmentReminderJob: CronJob = {
   intervalMs: null,
   placesCall: true,
   async run(now, opts) {
+    // Honor the same master call switch as the daily call — no job may dial
+    // the phone while calling is disabled in Settings, or the admin UI lies.
+    const settings = await getSettings();
+    if (!settings.dailyCallEnabled && !opts?.force) return { outcome: "skipped" };
+
     // A 2-hour window, not a single exact minute — so a transient failure
     // (ElevenLabs down, network blip) gets retried by a later tick instead of
     // silently going unfixed for the night. Nothing below persists a
