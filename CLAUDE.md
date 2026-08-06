@@ -70,19 +70,24 @@ Route middleware split in `artifacts/api-server/src/routes/index.ts`:
 
 ### Frontend Route Map
 
+Verified against `App.tsx` on 2026-08-06 — this is the complete list:
+
 ```
 /               → redirect to /pops
 /pops           → PopsView (zero-touch display for Pops; auto-refreshes every 30s)
 /jessica        → JessicaPhone (live Gemini call UI with SSE streaming)
-/scripts        → JessicaView (terminal-style script manifest)
-/admin          → AdminView (Raymo's dashboard — 7 tabs)
+/calls          → CallsView (call session history + transcripts)
+/shopper        → ShopperView (meals / grocery carts)
+/admin          → AdminView (Raymo's dashboard — tabbed)
 /admin/report   → DoctorReport
-/smarthome      → SmartHomePanel
-/intercom       → E2EE intercom (AES-GCM; ciphertext+iv+salt only in DB)
+/scripts        → JessicaView (terminal-style script manifest)
 /my-subscription→ MySubscriptionPage (static "self-hosted, no billing" notice)
+/settings       → SettingsView
 /guardian       → GuardianPage (stub — outside VaultGate)
 /guardian/success → GuardianSuccessPage (stub — outside VaultGate)
 ```
+
+**Removed features — do not reintroduce.** `/smarthome` and `/intercom` were previously listed here but no longer exist on the frontend. The E2EE intercom and the client-side `crypto.ts` were deleted in `61c5421` ("Remove encryption and vault features"), the smart-home page in `62f16ac`, and the governor routes in `98a0acd`. Stale copies of all of these still sit in `Knowledgebase/artifacts/` (a pre-removal docs snapshot, not live code) — if a search turns them up, that is the snapshot, not a feature you should wire back in. The api-server *does* still register `smarthomeRouter` under the local-only tier, so those endpoints exist with no UI in front of them.
 
 Routes under `AppContent` (inside `VaultProvider`) require vault unlock. `/guardian` and `/guardian/success` are outside the vault. They were the public sign-up/checkout funnel; since billing was removed they are inert stubs that make no API calls, but they still have their own Vite HTML entries and SSR prerender step (`vite.config.ts`) — that build cost is now unearned, so collapsing them into the main SPA is a safe cleanup if anyone wants it.
 

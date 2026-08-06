@@ -179,7 +179,7 @@ Orval config: `lib/api-spec/orval.config.ts` — `api-client-react` target → r
 2. **Three-tier route auth** (backend) — new routes must be placed in PUBLIC / CORE WORKSPACE / LOCAL-ONLY in `routes/index.ts` deliberately; core-workspace routes touching new tables need `tenant_id` scoping from day one.
 3. **`drizzle-kit push` hangs** — use raw SQL via `pool` instead (see DB Gotchas above).
 4. **Orval → tsc rebuild sequence** — codegen, then rebuild `api-client-react` declarations, then root typecheck.
-5. **Intercom E2EE** — `intercom_messages`-style storage is ciphertext/iv/salt only; decryption is entirely client-side, never add server-side decryption.
+5. **Intercom is GONE** (was: "E2EE intercom, ciphertext/iv/salt only"). The intercom page, its API route, and `crypto.ts` were deliberately deleted in `61c5421` ("Remove encryption and vault features"). Pre-removal copies survive in `Knowledgebase/artifacts/` — that is a docs snapshot, not live code. Don't wire it back in. (The *vault gate* is separate and very much still live — see Vault Gate above.)
 6. **Quarter system** — `currentQuarter` in `app_state` is the *effective* quarter (override if set, else wall-clock); `computedQuarter` is always the wall-clock value. Both returned by `getAppState`.
 7. **Haldol cycle days 1–5** — `isZombiePhase` computed from `lastInjectionDate`; Jessica's tone shifts to "soft/brief/low-pressure" automatically via the system prompt.
 8. **`/scripts/active` before `/scripts/:id`** — Express route registration order matters; the literal path must come first.
