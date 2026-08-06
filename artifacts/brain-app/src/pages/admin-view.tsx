@@ -3320,17 +3320,28 @@ function RotationTab() {
   const completePct = total > 0 ? Math.round((done / total) * 100) : 0;
   const hourlyPct = hourlyTotal > 0 ? Math.round((hourlyDone / hourlyTotal) * 100) : 0;
 
+  // A failed save here means a care task Ray believes is logged silently isn't.
+  // Every mutation on this tab must surface its own failure and re-sync from
+  // the server, so the checkbox can never sit "checked" over a rejected write.
+  const rotationMutationOpts = (what: string) => ({
+    onSuccess: () => refetchTasks(),
+    onError: () => {
+      toast({ title: `Couldn't save ${what}`, description: "Not recorded — check your connection and try again.", variant: "destructive" as const });
+      refetchTasks();
+    },
+  });
+
   const handleToggleTask = (t: RotationTask) => {
-    updateTask.mutate({ id: t.id, data: { status: t.status === "done" ? "pending" : "done" } }, { onSuccess: () => refetchTasks() });
+    updateTask.mutate({ id: t.id, data: { status: t.status === "done" ? "pending" : "done" } }, rotationMutationOpts("that task"));
   };
 
   const handleMedResponse = (t: RotationTask, response: string) => {
-    updateTask.mutate({ id: t.id, data: { medResponse: t.medResponse === response ? null : response } }, { onSuccess: () => refetchTasks() });
+    updateTask.mutate({ id: t.id, data: { medResponse: t.medResponse === response ? null : response } }, rotationMutationOpts("the med response"));
   };
 
   const handleSaveNote = (t: RotationTask) => {
     const note = inlineNotes[t.id] !== undefined ? inlineNotes[t.id] : (t.loggedNote ?? "");
-    updateTask.mutate({ id: t.id, data: { loggedNote: note.trim() || null } }, { onSuccess: () => refetchTasks() });
+    updateTask.mutate({ id: t.id, data: { loggedNote: note.trim() || null } }, rotationMutationOpts("the note"));
   };
 
   const handleAddTask = () => {

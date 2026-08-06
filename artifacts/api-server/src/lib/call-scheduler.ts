@@ -461,10 +461,20 @@ const rotationResetJob: CronJob = {
     // NOTE: rotation_tasks tracks completion via `status` + `completed_at`
     // (there is no is_completed column). Ray's typed notes (logged_note) and
     // med_response are intentionally preserved — only completion state resets.
+    //
+    // Only clear completions earned on an EARLIER Pacific day. `isTimeOfDayDue`
+    // with no bound is true from 00:00 until 23:59, so this job is "due" all day
+    // and fires on the first tick after the server comes up. On Replit the
+    // server sleeps and restarts constantly, so that first tick is routinely
+    // mid-afternoon — an unfiltered reset would then wipe the caregiving tasks
+    // already checked off that morning. Scoping by day makes a late catch-up
+    // run harmless instead of destructive.
+    const startOfToday = new Date(pacificWallTimeToEpochMs(now.date, "00:00"));
     const reset = await db
       .update(rotationTasksTable)
       .set({ status: "pending", completedAt: null })
-      .where(sql`${rotationTasksTable.status} <> 'pending' OR ${rotationTasksTable.completedAt} IS NOT NULL`)
+      .where(sql`(${rotationTasksTable.status} <> 'pending' OR ${rotationTasksTable.completedAt} IS NOT NULL)
+                 AND (${rotationTasksTable.completedAt} IS NULL OR ${rotationTasksTable.completedAt} < ${startOfToday})`)
       .returning({ id: rotationTasksTable.id });
 
     return { outcome: "ok", detail: `Reset ${reset.length} rotation task(s) for the new day` };
