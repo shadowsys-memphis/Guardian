@@ -26,10 +26,19 @@
 - All feature endpoints audited live Aug 6: shopper (loaded), schedule, inventory, health-assessment, scripts, smarthome, rotation, symptoms, state, cron — all working. Appointments/medications/documents/cravings wired but empty (unused, not broken).
 - Both call-placing cron jobs (`daily_call`, `appointment_reminder`) now gate on the single master switch `dailyCallEnabled` (fixed Aug 6 — reminder job was previously ungated).
 
+## `Knowledgebase/artifacts/` is a docs copy, NOT a second app (verified Aug 6)
+The docs vault contains a snapshot of all three artifact source folders, with the **same package names** (`@workspace/api-server`, etc.). This looks alarming and has already triggered one false alarm about "two cron schedulers calling Pops twice." It is not live. Verified:
+- `.replit` registers only `artifacts/api-server` and `artifacts/mockup-sandbox` — the real paths. No `Knowledgebase/`-prefixed entry exists, and the file is unchanged since Jul 30.
+- `pnpm-workspace.yaml` globs only `artifacts/*`; `pnpm -r list` resolves all three packages to `/home/runner/workspace/artifacts/…`.
+- The `Knowledgebase/` copies have **no `node_modules`** — never installed, cannot start.
+- One `dist/index.mjs` process running; **zero duplicate `cron_job_log` rows in 3 days** (same job, same minute) — one scheduler, confirmed empirically.
+
+Do not "fix" this by starting a Knowledgebase-prefixed workflow. If the duplicate source folders are ever removed from git, that's a 173-file deletion and Ray's call alone.
+
 ## Open items (owner: Ray unless noted)
-1. **Flip `dailyCallEnabled`** (app_settings → assessment_settings). Claude is deliberately blocked from doing this. Once true: daily call 10:00 PT, appointment reminders 20:00–22:00 PT, quiet window 22:00–07:00.
-2. **Republish the deployment** — the public app still runs old code AND the old open-door auth.
-3. **Switch deployment Autoscale → Reserved VM** — an autoscale app sleeps and cannot fire the 10:00 call.
+1. **Flip `dailyCallEnabled`** (app_settings → assessment_settings). Claude is deliberately blocked from doing this. Verified still `false` on Aug 6 — **no copy of the app can place a call to Pops until Ray flips it.** Once true: daily call 10:00 PT, appointment reminders 20:00–22:00 PT, quiet window 22:00–07:00.
+2. ~~Republish the deployment~~ — **DONE Aug 6** (Ray republished; HEAD is `1e08e4c "Published your App"`).
+3. **Switch deployment Autoscale → Reserved VM** — `.replit` still says `deploymentTarget = "autoscale"`. An autoscale app sleeps and cannot fire the 10:00 call. Blocks item 1 from actually working.
 4. Rotation-task completions don't persist (17 rows pending since Jun 29) — known bug, next code task (owner: Claude).
 5. Knowledgebase: 194 of 204 files on GitHub; ~10 skipped by .gitignore on the Mac (likely junk — verify with `git ls-files --others --ignored --exclude-standard -- Knowledgebase/` there).
 6. Open PR #2 (ElevenLabs webhook signature verification) from Jul 21 — real security work, unmerged.
