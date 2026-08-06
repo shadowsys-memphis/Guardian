@@ -234,35 +234,41 @@ export function JessicaPhone() {
     setOutboundSummary(null);
 
     try {
-      const settingsRes = await fetch(`${BASE_URL}/api/settings`).catch(() => null);
-      const settings: Record<string, string> = settingsRes?.ok ? await settingsRes.json().catch(() => ({})) : {};
-      const popsPhone = settings["pops_phone_number"] ?? "";
+      // Ask the server to place the call and let IT decide whether a number is
+      // configured — it reads pops_phone_number itself. Pre-checking here via
+      // GET /api/settings was broken: that route is local-session-only and this
+      // raw fetch sends no Authorization header, so it always 401'd, popsPhone
+      // was always "", and pressing Connect silently started an in-browser chat
+      // instead of ringing the phone.
+      const outboundRes = await fetch(`${BASE_URL}/api/jessica/outbound-call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(testMode ? { test: true } : {}),
+      });
+      if (outboundRes.ok) {
+        const data = await outboundRes.json();
+        setOutboundConversationId(data.elevenLabsConversationId);
+        setIsOutboundCall(true);
+        setCallState("connected");
+        return;
+      }
 
-      if (testMode || (popsPhone && popsPhone.trim())) {
-        const res = await fetch(`${BASE_URL}/api/jessica/outbound-call`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(testMode ? { test: true } : {}),
+      const outboundErr = await outboundRes.json().catch(() => ({}));
+      const errCode = (outboundErr as any).error;
+      // Only these two mean "outbound calling isn't set up" — fall through to
+      // the in-browser Gemini voice call. Anything else is a real failure and
+      // must be surfaced, not silently swapped for a different call type.
+      const canFallBackToBrowser =
+        (outboundRes.status === 503 && errCode === "elevenlabs_not_configured") ||
+        (outboundRes.status === 400 && errCode === "no_phone_number");
+      if (!canFallBackToBrowser) {
+        toast({
+          title: "Could not start outbound call",
+          description: (outboundErr as any).message ?? "ElevenLabs call failed. Check Settings → Jessica.",
+          variant: "destructive",
         });
-        if (res.ok) {
-          const data = await res.json();
-          setOutboundConversationId(data.elevenLabsConversationId);
-          setIsOutboundCall(true);
-          setCallState("connected");
-          return;
-        }
-
-        const body = await res.json().catch(() => ({}));
-        const isNotConfigured = res.status === 503 && (body as any).error === "elevenlabs_not_configured";
-        if (!isNotConfigured) {
-          toast({
-            title: "Could not start outbound call",
-            description: (body as any).message ?? "ElevenLabs call failed. Check Settings → Jessica.",
-            variant: "destructive",
-          });
-          setCallState("idle");
-          return;
-        }
+        setCallState("idle");
+        return;
       }
 
       const res = await fetch(`${BASE_URL}/api/gemini/conversations`, {
