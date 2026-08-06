@@ -92,13 +92,14 @@ export async function pushToCalendar(
 
 export function makeMedEventDescription(opts: {
   cycleDay: number | null;
+  intervalDays?: number;
   nextInjectionDate: string;
   isZombiePhase: boolean;
   notes?: string | null;
 }): string {
   const lines = [
     "💊 Haldol Decanoate Injection",
-    `Cycle Day: ${opts.cycleDay ?? "??"}/14`,
+    `Cycle Day: ${opts.cycleDay ?? "??"}/${opts.intervalDays ?? 28}`,
     opts.isZombiePhase
       ? "⚠ High Symptom Phase — reduced stimulation recommended (Days 1–5)"
       : "✓ Stabilization Phase",

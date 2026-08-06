@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { z } from "zod";
+import { db, haldolCycleTable } from "@workspace/db";
+import { DEFAULT_INTERVAL_DAYS } from "../lib/haldol-cycle";
 
 const router: IRouter = Router();
 
@@ -39,10 +41,15 @@ router.post("/admin/summary", async (req, res) => {
 
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
+    // Interval comes from the prescriber-set DB row, never hardcoded — a
+    // stale "/14" here made every AI clinical summary claim a biweekly cycle.
+    const cycleRows = await db.select({ intervalDays: haldolCycleTable.intervalDays }).from(haldolCycleTable).limit(1);
+    const intervalDays = cycleRows[0]?.intervalDays ?? DEFAULT_INTERVAL_DAYS;
+
     const prompt = `You are a clinical documentation assistant for a home caregiver team. Generate a structured clinical summary report for ${body.patientName}'s caregiver rotation log.
 
 DATE: ${today}
-HALDOL CYCLE DAY: ${body.cycleDay ?? "unknown"}/14
+HALDOL CYCLE DAY: ${body.cycleDay ?? "unknown"}/${intervalDays}
 ${body.notes ? `CAREGIVER NOTES: ${body.notes}` : ""}
 
 TODAY'S ROTATION TASKS:

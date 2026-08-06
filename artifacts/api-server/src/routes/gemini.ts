@@ -192,7 +192,7 @@ ${symptomStr}`;
 
 export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string, overdue?: { isOverdue: boolean; daysOverdue: number; intervalDays?: number; zombiePhaseDays?: number }): string {
   const toneProfile = overdue?.isOverdue
-    ? "Pops' Haldol injection is overdue — his caregiver has not logged a new dose within the expected 14-day window. Gently ask whether he's seen anyone about his injection recently, without alarming him, and keep the check-in soft and brief either way."
+    ? `Pops' Haldol injection is overdue — his caregiver has not logged a new dose within the expected ${overdue?.intervalDays ?? DEFAULT_INTERVAL_DAYS}-day window. Gently ask whether he's seen anyone about his injection recently, without alarming him, and keep the check-in soft and brief either way.`
     : isZombiePhase
     ? "Today is a rest day for Pops — his Haldol cycle is in the high-symptom phase (days 1-5). Keep everything soft, brief, and low-pressure. No long conversations. Gentle check-ins only."
     : "Today is a normal day for Pops. You can be warm, engaged, and conversational. Keep him anchored and positive.";

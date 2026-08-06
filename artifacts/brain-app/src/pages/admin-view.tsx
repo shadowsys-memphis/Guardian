@@ -647,7 +647,7 @@ function HealthQuestionsSection() {
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold uppercase text-muted-foreground">Cycle Days (optional)</label>
-              <p className="text-xs text-muted-foreground/60">Only ask on specific days of the 14-day cycle. Enter day numbers separated by commas (e.g. 1,2,3,4,5). Leave blank to ask on any day.</p>
+              <p className="text-xs text-muted-foreground/60">Only ask on specific days of the medication cycle. Enter day numbers separated by commas (e.g. 1,2,3,4,5). Leave blank to ask on any day.</p>
               <Input
                 value={form.cycleDays}
                 onChange={(e) => setForm({ ...form, cycleDays: e.target.value })}
@@ -1686,6 +1686,7 @@ function HaldolTab() {
       summary: "💊 Pops — Haldol Decanoate Injection",
       description: makeMedEventDescription({
         cycleDay: haldol.cycleDay ?? null,
+        intervalDays: haldol.intervalDays,
         nextInjectionDate: haldol.nextInjectionDate,
         isZombiePhase: haldol.isZombiePhase ?? false,
         notes: haldol.notes,
@@ -1718,7 +1719,7 @@ function HaldolTab() {
     <div className="space-y-6">
       <header className="mb-8 border-b border-border/50 pb-4">
         <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Haldol Cycle Tracker</h2>
-        <p className="text-muted-foreground">Manage the 14-day medication cycle and anticipate high-symptom rest phases.</p>
+        <p className="text-muted-foreground">Manage the monthly medication cycle and anticipate high-symptom rest phases.</p>
       </header>
 
       {/* 14-Segment Phase Arc */}
@@ -1776,7 +1777,7 @@ function HaldolTab() {
               <div>
                 <p className="text-muted-foreground font-bold uppercase tracking-widest text-sm mb-2">Cycle Day</p>
                 <div className="text-8xl font-display text-primary tracking-wider">
-                  {haldol.cycleDay}<span className="text-4xl text-muted-foreground">/14</span>
+                  {haldol.cycleDay}<span className="text-4xl text-muted-foreground">/{haldol.intervalDays ?? 28}</span>
                 </div>
               </div>
 
@@ -1815,7 +1816,7 @@ function HaldolTab() {
           <Card>
             <CardHeader>
               <CardTitle>Update Cycle</CardTitle>
-              <CardDescription>Log a new injection to reset the 14-day cycle counter.</CardDescription>
+              <CardDescription>Log a new injection to reset the cycle counter.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleUpdate} className="space-y-4">
@@ -3421,7 +3422,7 @@ function RotationTab() {
         <div>
           <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Rotation</h2>
           <p className="text-muted-foreground text-sm">Caregiver task tracking, med response logging &amp; clinical summaries.</p>
-          {cycleDay !== null && <p className="text-xs text-primary/70 mt-0.5">Haldol Cycle Day <span className="font-bold">{cycleDay}</span>/14</p>}
+          {cycleDay !== null && <p className="text-xs text-primary/70 mt-0.5">Haldol Cycle Day <span className="font-bold">{cycleDay}</span>/{(haldolData as any)?.intervalDays ?? 28}</p>}
         </div>
         <Button onClick={handleGenerateSummary} disabled={generateSummary.isPending} size="sm" className="gap-2">
           {generateSummary.isPending ? <RefreshCw size={14} className="animate-spin" /> : <ClipboardList size={14} />}
