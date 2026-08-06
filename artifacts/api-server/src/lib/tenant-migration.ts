@@ -110,7 +110,7 @@ export async function runTenantMigration(): Promise<void> {
     await pool.query(`
       DO $$ BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'haldol_cycle') THEN
-          ALTER TABLE haldol_cycle ADD COLUMN IF NOT EXISTS interval_days INTEGER NOT NULL DEFAULT 14;
+          ALTER TABLE haldol_cycle ADD COLUMN IF NOT EXISTS interval_days INTEGER NOT NULL DEFAULT 28;
           ALTER TABLE haldol_cycle ADD COLUMN IF NOT EXISTS zombie_phase_days INTEGER NOT NULL DEFAULT 5;
         END IF;
       END $$

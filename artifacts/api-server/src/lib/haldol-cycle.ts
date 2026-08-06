@@ -10,7 +10,10 @@
  * Nothing should recompute cycle days locally. Import this.
  */
 
-export const DEFAULT_INTERVAL_DAYS = 14;
+// Monthly per Dr Uddin (2026-07-28). The DB row's interval_days is the real
+// source; this fallback only covers a missing/invalid value and must match
+// the prescribed cadence so a fallback never silently shortens the cycle.
+export const DEFAULT_INTERVAL_DAYS = 28;
 export const DEFAULT_ZOMBIE_PHASE_DAYS = 5;
 
 export interface HaldolCycleInfo {

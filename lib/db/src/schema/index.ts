@@ -54,9 +54,9 @@ export const haldolCycleTable = pgTable("haldol_cycle", {
   id: serial("id").primaryKey(),
   lastInjectionDate: date("last_injection_date").notNull(),
   doseMg: integer("dose_mg"),
-  // Prescriber-set dosing interval. Default 14 preserves the historical
-  // biweekly assumption; set per-cycle when the prescription changes.
-  intervalDays: integer("interval_days").notNull().default(14),
+  // Prescriber-set dosing interval. Monthly (28) per Dr Uddin 2026-07-28;
+  // set per-cycle when the prescription changes.
+  intervalDays: integer("interval_days").notNull().default(28),
   // Post-injection high-symptom window, in days from the injection.
   zombiePhaseDays: integer("zombie_phase_days").notNull().default(5),
   notes: text("notes"),

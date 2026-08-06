@@ -102,7 +102,7 @@ function GeneralTab() {
   });
 
   const [haldolForm, setHaldolForm] = useState({
-    haldol_injection_interval_days: "14",
+    haldol_injection_interval_days: "28",
     haldol_zombie_phase_days: "5",
   });
 
@@ -120,7 +120,7 @@ function GeneralTab() {
     if (!loading) {
       setAppName(settings.app_name ?? "br(AI)n");
       setHaldolForm({
-        haldol_injection_interval_days: settings.haldol_injection_interval_days ?? "14",
+        haldol_injection_interval_days: settings.haldol_injection_interval_days ?? "28",
         haldol_zombie_phase_days: settings.haldol_zombie_phase_days ?? "5",
       });
     }

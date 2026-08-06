@@ -89,7 +89,7 @@ Routes under `AppContent` (inside `VaultProvider`) require vault unlock. `/guard
 ### Key Invariants
 
 - **`import { z } from "zod/v4"`** everywhere — not `"zod"`. `drizzle-zod` requires the `/v4` subpath.
-- **Haldol cycle day**: `(diffDays % 14) + 1` — no `Math.min/max` clamping. Both `haldol.ts` and `gemini.ts` must use this formula.
+- **Haldol cycle day**: `(diffDays % intervalDays) + 1` — no `Math.min/max` clamping. The interval is prescriber-set in `haldol_cycle.interval_days` (monthly, 28, per Dr Uddin 2026-07-28); all cycle math goes through `lib/haldol-cycle.ts` (`computeHaldolCycle`) — never recompute locally or hardcode an interval.
 - **`/scripts/active` must be registered before `/:id`** in the Express router or "active" gets matched as an ID.
 - **Gemini SSE route** (`sendGeminiMessage`) returns `text/event-stream` — don't add JSON content-type expectations.
 - **CORS is exact-match** — do not relax to `startsWith`. Allowed origins: `VITE_PUBLIC_SITE_URL`, `localhost:5173`, `localhost:3000`.
