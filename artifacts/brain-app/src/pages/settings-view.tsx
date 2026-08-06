@@ -20,6 +20,7 @@ import {
   Syringe,
   Settings,
   Phone,
+  Activity,
 } from "lucide-react";
 import {
   useGetAssessmentSettings,
@@ -36,11 +37,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { SystemJobsPanel } from "@/components/system-jobs-panel";
 import { useToast } from "@/hooks/use-toast";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type SettingsTab = "general" | "jessica" | "store" | "medications" | "ai-model" | "access";
+type SettingsTab = "general" | "jessica" | "store" | "medications" | "ai-model" | "access" | "system";
 
 function SavedBadge({ visible }: { visible: boolean }) {
   if (!visible) return null;
@@ -262,10 +265,39 @@ function JessicaTab() {
   const { toast } = useToast();
   const [phone, setPhone] = useState("");
   const [savedKey, setSavedKey] = useState<string | null>(null);
+  const { data: healthSettings } = useGetAssessmentSettings();
+  const updateHealthSettings = useUpdateAssessmentSettings();
+  const [callForm, setCallForm] = useState({ dailyCallEnabled: false, dailyCallTime: "10:00" });
 
   useEffect(() => {
     if (!loading) setPhone(settings.pops_phone_number ?? "");
   }, [loading, settings]);
+
+  useEffect(() => {
+    if (healthSettings) {
+      setCallForm({
+        dailyCallEnabled: (healthSettings as any).dailyCallEnabled ?? false,
+        dailyCallTime: (healthSettings as any).dailyCallTime ?? "10:00",
+      });
+    }
+  }, [healthSettings]);
+
+  const handleCallToggle = (dailyCallEnabled: boolean) => {
+    const next = { ...callForm, dailyCallEnabled };
+    setCallForm(next);
+    updateHealthSettings.mutate({ data: next }, {
+      onSuccess: () => toast({ title: dailyCallEnabled ? "Daily call enabled" : "Daily call disabled" }),
+      onError: () => toast({ title: "Failed to save — daily call unchanged", variant: "destructive" }),
+    });
+  };
+
+  const handleCallTimeSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateHealthSettings.mutate({ data: callForm }, {
+      onSuccess: () => toast({ title: "Daily call time saved" }),
+      onError: () => toast({ title: "Failed to save call time", variant: "destructive" }),
+    });
+  };
 
   const flash = (key: string) => {
     setSavedKey(key);
@@ -313,6 +345,38 @@ function JessicaTab() {
           <p className="text-xs text-muted-foreground/60">
             Leave blank to use the in-app chat mode as a fallback.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Clock size={14} className="text-primary" /> Daily Call
+          </CardTitle>
+          <CardDescription>Jessica calls Pops automatically at this time every day (Pacific).</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between mb-4">
+            <label htmlFor="daily-call-toggle" className="text-sm font-medium">
+              {callForm.dailyCallEnabled ? "Automatic daily call is on" : "Automatic daily call is off"}
+            </label>
+            <Switch id="daily-call-toggle" checked={callForm.dailyCallEnabled} onCheckedChange={handleCallToggle} />
+          </div>
+          <form onSubmit={handleCallTimeSave} className="space-y-4 max-w-md">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Call Time (24h, Pacific)</label>
+              <Input
+                type="time"
+                min="06:00"
+                max="20:00"
+                value={callForm.dailyCallTime}
+                onChange={(e) => setCallForm({ ...callForm, dailyCallTime: e.target.value })}
+                className="max-w-[160px]"
+              />
+              <p className="text-xs text-muted-foreground">Must be between 6:00 AM and 8:00 PM.</p>
+            </div>
+            <Button type="submit" disabled={updateHealthSettings.isPending}>Save Call Time</Button>
+          </form>
         </CardContent>
       </Card>
 
@@ -1167,6 +1231,7 @@ export function SettingsView() {
     { id: "medications", label: "Medications", icon: <Pill size={16} /> },
     { id: "ai-model", label: "AI Model", icon: <BrainCircuit size={16} /> },
     { id: "access", label: "Access", icon: <Shield size={16} /> },
+    { id: "system", label: "System", icon: <Activity size={16} /> },
   ];
 
   const tabTitle: Record<SettingsTab, string> = {
@@ -1176,6 +1241,7 @@ export function SettingsView() {
     medications: "Medications",
     "ai-model": "AI Model",
     access: "Access & Security",
+    system: "System Jobs",
   };
 
   const tabDesc: Record<SettingsTab, string> = {
@@ -1185,6 +1251,7 @@ export function SettingsView() {
     medications: "Track Pops' active medications so Jessica can verify adherence.",
     "ai-model": "Choose which AI model powers Jessica and configure LM Studio.",
     access: "Change the vault passphrase and manage access.",
+    system: "Scheduled background jobs and their recent run history.",
   };
 
   return (
@@ -1236,6 +1303,7 @@ export function SettingsView() {
           {tab === "medications" && <MedicationsTab />}
           {tab === "ai-model" && <AiModelTab />}
           {tab === "access" && <AccessTab />}
+          {tab === "system" && <SystemJobsPanel />}
         </div>
       </main>
     </div>
