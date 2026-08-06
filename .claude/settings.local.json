@@ -11,7 +11,9 @@
       "Bash(rm -f /home/runner/workspace/artifacts/api-server/test-normalize.mjs)",
       "Bash(pnpm --filter @workspace/api-server run typecheck)",
       "Bash(git merge *)",
-      "Bash(echo \"--- exit: $? ---\")"
+      "Bash(echo \"--- exit: $? ---\")",
+      "Bash(git commit -q -m 'HANDOFF: close out Knowledgebase deletion; record the Settings dead-tab finding *)",
+      "Bash(git fetch *)"
     ]
   }
 }
