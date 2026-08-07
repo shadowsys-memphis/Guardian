@@ -4,6 +4,7 @@ import {
   medicalDocumentsTable,
   medicationsTable,
   scheduleTasksTable,
+  medicalAppointmentsTable,
   appSettingsTable,
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
@@ -41,7 +42,7 @@ Return ONLY valid JSON matching exactly this schema — no markdown, no explanat
   "physician": "name and specialty or null",
   "facility": "facility name or null",
   "appointments": [
-    {"date": "YYYY-MM-DD", "time": "12:00 PM format", "provider": "Dr. Name", "location": "place", "type": "follow-up|primary-care|specialist|other"}
+    {"date": "YYYY-MM-DD", "time": "12:00 PM format", "provider": "Dr. Name", "location": "place", "type": "follow-up|primary-care|specialist|bloodwork|lab|other"}
   ],
   "medications": [
     {"name": "medication name", "dose": "dose or null", "frequency": "frequency or null", "instructions": "full instructions", "timeOfDay": "morning|afternoon|evening|night|as-needed"}
@@ -148,6 +149,22 @@ function normalizeExtracted(parsed: unknown, rawText: string): Record<string, un
     return { source_label: "Medical Document", raw_text: rawText };
   }
   return ExtractedDocumentSchema.parse(parsed);
+}
+
+// Collapses whatever free-text type Gemini extracted into the small set of
+// values the rest of the app understands. This matters beyond cosmetics: the
+// night-before reminder job (lib/call-scheduler.ts) does
+// `type.includes("bloodwork") || type.includes("lab")` to decide whether to
+// tell Pops to fast — so "Lab work", "Blood draw", "Labs", etc. all need to
+// normalize down to a string containing "bloodwork".
+function normalizeAppointmentType(rawType: string | null | undefined): string {
+  const t = (rawType ?? "").toLowerCase().trim();
+  if (t.includes("blood") || t.includes("lab")) return "bloodwork";
+  if (t.includes("primary")) return "primary_care";
+  if (t.includes("follow")) return "follow_up";
+  if (t.includes("specialist")) return "specialist";
+  if (!t) return "primary_care";
+  return "other";
 }
 
 router.delete("/documents/:id", async (req, res) => {
@@ -364,6 +381,35 @@ router.post("/documents/apply", async (req, res) => {
         isCompleted: false,
         order: 99,
       });
+
+      // Dual-write into medical_appointments (kept separate from
+      // scheduleTasksTable above, which only drives the Rotation/Dashboard
+      // display). The night-before reminder-call job in lib/call-scheduler.ts
+      // queries medical_appointments directly, so without this insert a
+      // scanned appointment would show up on the dashboard but Jessica would
+      // never call to remind Pops about it the evening before.
+      let medApptExists = false;
+      if (body.overwrite) {
+        const existingMedAppt = await db
+          .select({ id: medicalAppointmentsTable.id })
+          .from(medicalAppointmentsTable)
+          .where(
+            sql`${medicalAppointmentsTable.appointmentDate} = ${appt.date} AND ${medicalAppointmentsTable.provider} = ${appt.provider}`
+          )
+          .limit(1);
+        medApptExists = existingMedAppt.length > 0;
+      }
+      if (!medApptExists) {
+        await db.insert(medicalAppointmentsTable).values({
+          appointmentDate: appt.date,
+          appointmentTime: appt.time ?? "09:00",
+          provider: appt.provider,
+          location: appt.location ?? null,
+          type: normalizeAppointmentType(appt.type),
+          notes: `Source: ${body.source_label}`,
+        });
+      }
+
       details.push(`Appointment added: ${title} on ${appt.date}`);
     }
 

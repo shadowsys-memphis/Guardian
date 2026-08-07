@@ -13,6 +13,7 @@ import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay } from "./health-assessment";
 import { buildJessicaSystemPrompt, getCurrentCycleInfo, loadLiveContext } from "./gemini";
 import { todayPacific } from "../lib/pacific-time";
+import { verifyElevenLabsSignature, getElevenLabsWebhookSecret, getElevenLabsSignatureHeader } from "../lib/webhook-auth";
 
 const router: IRouter = Router();
 
@@ -323,6 +324,24 @@ const webhookPayloadSchema = z.object({
 }).passthrough();
 
 router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) => {
+  // Fail closed: if the shared secret isn't configured yet, refuse to process
+  // rather than silently accepting unauthenticated calls. Anyone who finds
+  // this URL could otherwise inject fake transcripts/health data or forge
+  // "call ended" events for real sessions.
+  const webhookSecret = getElevenLabsWebhookSecret();
+  if (!webhookSecret) {
+    req.log.error("ELEVENLABS_WEBHOOK_SECRET is not set — rejecting webhook (fail closed). Configure it to match the secret set in ElevenLabs' webhook settings.");
+    res.status(503).json({ error: "webhook_not_configured" });
+    return;
+  }
+
+  const verification = verifyElevenLabsSignature(req.rawBody, getElevenLabsSignatureHeader(req), webhookSecret);
+  if (!verification.ok) {
+    req.log.warn({ reason: verification.reason }, "Rejected ElevenLabs webhook — signature verification failed");
+    res.status(401).json({ error: "invalid_signature" });
+    return;
+  }
+
   try {
     const parsed = webhookPayloadSchema.safeParse(req.body);
 

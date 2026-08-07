@@ -51,7 +51,19 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "15mb" }));
+app.use(
+  express.json({
+    limit: "15mb",
+    // Captures the exact raw bytes onto req.rawBody so the ElevenLabs webhook
+    // route (routes/jessica.ts) can verify its HMAC signature against what
+    // was actually sent on the wire — re-serializing the parsed JSON body
+    // can reorder keys/whitespace and silently break signature verification.
+    // See lib/webhook-auth.ts.
+    verify: (req, _res, buf) => {
+      (req as Request).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 app.use("/api", router);
