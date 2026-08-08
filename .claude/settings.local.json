@@ -18,7 +18,8 @@
       "Bash(node -e \"const {Pool}=require\\('pg'\\);const p=new Pool\\({connectionString:process.env.DATABASE_URL}\\); p.query\\(\\\\\"SELECT job_name, outcome, detail, ran_at FROM cron_job_log WHERE job_name='rotation_reset' ORDER BY ran_at DESC LIMIT 15\\\\\"\\).then\\(r=>{console.log\\(JSON.stringify\\(r.rows,null,1\\)\\);return p.end\\(\\)}\\)\")",
       "Bash(node -e \"const {Pool}=require\\('pg'\\);const p=new Pool\\({connectionString:process.env.DATABASE_URL}\\); p.query\\(\\\\\"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='rotation_tasks' ORDER BY ordinal_position\\\\\"\\).then\\(r=>{console.log\\(JSON.stringify\\(r.rows,null,1\\)\\);return p.end\\(\\)}\\)\")",
       "Bash(node -e \"const {Pool}=require\\('pg'\\);const p=new Pool\\({connectionString:process.env.DATABASE_URL}\\); p.query\\(\\\\\"SELECT job_name, count\\(*\\), max\\(ran_at\\) AS last_ran FROM cron_job_log GROUP BY job_name ORDER BY job_name\\\\\"\\).then\\(r=>{console.log\\(JSON.stringify\\(r.rows,null,1\\)\\);return p.end\\(\\)}\\)\")",
-      "Bash(node -e \"console.log\\(Intl.DateTimeFormat\\(\\).resolvedOptions\\(\\).timeZone, '| local hour:', new Date\\(\\).getHours\\(\\), '|', new Date\\(\\).toString\\(\\)\\)\")"
+      "Bash(node -e \"console.log\\(Intl.DateTimeFormat\\(\\).resolvedOptions\\(\\).timeZone, '| local hour:', new Date\\(\\).getHours\\(\\), '|', new Date\\(\\).toString\\(\\)\\)\")",
+      "Bash(git *)"
     ]
   }
 }
