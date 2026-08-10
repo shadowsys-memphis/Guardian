@@ -4,6 +4,15 @@
 
 pnpm workspace monorepo using TypeScript. This is the **br(AI)n App** — a three-part unified caregiver AI system for a Veteran (Pops) dealing with PTSD, Schizophrenia, and Auditory Hallucinations. Raymo is the VA caregiver/developer.
 
+## Core Interaction Principle — read before touching anything schedule/task related
+
+This system is **audio/phone-first, not visual-first**. The phone call with Jessica is the product; the web dashboard is not a substitute for it.
+
+- Pops' day (his schedule, tasks, reminders) must be manageable through natural conversation on a phone call with Jessica — including adding, removing, or adjusting tasks by voice — not by requiring Raymo to open a screen and click through Settings/Admin.
+- The Admin web dashboard (`/admin`) is Raymo's oversight and fallback tool. It is not the intended primary path for routine day-to-day schedule/task changes. Do not propose "go toggle this in Settings" as *the* fix for something that should instead be sayable to Jessica on a call — say so explicitly if that voice path doesn't exist yet, rather than treating the dashboard workaround as the design.
+- Default new schedule/task features to the phone/voice flow first. A web UI for the same feature is secondary, if needed at all.
+- Ray has stated this repeatedly across sessions. Treat any drift back toward a dashboard-centric design (by this agent or by an isolated task agent) as a regression, not a valid alternative.
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

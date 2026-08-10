@@ -2,3 +2,6 @@
 - [Brain Guardian tenant auth](tenant-auth-pattern.md) — multi-tenant auth uses JWT + bcrypt; VAULT_PASSPHRASE env var gates Ray's local access; legacy fallback if neither set.
 - [Hermes adapter + careEventsTable](hermes-care-events.md) — task agents can add new DB tables to hermes.ts without adding the schema; always check lib/db/src/schema/index.ts export when API server build fails on missing import.
 - [api-server has no backend hot-reload](api-server-hot-reload.md) — dev script is build+start; restart the workflow to make backend source changes take effect.
+- [Audio-first interaction mandate](audio-first-interaction-mandate.md) — Ray requires phone/voice with Jessica as the primary interface; never propose web-dashboard/Settings changes as the fix for routine Pops-schedule work.
+- [Two overlapping task tables](dual-task-tables.md) — schedule_tasks (tenant-scoped, Pops-facing) and rotation_tasks (local dashboard-only) both represent Pops' routine; don't merge/touch either without asking, both may hold live data.
+- [Verify task-completion reminders](task-reminder-verification.md) — a recurring "you're assigned task #N" nudge isn't proof the task exists or is done; verify via the task list before completing or dismissing it.
