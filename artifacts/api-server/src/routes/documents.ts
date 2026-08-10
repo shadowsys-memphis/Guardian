@@ -151,18 +151,25 @@ function normalizeExtracted(parsed: unknown, rawText: string): Record<string, un
   return ExtractedDocumentSchema.parse(parsed);
 }
 
-// Collapses whatever free-text type Gemini extracted into the small set of
-// values the rest of the app understands. This matters beyond cosmetics: the
-// night-before reminder job (lib/call-scheduler.ts) does
-// `type.includes("bloodwork") || type.includes("lab")` to decide whether to
-// tell Pops to fast — so "Lab work", "Blood draw", "Labs", etc. all need to
-// normalize down to a string containing "bloodwork".
+// Collapses whatever free-text type Gemini extracted (the prompt's
+// "follow-up|primary-care|specialist|bloodwork|lab|other") into the SAME
+// fixed vocabulary the Appointments tab's manual entry form already uses
+// (see TYPE_LABELS in admin-view.tsx: primary_care/psychiatry/cardiology/
+// neurology/va_appointment/lab_work/other) — so a scanned appointment gets a
+// real label in that tab instead of an unrecognized raw string, and reads
+// exactly like one Ray typed in by hand. "follow-up"/"specialist" have no
+// equivalent bucket there and fall back to "other" rather than inventing a
+// new category the UI has no label for.
+//
+// This matters beyond cosmetics: the night-before reminder job
+// (lib/call-scheduler.ts) does `type.includes("bloodwork") ||
+// type.includes("lab")` to decide whether to tell Pops to fast — "lab_work"
+// already satisfies that check (it contains "lab"), so "Lab work",
+// "Blood draw", "Labs", etc. still trigger the fasting warning.
 function normalizeAppointmentType(rawType: string | null | undefined): string {
   const t = (rawType ?? "").toLowerCase().trim();
-  if (t.includes("blood") || t.includes("lab")) return "bloodwork";
+  if (t.includes("blood") || t.includes("lab")) return "lab_work";
   if (t.includes("primary")) return "primary_care";
-  if (t.includes("follow")) return "follow_up";
-  if (t.includes("specialist")) return "specialist";
   if (!t) return "primary_care";
   return "other";
 }
@@ -357,30 +364,44 @@ router.post("/documents/apply", async (req, res) => {
       const timeLabel = appt.time ?? "TBD";
       const descriptionPrefix = `${appt.date}${appt.location ? ` — ${appt.location}` : ""}`;
 
+      // scheduleTasksTable (Rotation/Dashboard display) and
+      // medicalAppointmentsTable (the reminder-call job's data source) are
+      // checked and inserted independently below — deliberately NOT one
+      // `continue` gating both — so each table's duplicate protection holds
+      // on its own. Without this, a document that already has its schedule
+      // task (e.g. applied before the medical_appointments dual-write below
+      // existed) would short-circuit here and never backfill the missing
+      // medical_appointments row even when Ray explicitly re-applies it.
+      //
+      // Decision point (intentionally not automated): appointments from
+      // documents applied before this fix — which exist ONLY in
+      // schedule_tasks — are not bulk-migrated into medical_appointments by
+      // this endpoint. Ray must click "Update Care Plan" on that specific
+      // document (which now backfills it via this same independent check)
+      // or re-enter the appointment by hand in the Appointments tab.
+      let scheduleTaskExists = false;
       if (body.overwrite) {
         const existing = await db
-          .select()
+          .select({ id: scheduleTasksTable.id })
           .from(scheduleTasksTable)
           .where(
             sql`${scheduleTasksTable.title} = ${title} AND ${scheduleTasksTable.description} LIKE ${descriptionPrefix + "%"}`
           )
           .limit(1);
-        if (existing.length > 0) {
-          details.push(`Appointment already scheduled (skipped): ${title} on ${appt.date}`);
-          continue;
-        }
+        scheduleTaskExists = existing.length > 0;
       }
-
-      await db.insert(scheduleTasksTable).values({
-        tenantId: "local",
-        quarter: "Q1",
-        timeLabel,
-        title,
-        description: `${descriptionPrefix}. Source: ${body.source_label}`,
-        isActive: true,
-        isCompleted: false,
-        order: 99,
-      });
+      if (!scheduleTaskExists) {
+        await db.insert(scheduleTasksTable).values({
+          tenantId: "local",
+          quarter: "Q1",
+          timeLabel,
+          title,
+          description: `${descriptionPrefix}. Source: ${body.source_label}`,
+          isActive: true,
+          isCompleted: false,
+          order: 99,
+        });
+      }
 
       // Dual-write into medical_appointments (kept separate from
       // scheduleTasksTable above, which only drives the Rotation/Dashboard
@@ -410,7 +431,11 @@ router.post("/documents/apply", async (req, res) => {
         });
       }
 
-      details.push(`Appointment added: ${title} on ${appt.date}`);
+      details.push(
+        scheduleTaskExists && medApptExists
+          ? `Appointment already scheduled (skipped): ${title} on ${appt.date}`
+          : `Appointment added: ${title} on ${appt.date}`
+      );
     }
 
     for (const med of body.medications) {

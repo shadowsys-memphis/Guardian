@@ -5,3 +5,4 @@
 - [Audio-first interaction mandate](audio-first-interaction-mandate.md) — Ray requires phone/voice with Jessica as the primary interface; never propose web-dashboard/Settings changes as the fix for routine Pops-schedule work.
 - [Two overlapping task tables](dual-task-tables.md) — schedule_tasks (tenant-scoped, Pops-facing) and rotation_tasks (local dashboard-only) both represent Pops' routine; don't merge/touch either without asking, both may hold live data.
 - [Verify task-completion reminders](task-reminder-verification.md) — a recurring "you're assigned task #N" nudge isn't proof the task exists or is done; verify via the task list before completing or dismissing it.
+- [Scanned appointment reminder routing](scanned-appointment-reminder-routing.md) — keep appointment `type` vocabulary in sync across 3 files; give each insert-destination table its own duplicate guard.
