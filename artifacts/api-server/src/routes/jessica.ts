@@ -350,6 +350,17 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
       return;
     }
 
+    // ElevenLabs can be configured to also send post_call_audio or
+    // call_initiation_failure events to the same URL. Those share the same
+    // conversation_id but carry no real transcript/analysis, so processing
+    // them here would overwrite a session's real transcript with an empty
+    // one (or mark it "already_ended" before the real transcription webhook
+    // arrives). Only the transcription event should ever update health data.
+    if (parsed.data.type && parsed.data.type !== "post_call_transcription") {
+      res.json({ received: true, skipped: "unsupported_event_type" });
+      return;
+    }
+
     const { data: webhookData } = parsed.data;
     const elevenLabsConversationId = webhookData.conversation_id;
     const transcript = webhookData.transcript ?? [];
