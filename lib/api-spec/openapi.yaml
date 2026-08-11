@@ -171,6 +171,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScheduleTask"
+    delete:
+      operationId: uncompleteScheduleTask
+      tags: [schedule]
+      summary: Mark a completed task as not completed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Task marked not complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleTask"
 
   /symptoms:
     get:

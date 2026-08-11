@@ -236,6 +236,29 @@ export const CompleteScheduleTaskResponse = zod.object({
 });
 
 /**
+ * @summary Mark a completed task as not completed
+ */
+export const UncompleteScheduleTaskParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UncompleteScheduleTaskResponse = zod.object({
+  id: zod.number(),
+  quarter: zod.enum(["Q1", "Q2", "Q3", "Q4"]),
+  timeLabel: zod.string().describe("e.g. '0600', '0800-1200'"),
+  title: zod.string(),
+  description: zod.string().optional(),
+  voiceScript: zod
+    .string()
+    .optional()
+    .describe("What Jessica says when initiating this task"),
+  isCompleted: zod.boolean(),
+  completedAt: zod.date().nullish(),
+  order: zod.number(),
+  isActive: zod.boolean(),
+});
+
+/**
  * @summary Get symptom logs (most recent first)
  */
 export const getSymptomLogsQueryLimitDefault = 20;

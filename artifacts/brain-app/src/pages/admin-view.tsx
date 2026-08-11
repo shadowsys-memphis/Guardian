@@ -68,7 +68,7 @@ import {
 
 import {
   useGetAppState, useUpdateAppState,
-  useGetSchedule, useCreateScheduleTask, useUpdateScheduleTask, useDeleteScheduleTask, useCompleteScheduleTask,
+  useGetSchedule, useCreateScheduleTask, useUpdateScheduleTask, useDeleteScheduleTask, useCompleteScheduleTask, useUncompleteScheduleTask,
   useGetSymptomLogs, useCreateSymptomLog,
   useGetVoiceScripts, useUpdateVoiceScript,
   useGetHaldolCycle, useUpdateHaldolCycle,
@@ -98,7 +98,9 @@ import {
   type RotationTask,
   type HistoricalCareLog,
   type InventoryItem,
+  getGetScheduleQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScheduleTabDnD } from "@/components/schedule-dnd";
@@ -1339,7 +1341,16 @@ function ScheduleTab() {
   const createTask = useCreateScheduleTask();
   const updateTask = useUpdateScheduleTask();
   const deleteTask = useDeleteScheduleTask();
-  const completeTask = useCompleteScheduleTask();
+  const queryClient = useQueryClient();
+  // The generated mutations don't invalidate anything, and refetchOnWindowFocus
+  // is off globally — without this the Done/Pending badge won't flip until reload.
+  const refetchSchedule = {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetScheduleQueryKey() });
+    },
+  };
+  const completeTask = useCompleteScheduleTask({ mutation: refetchSchedule });
+  const uncompleteTask = useUncompleteScheduleTask({ mutation: refetchSchedule });
   const { toast } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1416,6 +1427,7 @@ function ScheduleTab() {
         schedule={schedule}
         updateTask={(vars) => updateTask.mutate(vars)}
         completeTask={(vars) => completeTask.mutate(vars)}
+        uncompleteTask={(vars) => uncompleteTask.mutate(vars)}
         deleteTask={(vars) => deleteTask.mutate(vars)}
         onEdit={(task) => { setEditingTask(task); setIsModalOpen(true); }}
         onCalendar={handlePushTaskToCalendar}

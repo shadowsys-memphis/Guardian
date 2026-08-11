@@ -7,6 +7,7 @@ import {
   UpdateScheduleTaskParams,
   DeleteScheduleTaskParams,
   CompleteScheduleTaskParams,
+  UncompleteScheduleTaskParams,
 } from "@workspace/api-zod";
 import { eq, asc, and } from "drizzle-orm";
 
@@ -114,6 +115,26 @@ router.post("/schedule/:id/complete", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to complete task");
     res.status(400).json({ error: "Failed to complete task" });
+  }
+});
+
+router.delete("/schedule/:id/complete", async (req, res) => {
+  try {
+    const tenantId = getTenantId(req);
+    const { id } = UncompleteScheduleTaskParams.parse(req.params);
+    const [updated] = await db
+      .update(scheduleTasksTable)
+      .set({ isCompleted: false, completedAt: null })
+      .where(and(eq(scheduleTasksTable.id, id), eq(scheduleTasksTable.tenantId, tenantId)))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "Task not found" });
+      return;
+    }
+    res.json(serializeTask(updated));
+  } catch (err) {
+    req.log.error({ err }, "Failed to uncomplete task");
+    res.status(400).json({ error: "Failed to uncomplete task" });
   }
 });
 

@@ -758,6 +758,90 @@ export const useCompleteScheduleTask = <
 };
 
 /**
+ * @summary Mark a completed task as not completed
+ */
+export const getUncompleteScheduleTaskUrl = (id: number) => {
+  return `/api/schedule/${id}/complete`;
+};
+
+export const uncompleteScheduleTask = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ScheduleTask> => {
+  return customFetch<ScheduleTask>(getUncompleteScheduleTaskUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getUncompleteScheduleTaskMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uncompleteScheduleTask>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof uncompleteScheduleTask>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["uncompleteScheduleTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof uncompleteScheduleTask>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return uncompleteScheduleTask(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UncompleteScheduleTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof uncompleteScheduleTask>>
+>;
+
+export type UncompleteScheduleTaskMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark a completed task as not completed
+ */
+export const useUncompleteScheduleTask = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uncompleteScheduleTask>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof uncompleteScheduleTask>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getUncompleteScheduleTaskMutationOptions(options));
+};
+
+/**
  * @summary Get symptom logs (most recent first)
  */
 export const getGetSymptomLogsUrl = (params?: GetSymptomLogsParams) => {

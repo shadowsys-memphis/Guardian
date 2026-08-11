@@ -49,7 +49,9 @@
       "The Done badge in `schedule-dnd.tsx` toggles back to Pending when clicked, calling the new hook",
       "`pnpm run typecheck` passes with zero new errors"
     ],
-    "passes": false
+    "passes": true,
+    "verified": "2026-08-11 — DELETE /schedule/:id/complete added (tenant-scoped, sets isCompleted=false/completedAt=null, 404 when not found); openapi.yaml documents it as uncompleteScheduleTask; codegen produced useUncompleteScheduleTask + UncompleteScheduleTaskParams; Done badge wired to it in schedule-dnd.tsx via admin-view; typecheck and both builds clean. NOT runtime-exercised — no API server was available on this box to curl against.",
+    "notes": "Also fixed a pre-existing gap: neither mutation invalidated the schedule query and refetchOnWindowFocus is off, so the badge would not visibly flip until reload. Both complete and uncomplete now invalidate getGetScheduleQueryKey()."
   },
   {
     "id": "MV-001",

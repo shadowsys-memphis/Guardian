@@ -76,6 +76,7 @@ interface TaskCardProps {
   onTitleEditSave: () => void;
   onTitleEditCancel: () => void;
   onComplete: () => void;
+  onUncomplete: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onCalendar: () => void;
@@ -99,6 +100,7 @@ function TaskCard({
   onTitleEditSave,
   onTitleEditCancel,
   onComplete,
+  onUncomplete,
   onEdit,
   onDelete,
   onCalendar,
@@ -167,7 +169,14 @@ function TaskCard({
 
       <div className="shrink-0">
         {task.isCompleted ? (
-          <Badge variant="success" className="text-xs">Done</Badge>
+          <Badge
+            variant="success"
+            className="text-xs cursor-pointer hover:bg-muted hover:text-muted-foreground transition-colors"
+            title="Tap to mark pending"
+            onClick={onUncomplete}
+          >
+            Done
+          </Badge>
         ) : (
           <Badge
             variant="outline"
@@ -270,6 +279,7 @@ export interface ScheduleTabDnDProps {
   schedule: ScheduleTask[] | undefined;
   updateTask: (vars: { id: number; data: { quarter?: "Q1" | "Q2" | "Q3" | "Q4"; order?: number; timeLabel?: string; title?: string } }) => void;
   completeTask: (vars: { id: number }) => void;
+  uncompleteTask: (vars: { id: number }) => void;
   deleteTask: (vars: { id: number }) => void;
   onEdit: (task: ScheduleTask) => void;
   onCalendar: (task: ScheduleTask) => void;
@@ -280,6 +290,7 @@ export function ScheduleTabDnD({
   schedule,
   updateTask,
   completeTask,
+  uncompleteTask,
   deleteTask,
   onEdit,
   onCalendar,
@@ -442,6 +453,7 @@ export function ScheduleTabDnD({
                       onTitleEditSave={() => saveTitle(task)}
                       onTitleEditCancel={() => setEditingTitleId(null)}
                       onComplete={() => completeTask({ id: task.id })}
+                      onUncomplete={() => uncompleteTask({ id: task.id })}
                       onEdit={() => onEdit(task)}
                       onDelete={() => {
                         if (confirm("Delete task?")) deleteTask({ id: task.id });
@@ -475,6 +487,7 @@ export function ScheduleTabDnD({
             onTitleEditSave={() => {}}
             onTitleEditCancel={() => {}}
             onComplete={() => {}}
+            onUncomplete={() => {}}
             onEdit={() => {}}
             onDelete={() => {}}
             onCalendar={() => {}}
