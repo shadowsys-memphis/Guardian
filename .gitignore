@@ -60,3 +60,4 @@ Thumbs.db
 
 # auto-push failure alert (local signal, never commit)
 GITHUB-SYNC-FAILED.txt
+.local/git-backups/
