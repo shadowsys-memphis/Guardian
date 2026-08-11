@@ -1,6 +1,13 @@
 # Shopper Engine Upgrades + Inventory Baseline + Phone Intake
 
-**Status:** Implementation pending Sheets audit. See `tasks/shopper-sheets-audit.md` before implementing any inventory baseline or Drive export. Budget rules (caps, per-item limits) come from tenant profile data — never hardcoded.
+**Status:** SHIPPED — all 7 "Done looks like" criteria verified built: Budget Rules panel,
+AI Meal Remix (endpoint is `/shopper/remix`, not `/meals/remix` as written below), Drive
+export, Inventory tab, restock endpoint, `/intake/image` phone intake, and the
+`inventory_items` table. _(audited 2026-08-11)_
+
+**Originally:** pending Sheets audit — that gate applied to Google **Sheets** sync
+specifically, which remains unbuilt; it did not block the rest, which shipped.
+Budget rules come from tenant profile data — never hardcoded.
 
 ## What & Why
 Extends the existing Shopper tab into the full caregiver logistics engine: explicit budget rules UI, AI meal remix, a structured inventory baseline system (weekly/monthly/quarterly/yearly replenishment cycles), and a Gemini-vision phone intake protocol so the caregiver can photograph a fridge or receipt and the AI updates the cart automatically.

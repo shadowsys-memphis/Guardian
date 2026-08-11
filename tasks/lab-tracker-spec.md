@@ -1,6 +1,10 @@
 # Spec — Blood-Work Tracker (lab_protocols / lab_phases / lab_draws)
 
-**Status:** SHIPPED — schema in `lib/db/src/schema/index.ts`, 8 handlers in `routes/labs.ts` _(audited 2026-08-11)_
+**Status:** BACKEND ONLY — **not usable**. `routes/labs.ts` has 8 handlers registered on
+`coreRouter` (tenant-scoped) and the tables are in `lib/db/src/schema/index.ts`, but there
+are **zero** `/labs` paths in `openapi.yaml`, **zero** generated client hooks, and **zero**
+frontend. It is reachable only by curl. Remaining work: add the paths to the spec, run
+codegen, build a UI. _(audited 2026-08-11)_
 **Originally:** locked 2026-07-28 · Architect+Builder: Fable (tenant-scoped ⇒ not routed to cheap model per spec-first-routing)
 **Driver:** clozapine monitoring — blood draws weekly, stepping down to biweekly.
 

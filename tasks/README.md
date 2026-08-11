@@ -9,9 +9,13 @@ anything — most of this folder is already built.
 
 | File | State |
 |---|---|
-| `ios-calendar-push-all-alerts.md` | Partial — `POST /calendar/events` exists; app-wide wiring unverified |
-| `shopper-inventory-phone-intake.md` | Blocked on `shopper-sheets-audit.md` |
-| `voice-to-cart-shopper.md` | Core shipped; Sheets sync still unbuilt |
+| `lab-tracker-spec.md` | **Backend only** — 8 handlers, but no spec paths, no hooks, no UI |
+| `ios-calendar-push-all-alerts.md` | Partial — only schedule tasks push; spec wants app-wide |
+| `voice-to-cart-shopper.md` | Core shipped; Google Sheets sync still unbuilt |
+
+Depth-audited 2026-08-11: each item was checked for backend handlers, router
+registration, `openapi.yaml` paths, generated hooks, **and** frontend consumption.
+"A route file exists" is not shipped — `lab-tracker-spec` is the cautionary case.
 
 ## Notes, not tasks
 
@@ -23,7 +27,7 @@ anything — most of this folder is already built.
 
 `ai-agent-init-files.md`, `caregiver-rotation-dashboard.md`, `color-scheme-pastel.md`,
 `daily-task-alert-system.md`, `doctor-report.md`, `google-workspace-dialer-upgrade.md`,
-`lab-tracker-spec.md`, `lmstudio-local-models.md`, `task-7.md`, `task-20.md`
+`lmstudio-local-models.md`, `shopper-inventory-phone-intake.md`, `task-7.md`, `task-20.md`
 
 ## Removed in the 2026-08-11 audit
 
