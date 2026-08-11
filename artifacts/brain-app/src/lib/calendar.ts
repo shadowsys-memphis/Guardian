@@ -31,26 +31,7 @@ export function getDefaultReminderMinutes(type: CalendarEventType): number | und
   return EVENT_TYPE_REMINDER_MINUTES[type];
 }
 
-export function getGoogleToken(): string | null {
-  return localStorage.getItem("brain_google_token");
-}
-
-export function promptGoogleToken(toast: (opts: any) => void): string | null {
-  const existing = getGoogleToken();
-  const token = window.prompt(
-    "Paste your Google OAuth2 access token (Calendar + Drive scope):\n\nGet one at: https://developers.google.com/oauthplayground\nScopes: calendar.events, drive.file\n\nExisting token will be overwritten.",
-    existing ?? ""
-  );
-  if (token && token.trim()) {
-    localStorage.setItem("brain_google_token", token.trim());
-    toast({ title: "Google token saved", description: "Your token is stored in browser storage for this session." });
-    return token.trim();
-  }
-  return existing;
-}
-
 export async function pushToCalendar(
-  token: string,
   event: CalendarEventInput,
   eventType: CalendarEventType = "custom"
 ): Promise<CalendarPushResult> {
@@ -76,7 +57,6 @@ export async function pushToCalendar(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-google-access-token": token,
       },
       body: JSON.stringify(payload),
     });
@@ -219,12 +199,13 @@ export function handleCalendarError(error: string, toast: (opts: any) => void): 
   if (
     error.includes("denied") ||
     error.includes("access") ||
+    error.includes("connected") ||
     error.includes("401") ||
     error.includes("403")
   ) {
     toast({
-      title: "Google access denied",
-      description: "Re-grant Calendar permissions in your Google Account.",
+      title: "Google Calendar not connected",
+      description: "Ask the workspace owner to connect the Google Calendar integration in Replit.",
       variant: "destructive",
     });
   } else {

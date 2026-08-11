@@ -1,7 +1,5 @@
 import { useState } from "react";
 import {
-  getGoogleToken,
-  promptGoogleToken,
   pushToCalendar,
   makeShoppingEventDescription,
   makeUrgentItemDescription,
@@ -100,13 +98,9 @@ export function ShopperPage() {
       return next;
     });
     if (!nowUrgent) return;
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     setUrgentPushingKey(key);
     const today = new Date().toISOString().split("T")[0];
     const result = await pushToCalendar(
-      token,
       {
         summary: `⚡ URGENT — Pick up: ${key}`,
         description: makeUrgentItemDescription({
@@ -129,9 +123,6 @@ export function ShopperPage() {
   };
 
   const handlePushShoppingToCalendar = async () => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     const items = (cart?.items ?? []) as any[];
     if (items.length === 0) {
       toast({ title: "No items in cart", description: "Add meals first, then push the shopping reminder.", variant: "destructive" });
@@ -139,7 +130,7 @@ export function ShopperPage() {
     }
     const weekStart = cart?.weekStartDate ?? new Date().toISOString().split("T")[0];
     setCalPushingShop(true);
-    const result = await pushToCalendar(token, {
+    const result = await pushToCalendar({
       summary: `🛒 Grocery Run — Week of ${weekStart}`,
       description: makeShoppingEventDescription({
         weekStartDate: weekStart,
@@ -164,9 +155,6 @@ export function ShopperPage() {
   };
 
   const handleExportMealPlan = async () => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     const mealsInCart = (cart?.meals ?? []) as any[];
     if (mealsInCart.length === 0) {
       toast({ title: "No meals in cart", description: "Add meals to this week's cart before exporting.", variant: "destructive" });
@@ -195,19 +183,14 @@ export function ShopperPage() {
     try {
       const res = await fetch(`${WORKSPACE_BASE}/api/drive/export`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-google-access-token": token },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename, content, mimeType: "text/plain" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Drive export failed.");
       toast({ title: "Meal Plan exported!", description: data.link ? `Saved as "${data.filename}"` : "File saved to Google Drive." });
     } catch (err: any) {
-      const msg: string = err?.message ?? "Drive export failed.";
-      if (msg.includes("denied") || msg.includes("access")) {
-        toast({ title: "Google access denied", description: "Re-grant Drive permissions in your Google Account.", variant: "destructive" });
-      } else {
-        toast({ title: "Drive export failed", description: msg, variant: "destructive" });
-      }
+      toast({ title: "Drive export failed", description: err?.message ?? "Drive export failed.", variant: "destructive" });
     } finally {
       setMealDriveExporting(false);
     }

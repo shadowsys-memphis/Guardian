@@ -8,3 +8,6 @@
 - [Scanned appointment reminder routing](scanned-appointment-reminder-routing.md) — keep appointment `type` vocabulary in sync across 3 files; give each insert-destination table its own duplicate guard.
 - [ElevenLabs webhook auth pattern](elevenlabs-webhook-auth.md) — rawBody is captured globally in app.ts; reuse it for any new signed webhook instead of re-parsing JSON.
 - [Ad-hoc test scripts & pnpm resolution](pnpm-adhoc-test-scripts.md) — run temp ESM scripts needing workspace deps (pg, drizzle) from inside a workspace package dir, not /tmp.
+- [pnpm workspace package installs](pnpm-workspace-package-install.md) — use `pnpm --filter <pkg> add <dep>`, not the generic installer, or it fails with ERR_PNPM_ADDING_TO_ROOT.
+- [Replit connectors SDK (Google APIs)](replit-connectors-sdk.md) — proxy() usage pattern + a subtle naive-vs-absolute datetime bug that breaks Google Calendar event creation.
+- [OpenAPI codegen pipeline](openapi-codegen-pipeline.md) — orval generates api-zod/api-client-react from openapi.yaml; update the spec + rerun codegen when a route's request contract changes.

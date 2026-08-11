@@ -2,8 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
-  getGoogleToken,
-  promptGoogleToken,
   pushToCalendar,
   makeMedEventDescription,
   makeShoppingEventDescription,
@@ -1349,15 +1347,11 @@ function ScheduleTab() {
   const [calSyncingId, setCalSyncingId] = useState<number | null>(null);
 
   const handlePushTaskToCalendar = async (task: ScheduleTask) => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     setCalSyncingId(task.id);
     const today = new Date().toISOString().split("T")[0];
     const h = quarterToHour(task.quarter);
     const startIso = `${today}T${String(h).padStart(2, "0")}:00:00`;
     const result = await pushToCalendar(
-      token,
       {
         summary: `[Schedule] ${task.title}`,
         description: makeScheduleTaskDescription(task),
@@ -1676,12 +1670,9 @@ function HaldolTab() {
   const [calPushing, setCalPushing] = useState(false);
 
   const handlePushInjectionToCalendar = async () => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     if (!haldol?.nextInjectionDate) return;
     setCalPushing(true);
-    const result = await pushToCalendar(token, {
+    const result = await pushToCalendar({
       summary: "💊 Pops — Haldol Decanoate Injection",
       description: makeMedEventDescription({
         cycleDay: haldol.cycleDay ?? null,
@@ -1926,13 +1917,9 @@ export function ShopperTab() {
       return next;
     });
     if (!nowUrgent) return;
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     setUrgentPushingKey(key);
     const today = new Date().toISOString().split("T")[0];
     const result = await pushToCalendar(
-      token,
       {
         summary: `⚡ URGENT — Pick up: ${key}`,
         description: makeUrgentItemDescription({
@@ -1955,9 +1942,6 @@ export function ShopperTab() {
   };
 
   const handlePushShoppingToCalendar = async () => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     const items = (cart?.items ?? []) as any[];
     if (items.length === 0) {
       toast({ title: "No items in cart", description: "Add meals first, then push the shopping reminder.", variant: "destructive" });
@@ -1965,7 +1949,7 @@ export function ShopperTab() {
     }
     const weekStart = cart?.weekStartDate ?? new Date().toISOString().split("T")[0];
     setCalPushingShop(true);
-    const result = await pushToCalendar(token, {
+    const result = await pushToCalendar({
       summary: `🛒 Grocery Run — Week of ${weekStart}`,
       description: makeShoppingEventDescription({
         weekStartDate: weekStart,
@@ -1990,9 +1974,6 @@ export function ShopperTab() {
   };
 
   const handleExportMealPlan = async () => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     const mealsInCart = (cart?.meals ?? []) as any[];
     if (mealsInCart.length === 0) {
       toast({ title: "No meals in cart", description: "Add meals to this week's cart before exporting.", variant: "destructive" });
@@ -2021,19 +2002,14 @@ export function ShopperTab() {
     try {
       const res = await fetch(`${WORKSPACE_BASE}/api/drive/export`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-google-access-token": token },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename, content, mimeType: "text/plain" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Drive export failed.");
       toast({ title: "Meal Plan exported!", description: data.link ? `Saved as "${data.filename}"` : "File saved to Google Drive." });
     } catch (err: any) {
-      const msg: string = err?.message ?? "Drive export failed.";
-      if (msg.includes("denied") || msg.includes("access")) {
-        toast({ title: "Google access denied", description: "Re-grant Drive permissions in your Google Account.", variant: "destructive" });
-      } else {
-        toast({ title: "Drive export failed", description: msg, variant: "destructive" });
-      }
+      toast({ title: "Drive export failed", description: err?.message ?? "Drive export failed.", variant: "destructive" });
     } finally {
       setMealDriveExporting(false);
     }
@@ -3355,11 +3331,8 @@ function RotationTab() {
   };
 
   const handleSyncCal = async (t: RotationTask) => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     setCalSyncing(t.id);
-    const result = await pushToCalendar(token, {
+    const result = await pushToCalendar({
       summary: `[Pops] ${t.title}`,
       description: makeRotationTaskDescription(t),
       startTime: todayAtTime(t.timeSlot),
@@ -3373,27 +3346,19 @@ function RotationTab() {
   };
 
   const handleExportSummaryToDrive = async () => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     setDriveExporting(true);
     try {
       const filename = `clinical-summary-${new Date().toISOString().split("T")[0]}.txt`;
       const res = await fetch(`${WORKSPACE_BASE}/api/drive/export`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-google-access-token": token },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename, content: summaryMarkdown, mimeType: "text/plain" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Drive export failed.");
       toast({ title: "Exported to Drive!", description: data.link ? `Saved as "${data.filename}"` : "File saved to Google Drive." });
     } catch (err: any) {
-      const msg: string = err?.message ?? "Drive export failed.";
-      if (msg.includes("denied") || msg.includes("access")) {
-        toast({ title: "Google access denied", description: "Re-grant Drive permissions in your Google Account.", variant: "destructive" });
-      } else {
-        toast({ title: "Drive export failed", description: msg, variant: "destructive" });
-      }
+      toast({ title: "Drive export failed", description: err?.message ?? "Drive export failed.", variant: "destructive" });
     } finally {
       setDriveExporting(false);
     }
@@ -3669,16 +3634,12 @@ function CalendarSyncTab() {
   const scheduleTasks = (schedule ?? []) as ScheduleTask[];
 
   const handlePushAll = async () => {
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
-
     setPushing(true);
     setResults([]);
     const newResults: Array<{ label: string; ok: boolean; detail?: string }> = [];
 
     if (selected.medications && haldol?.nextInjectionDate) {
-      const r = await pushToCalendar(token, {
+      const r = await pushToCalendar({
         summary: "💊 Pops — Haldol Decanoate Injection",
         description: makeMedEventDescription({
           cycleDay: haldol.cycleDay ?? null,
@@ -3696,7 +3657,7 @@ function CalendarSyncTab() {
       const items = (cart?.items ?? []) as any[];
       if (items.length > 0) {
         const weekStart = cart?.weekStartDate ?? new Date().toISOString().split("T")[0];
-        const r = await pushToCalendar(token, {
+        const r = await pushToCalendar({
           summary: `🛒 Grocery Run — Week of ${weekStart}`,
           description: makeShoppingEventDescription({
             weekStartDate: weekStart,
@@ -3725,7 +3686,7 @@ function CalendarSyncTab() {
         const h = quarterHours[t.quarter] ?? 9;
         const today = new Date().toISOString().split("T")[0];
         const startIso = `${today}T${String(h).padStart(2, "0")}:00:00`;
-        const r = await pushToCalendar(token, {
+        const r = await pushToCalendar({
           summary: `[Schedule] ${t.title}`,
           description: t.description ?? `Quarter: ${t.quarter} · Time: ${t.timeLabel}`,
           startTime: startIso,
@@ -3740,7 +3701,7 @@ function CalendarSyncTab() {
     if (selected.rotation) {
       const pending = taskList.filter((t) => t.status !== "done");
       for (const t of pending) {
-        const r = await pushToCalendar(token, {
+        const r = await pushToCalendar({
           summary: `[Pops] ${t.title}`,
           description: makeRotationTaskDescription(t),
           startTime: todayAtTime(t.timeSlot),
@@ -3762,7 +3723,7 @@ function CalendarSyncTab() {
     } else if (okCount > 0) {
       toast({ title: `${okCount} pushed, ${failCount} failed`, description: "Check results below.", variant: "destructive" });
     } else {
-      toast({ title: "All events failed", description: "Check your Google token.", variant: "destructive" });
+      toast({ title: "All events failed", description: "Check the Google Calendar connection.", variant: "destructive" });
     }
   };
 
@@ -3815,8 +3776,6 @@ function CalendarSyncTab() {
           <div className="pt-2 border-t border-border/30 flex items-center justify-between gap-4 flex-wrap">
             <p className="text-xs text-muted-foreground">
               {categoryCount === 0 ? "No categories selected" : `${categoryCount} categor${categoryCount === 1 ? "y" : "ies"} selected`}
-              {" · "}
-              <span className="text-primary/70">Token stored in browser • re-enter if expired</span>
             </p>
             <Button
               onClick={handlePushAll}
@@ -3846,21 +3805,6 @@ function CalendarSyncTab() {
           </CardContent>
         </Card>
       )}
-
-      <Card className="border-border/30 bg-secondary/10">
-        <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-xs font-display uppercase tracking-widest text-muted-foreground">How to get a Google Token</CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 text-xs text-muted-foreground space-y-2">
-          <p>1. Go to <span className="font-mono text-primary">developers.google.com/oauthplayground</span></p>
-          <p>2. In Step 1, add scopes: <span className="font-mono text-primary/80">calendar.events</span> and <span className="font-mono text-primary/80">drive.file</span></p>
-          <p>3. Authorize APIs with your Google account</p>
-          <p>4. In Step 2, click "Exchange authorization code for tokens"</p>
-          <p>5. Copy the <span className="font-mono text-primary/80">access_token</span> value</p>
-          <p>6. Click "Push All to Calendar" and paste it when prompted</p>
-          <p className="text-muted-foreground/50 pt-1">Tokens expire after ~1 hour. You'll be prompted again automatically.</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -3926,12 +3870,8 @@ function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: Historica
 
   const handleCalPush = async (idx: number) => {
     if (!quickCalForm || quickCalForm.idx !== idx) return;
-    let token = getGoogleToken();
-    if (!token) token = promptGoogleToken(toast);
-    if (!token) return;
     setCalPushingIdx(idx);
     const result = await pushToCalendar(
-      token,
       {
         summary: quickCalForm.summary || "Reminder from br(AI)n",
         description: `Created by System AI from conversation.\n\n${messages[idx]?.content ?? ""}`,

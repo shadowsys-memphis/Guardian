@@ -1584,15 +1584,8 @@ export const IntakeImageResponse = zod.object({
 });
 
 /**
- * @summary Create a Google Calendar event using an OAuth access token
+ * @summary Create a Google Calendar event via the managed Google Calendar connector
  */
-export const CreateCalendarEventHeader = zod.object({
-  "x-google-access-token": zod
-    .string()
-    .optional()
-    .describe("Google OAuth2 access token with calendar.events scope"),
-});
-
 export const CreateCalendarEventBody = zod.object({
   summary: zod.string(),
   description: zod.string().optional(),
@@ -1611,15 +1604,8 @@ export const CreateCalendarEventResponse = zod.object({
 });
 
 /**
- * @summary Export a text file to Google Drive using an OAuth access token
+ * @summary Export a text file to Google Drive via the managed Google Drive connector
  */
-export const ExportToDriveHeader = zod.object({
-  "x-google-access-token": zod
-    .string()
-    .optional()
-    .describe("Google OAuth2 access token with drive.file scope"),
-});
-
 export const ExportToDriveBody = zod.object({
   filename: zod.string(),
   content: zod.string(),

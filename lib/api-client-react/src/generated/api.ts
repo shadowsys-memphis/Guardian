@@ -6333,7 +6333,7 @@ export const useIntakeImage = <
 };
 
 /**
- * @summary Create a Google Calendar event using an OAuth access token
+ * @summary Create a Google Calendar event via the managed Google Calendar connector
  */
 export const getCreateCalendarEventUrl = () => {
   return `/api/calendar/events`;
@@ -6396,7 +6396,7 @@ export type CreateCalendarEventMutationBody = BodyType<CalendarEventInput>;
 export type CreateCalendarEventMutationError = ErrorType<void>;
 
 /**
- * @summary Create a Google Calendar event using an OAuth access token
+ * @summary Create a Google Calendar event via the managed Google Calendar connector
  */
 export const useCreateCalendarEvent = <
   TError = ErrorType<void>,
@@ -6419,7 +6419,7 @@ export const useCreateCalendarEvent = <
 };
 
 /**
- * @summary Export a text file to Google Drive using an OAuth access token
+ * @summary Export a text file to Google Drive via the managed Google Drive connector
  */
 export const getExportToDriveUrl = () => {
   return `/api/drive/export`;
@@ -6482,7 +6482,7 @@ export type ExportToDriveMutationBody = BodyType<DriveExportInput>;
 export type ExportToDriveMutationError = ErrorType<void>;
 
 /**
- * @summary Export a text file to Google Drive using an OAuth access token
+ * @summary Export a text file to Google Drive via the managed Google Drive connector
  */
 export const useExportToDrive = <
   TError = ErrorType<void>,

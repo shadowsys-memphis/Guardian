@@ -1325,14 +1325,7 @@ paths:
     post:
       operationId: createCalendarEvent
       tags: [workspace]
-      summary: Create a Google Calendar event using an OAuth access token
-      parameters:
-        - in: header
-          name: x-google-access-token
-          schema:
-            type: string
-          required: false
-          description: Google OAuth2 access token with calendar.events scope
+      summary: Create a Google Calendar event via the managed Google Calendar connector
       requestBody:
         required: true
         content:
@@ -1346,23 +1339,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CalendarEventResult"
-        "401":
-          description: Missing access token
         "403":
-          description: Google denied access
+          description: Google Calendar connector isn't connected
 
   /drive/export:
     post:
       operationId: exportToDrive
       tags: [workspace]
-      summary: Export a text file to Google Drive using an OAuth access token
-      parameters:
-        - in: header
-          name: x-google-access-token
-          schema:
-            type: string
-          required: false
-          description: Google OAuth2 access token with drive.file scope
+      summary: Export a text file to Google Drive via the managed Google Drive connector
       requestBody:
         required: true
         content:
@@ -1376,10 +1360,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DriveExportResult"
-        "401":
-          description: Missing access token
         "403":
-          description: Google denied access
+          description: Google Drive connector isn't connected
 
 components:
   schemas:
