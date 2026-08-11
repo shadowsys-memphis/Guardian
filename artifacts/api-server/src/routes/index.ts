@@ -49,7 +49,6 @@ coreRouter.use(symptomsRouter);
 coreRouter.use(inventoryRouter);
 coreRouter.use(labsRouter);             // blood-work tracker, tenant-scoped from day one
 coreRouter.use(adminRouter);            // no direct DB queries (AI proxy)
-coreRouter.use(workspaceRouteHandler);  // no direct DB queries (proxy)
 coreRouter.use(intakeRouter);           // no direct DB queries (AI proxy)
 coreRouter.use(geminiRouter);           // no direct DB queries (AI proxy)
 
@@ -73,6 +72,14 @@ localRouter.use(medicationsRouter);
 localRouter.use(documentsRouter);
 localRouter.use(cronRouter);
 localRouter.use(authRouter);
+// Google Calendar/Drive via the workspace's managed Replit connector — this
+// is Ray's own connected Google account, a single workspace-owner-level
+// credential with no per-tenant isolation (see workspace.ts: it calls
+// connectors.proxy(...) directly, with no caller-supplied credential). It
+// must stay local-only: mounting it under the tenant-accessible core router
+// would let any paying tenant create events on, or export arbitrary content
+// to, Ray's personal Google account.
+localRouter.use(workspaceRouteHandler);  // no direct DB queries (proxy)
 
 router.use(localRouter);
 

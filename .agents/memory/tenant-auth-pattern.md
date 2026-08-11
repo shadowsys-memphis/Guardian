@@ -34,9 +34,7 @@ ALTER TABLE on tables that may not exist yet causes migration failure. Always wr
 ## Legacy fallback
 If VAULT_PASSPHRASE NOT set AND no active tenants: accepts any 4+ char passphrase (backward compat). Automatically disables once VAULT_PASSPHRASE is set.
 
-## Testing this app without exposing the passphrase
-The frontend has no dev bypass for the vault gate (`vault-gate.tsx` / `vault-context.tsx`) — there is no URL param or hash to reach a tab/route directly either (tabs are plain `useState`, not routed), so a Playwright-style tester needs the real passphrase to get anywhere.
+## Principle — exchange secrets for tokens server-side, never through agent-visible text
+When verifying an auth-gated flow requires a real secret (e.g. the vault passphrase), exchange it for a session token by calling the real auth endpoint from a CodeExecution `"use impure"` function that reads the secret from `process.env` directly — never by routing the raw secret through chat or tool-call text where the agent would have to see or type it. Use the resulting token for subsequent authenticated requests.
 
-Instead of routing the passphrase through chat/tool-call text (where the agent would have to see it), call the API directly from a CodeExecution `"use impure"` function: it can `fetch("http://localhost:8080/api/tenants/auth", { method: "POST", body: JSON.stringify({ passphrase: process.env.VAULT_PASSPHRASE }) })` — the sandbox shares the container's network (api-server's port is reachable at `localhost:8080`) and its env (`VAULT_PASSPHRASE` resolves there), and the value never has to appear in agent-visible output. Use the returned `token` as `Authorization: Bearer <token>` for subsequent authenticated calls to verify backend behavior end-to-end without ever unlocking the UI.
-
-**Why:** Lets the agent verify authenticated backend routes (and even exercise real third-party side effects like Google Calendar/Drive) without ever displaying/handling the passphrase itself, and without needing a browser at all.
+**Why:** Lets the agent verify authenticated backend behavior end-to-end (including real third-party side effects) without ever displaying or handling the secret itself.

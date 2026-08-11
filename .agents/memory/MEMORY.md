@@ -11,3 +11,7 @@
 - [pnpm workspace package installs](pnpm-workspace-package-install.md) — use `pnpm --filter <pkg> add <dep>`, not the generic installer, or it fails with ERR_PNPM_ADDING_TO_ROOT.
 - [Replit connectors SDK (Google APIs)](replit-connectors-sdk.md) — proxy() usage pattern + a subtle naive-vs-absolute datetime bug that breaks Google Calendar event creation.
 - [OpenAPI codegen pipeline](openapi-codegen-pipeline.md) — orval generates api-zod/api-client-react from openapi.yaml; update the spec + rerun codegen when a route's request contract changes.
+- [ElevenLabs voice tool-calling](elevenlabs-voice-tool-calling.md) — mid-call webhook tools: API shape, tool_ids merge-not-overwrite, and the "errors hidden from LLM" gotcha.
+- [Channel-specific action parsing](phone-call-action-blocks-broken.md) — a new Hermes action type isn't automatically usable on every channel; check each channel's parser/trigger explicitly.
+- [schedule_tasks.timeLabel format](schedule-tasks-timelabel-format.md) — always raw 24-hour "HHMM", no colon/AM-PM; don't confuse with assessment_settings.dailyCallTime which IS "HH:MM".
+- [ElevenLabs caller identity verification](elevenlabs-caller-identity-verification.md) — a shared tool secret proves "ElevenLabs sent this," not who's on the call; use system__called_number/system__caller_id to check that too.

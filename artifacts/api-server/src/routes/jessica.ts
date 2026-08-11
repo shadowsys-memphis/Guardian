@@ -14,6 +14,9 @@ import { saveHealthDataPoint, getActiveQuestionsForCycleDay } from "./health-ass
 import { buildJessicaSystemPrompt, getCurrentCycleInfo, loadLiveContext } from "./gemini";
 import { todayPacific } from "../lib/pacific-time";
 import { verifyElevenLabsSignature, getElevenLabsWebhookSecret, getElevenLabsSignatureHeader } from "../lib/webhook-auth";
+import { dispatch, type HermesAction, type LedgerContext } from "../lib/hermes";
+import { getJessicaToolSecret, toolSecretMatches, isCallWithRay } from "../lib/jessica-tools";
+import { syncJessicaToolsToElevenLabs } from "../lib/elevenlabs-tools-sync";
 
 const router: IRouter = Router();
 
@@ -186,7 +189,7 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
     const extraBlock = opts?.extraContext ? `${opts.extraContext}\n\n` : "";
     const liveContext = extraBlock + careContextBlock + scheduleContext;
 
-    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue, intervalDays, zombiePhaseDays });
+    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue, intervalDays, zombiePhaseDays }, { channel: "phone" });
 
     const elevenLabsBody = {
       agent_id: agentId,
@@ -457,6 +460,164 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
     req.log.error({ err }, "ElevenLabs webhook processing failed");
     res.status(500).json({ error: "Webhook processing failed" });
   }
+});
+
+// ─── Real-time voice tool calls (Task #116) ──────────────────────────────────
+//
+// ElevenLabs calls these mid-conversation as "webhook tools" attached to the
+// Jessica agent (see lib/elevenlabs-tools-sync.ts for how they're
+// registered). They share the same Hermes dispatch + care_events ledger the
+// text-chat ACTION-block path uses, so a task added by voice looks identical
+// (in schedule_tasks, care_events, and the Admin dashboard) to one added by
+// typing to Jessica.
+//
+// Auth: a static shared-secret header, since ElevenLabs webhook tools don't
+// support HMAC signing like the post-call webhook above. The secret is
+// generated once (lib/jessica-tools.ts) and lives in app_settings, not a
+// Replit Secret — it's an internal machine-to-machine token we mint and
+// embed into the tool config ourselves, never typed in or seen by anyone.
+//
+// Response contract: ALWAYS respond 200 with { success, message } for every
+// business-logic outcome (added/removed/rescheduled, OR ambiguous/invalid
+// input) — ElevenLabs' default tool_error_handling_mode hides non-2xx error
+// bodies from the model, so a validation failure returned as 4xx would come
+// across as a silent dead end instead of Jessica reading back a specific
+// spoken clarification. Non-2xx is reserved for genuine auth/config failures
+// where there's no task-specific clarification to offer anyway.
+async function requireToolSecret(req: Request, res: Response, next: () => void): Promise<void> {
+  const expected = await getJessicaToolSecret();
+  if (!expected) {
+    req.log.error("Jessica tool secret not configured — rejecting tool call (fail closed). Click \"Sync Jessica's Tools\" in Settings once ElevenLabs is configured.");
+    res.status(503).json({ success: false, message: "not_configured" });
+    return;
+  }
+  const provided = req.headers["x-jessica-tool-secret"];
+  const providedStr = Array.isArray(provided) ? provided[0] : provided;
+  if (!toolSecretMatches(providedStr, expected)) {
+    req.log.warn("Rejected Jessica tool call — invalid or missing shared secret");
+    res.status(401).json({ success: false, message: "unauthorized" });
+    return;
+  }
+  next();
+}
+
+const jessicaToolCtx: LedgerContext = { tenantId: "local", source: "jessica", actor: "patient" };
+
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * Task #116 code-review fix: on top of requireToolSecret (which only proves
+ * "ElevenLabs' infrastructure sent this"), update-daily-call additionally
+ * requires the call itself to be verified as being with Ray — see
+ * isCallWithRay() in lib/jessica-tools.ts for the full rationale and
+ * mechanism. Responds 200 with a spoken denial (never a bare 4xx) so
+ * tool_error_handling_mode: "auto" still lets Jessica explain why, instead
+ * of silently swallowing the error from the model.
+ */
+function requireRayCaller(req: Request, res: Response, next: () => void): void {
+  const calledNumber = firstHeaderValue(req.headers["x-called-number"]);
+  const callerId = firstHeaderValue(req.headers["x-caller-id"]);
+  if (!isCallWithRay(calledNumber, callerId)) {
+    req.log.warn({ calledNumber, callerId }, "Rejected update-daily-call tool call — this call is not verified as being with Ray");
+    res.json({ success: false, message: "I can only change the daily call schedule when I'm speaking with Ray directly, so I'm not going to make that change on this call." });
+    return;
+  }
+  next();
+}
+
+const addTaskToolSchema = z.object({
+  title: z.string().min(1),
+  time: z.string().min(1),
+  details: z.string().optional(),
+});
+
+router.post("/jessica/tools/add-task", requireToolSecret, async (req: Request, res: Response) => {
+  try {
+    const parsed = addTaskToolSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.json({ success: false, message: "I need both a task name and a time to add that — could you say it again?" });
+      return;
+    }
+    const action: HermesAction = { type: "ADD_TASK", title: parsed.data.title, time: parsed.data.time, details: parsed.data.details };
+    const result = await dispatch(action, jessicaToolCtx);
+    res.json({ success: result.ok, message: result.message });
+  } catch (err) {
+    req.log.error({ err }, "Jessica add-task tool call failed");
+    res.json({ success: false, message: "Something went wrong on my end — let's try that again in a moment." });
+  }
+});
+
+const removeTaskToolSchema = z.object({
+  title: z.string().min(1),
+});
+
+router.post("/jessica/tools/remove-task", requireToolSecret, async (req: Request, res: Response) => {
+  try {
+    const parsed = removeTaskToolSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.json({ success: false, message: "Which task should I remove?" });
+      return;
+    }
+    const action: HermesAction = { type: "REMOVE_TASK", title: parsed.data.title };
+    const result = await dispatch(action, jessicaToolCtx);
+    res.json({ success: result.ok, message: result.message });
+  } catch (err) {
+    req.log.error({ err }, "Jessica remove-task tool call failed");
+    res.json({ success: false, message: "Something went wrong on my end — let's try that again in a moment." });
+  }
+});
+
+const rescheduleTaskToolSchema = z.object({
+  title: z.string().min(1),
+  time: z.string().min(1),
+});
+
+router.post("/jessica/tools/reschedule-task", requireToolSecret, async (req: Request, res: Response) => {
+  try {
+    const parsed = rescheduleTaskToolSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.json({ success: false, message: "I need both the task name and the new time to reschedule it — could you say it again?" });
+      return;
+    }
+    const action: HermesAction = { type: "RESCHEDULE_TASK", title: parsed.data.title, time: parsed.data.time };
+    const result = await dispatch(action, jessicaToolCtx);
+    res.json({ success: result.ok, message: result.message });
+  } catch (err) {
+    req.log.error({ err }, "Jessica reschedule-task tool call failed");
+    res.json({ success: false, message: "Something went wrong on my end — let's try that again in a moment." });
+  }
+});
+
+const updateDailyCallToolSchema = z.object({
+  enabled: z.boolean().optional(),
+  time: z.string().optional(),
+});
+
+router.post("/jessica/tools/update-daily-call", requireToolSecret, requireRayCaller, async (req: Request, res: Response) => {
+  try {
+    const parsed = updateDailyCallToolSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.json({ success: false, message: "Do you want to turn the daily call on or off, or change what time it happens?" });
+      return;
+    }
+    const action: HermesAction = { type: "UPDATE_CALL_SCHEDULE", enabled: parsed.data.enabled, time: parsed.data.time };
+    const result = await dispatch(action, jessicaToolCtx);
+    res.json({ success: result.ok, message: result.message });
+  } catch (err) {
+    req.log.error({ err }, "Jessica update-daily-call tool call failed");
+    res.json({ success: false, message: "Something went wrong on my end — let's try that again in a moment." });
+  }
+});
+
+// Manual, Ray-visible trigger for registering/refreshing the tools above with
+// ElevenLabs — mirrors the startup best-effort call in index.ts but gives
+// Settings a button with real success/failure feedback instead of a silent
+// background attempt Ray has no way to see.
+router.post("/jessica/sync-tools", requireLocalSession, async (req: Request, res: Response) => {
+  const result = await syncJessicaToolsToElevenLabs();
+  res.json(result);
 });
 
 export default router;

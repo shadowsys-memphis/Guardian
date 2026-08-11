@@ -93,6 +93,39 @@ export async function getSettings(): Promise<typeof DEFAULT_SETTINGS> {
   }
 }
 
+// Shared with lib/hermes.ts's UPDATE_CALL_SCHEDULE voice-tool handler so the
+// phone path and this HTTP route enforce exactly the same constraint — keeps
+// the call, and the +2h missed-call check, safely clear of the midnight
+// UTC/Pacific boundary. Single source of truth: don't duplicate this regex.
+export const dailyCallTimeSchema = z.string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM 24-hour format")
+  .refine((v) => {
+    const [h, m] = v.split(":").map(Number);
+    const mins = h * 60 + m;
+    return mins >= 360 && mins <= 1200; // 06:00–20:00
+  }, "Daily call time must be between 6:00 AM and 8:00 PM");
+
+/**
+ * Merges a partial settings patch into the persisted assessment_settings
+ * blob. Callers are responsible for validating their own fields first (e.g.
+ * via dailyCallTimeSchema) — this only merges and persists. Shared by the
+ * PUT /health-assessment/settings route and lib/hermes.ts's
+ * UPDATE_CALL_SCHEDULE voice-tool handler so both paths write through one
+ * function instead of duplicating the upsert logic.
+ */
+export async function applySettingsPatch(patch: Partial<typeof DEFAULT_SETTINGS>): Promise<typeof DEFAULT_SETTINGS> {
+  const current = await getSettings();
+  const merged = { ...current, ...patch };
+  const value = JSON.stringify(merged);
+  const existing = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "assessment_settings"));
+  if (existing.length > 0) {
+    await db.update(appSettingsTable).set({ value, updatedAt: new Date() }).where(eq(appSettingsTable.key, "assessment_settings"));
+  } else {
+    await db.insert(appSettingsTable).values({ key: "assessment_settings", value });
+  }
+  return merged;
+}
+
 function getStatusForCategory(dataPoints: { category: string; parsedValue: string | null; parsedIntensity: string | null; flagged: boolean }[], category: string): string {
   const pts = dataPoints.filter((d) => d.category === category);
   if (pts.length === 0) return "unknown";
@@ -394,24 +427,9 @@ router.put("/health-assessment/settings", async (req, res) => {
       quietWindowEnd: z.string().optional(),
       engagementIntervalHours: z.number().optional(),
       dailyCallEnabled: z.boolean().optional(),
-      dailyCallTime: z.string()
-        .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM 24-hour format")
-        .refine((v) => {
-          const [h, m] = v.split(":").map(Number);
-          const mins = h * 60 + m;
-          return mins >= 360 && mins <= 1200; // 06:00–20:00 — keeps the call, and the +2h missed-call check, safely clear of the midnight UTC/Pacific boundary
-        }, "Daily call time must be between 6:00 AM and 8:00 PM")
-        .optional(),
+      dailyCallTime: dailyCallTimeSchema.optional(),
     }).parse(req.body);
-    const current = await getSettings();
-    const merged = { ...current, ...body };
-    const value = JSON.stringify(merged);
-    const existing = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "assessment_settings"));
-    if (existing.length > 0) {
-      await db.update(appSettingsTable).set({ value, updatedAt: new Date() }).where(eq(appSettingsTable.key, "assessment_settings"));
-    } else {
-      await db.insert(appSettingsTable).values({ key: "assessment_settings", value });
-    }
+    const merged = await applySettingsPatch(body);
     res.json(merged);
   } catch (err) {
     req.log.error({ err }, "Failed to update settings");

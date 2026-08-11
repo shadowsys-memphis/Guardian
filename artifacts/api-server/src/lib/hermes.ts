@@ -49,6 +49,16 @@ import {
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import {
+  findTaskMatches,
+  describeTasks,
+  nextOrderInQuarter,
+  normalizeTimeToHHMM,
+  quarterForTime,
+  formatTimeLabel,
+  toStoredTimeLabel,
+} from "./jessica-tools";
+import { applySettingsPatch, dailyCallTimeSchema } from "../routes/health-assessment";
 
 let careEventsReady = false;
 async function ensureCareEventsTable(): Promise<void> {
@@ -94,7 +104,10 @@ export type HermesActionType =
   | "MED_CONFIRMED"
   | "MED_REFUSED"
   | "WELLBEING_ALERT"
-  | "MEDICAL_DOC_APPLIED";
+  | "MEDICAL_DOC_APPLIED"
+  | "REMOVE_TASK"
+  | "RESCHEDULE_TASK"
+  | "UPDATE_CALL_SCHEDULE";
 
 export interface HermesAction {
   type: HermesActionType;
@@ -103,7 +116,22 @@ export interface HermesAction {
   details?: string;
   device?: string;
   state?: "on" | "off";
+  /** 24-hour "HH:MM" — used by ADD_TASK/RESCHEDULE_TASK (voice tool calls) and UPDATE_CALL_SCHEDULE. */
+  time?: string;
+  /** UPDATE_CALL_SCHEDULE only — turns the automated daily call on/off. */
+  enabled?: boolean;
   [key: string]: unknown;
+}
+
+/**
+ * Result of a single dispatch() call. Fire-and-forget callers (the text-chat
+ * ACTION-block path) can ignore this; real-time voice tool calls need it to
+ * build Jessica's spoken confirmation/clarification in the same response.
+ */
+export interface HermesDispatchResult {
+  ok: boolean;
+  message: string;
+  outcome: HermesOutcome;
 }
 
 export interface LedgerContext {
@@ -151,20 +179,140 @@ async function writeLedger(
 
 // ─── Dispatch handlers ───────────────────────────────────────────────────────
 
-async function handleAddScheduleItem(action: HermesAction, ctx: LedgerContext): Promise<void> {
-  const quarter = (action.quarter as string) ?? "Q1";
-  const title = (action.title as string) ?? "Jessica-created item";
+async function handleAddScheduleItem(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
+  const title = (action.title as string)?.trim();
+  if (!title) {
+    await writeLedger(action, ctx, "skipped");
+    return { ok: false, message: "I didn't catch a task name — what should I add?", outcome: "skipped" };
+  }
+
+  // Voice tool calls (add_task) always send a real time; the older
+  // text-chat ACTION-block path (ADD_EVENT/ADD_TASK) never did — preserve
+  // its exact prior behavior (generic label, explicit/default quarter) when
+  // no time is given.
+  let quarter = (action.quarter as string) ?? "Q1";
+  let timeLabel = action.type === "ADD_EVENT" ? "Event" : "Task";
+  let spokenTime = "";
+  if (action.time) {
+    const normalized = normalizeTimeToHHMM(action.time);
+    if (!normalized) {
+      await writeLedger(action, ctx, "failed");
+      return { ok: false, message: `"${action.time}" doesn't look like a valid time — could you give me a time like 3:00 PM?`, outcome: "failed" };
+    }
+    quarter = quarterForTime(normalized);
+    timeLabel = toStoredTimeLabel(normalized);
+    spokenTime = formatTimeLabel(normalized);
+  }
+
+  const order = await nextOrderInQuarter(ctx.tenantId, quarter);
   await db.insert(scheduleTasksTable).values({
+    tenantId: ctx.tenantId,
     quarter,
-    timeLabel: action.type === "ADD_EVENT" ? "Event" : "Task",
+    timeLabel,
     title,
     description: action.details as string | undefined,
     isActive: true,
     isCompleted: false,
-    order: 99,
+    order,
   });
-  logger.info({ action }, `[Hermes] ${action.type} → schedule_tasks`);
+  logger.info({ action, tenantId: ctx.tenantId }, `[Hermes] ${action.type} → schedule_tasks`);
   await writeLedger(action, ctx, "dispatched", { doctorRelevant: true, learningRelevant: true });
+  const confirmation = spokenTime ? `Added "${title}" to the schedule at ${spokenTime}.` : `Added "${title}" to the schedule.`;
+  return { ok: true, message: confirmation, outcome: "dispatched" };
+}
+
+async function handleRemoveTask(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
+  const title = (action.title as string)?.trim();
+  if (!title) {
+    await writeLedger(action, ctx, "skipped");
+    return { ok: false, message: "Which task should I remove?", outcome: "skipped" };
+  }
+
+  const matches = await findTaskMatches(ctx.tenantId, title);
+  if (matches.length === 0) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `I couldn't find a task called "${title}" on the schedule. Could you tell me the exact task name?`, outcome: "failed" };
+  }
+  if (matches.length > 1) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `I found more than one task matching "${title}": ${describeTasks(matches)}. Which one should I remove?`, outcome: "failed" };
+  }
+
+  const task = matches[0];
+  await db.delete(scheduleTasksTable).where(eq(scheduleTasksTable.id, task.id));
+  logger.info({ action, taskId: task.id, tenantId: ctx.tenantId }, "[Hermes] REMOVE_TASK → schedule_tasks");
+  await writeLedger(action, ctx, "dispatched", { doctorRelevant: true, learningRelevant: true });
+  return { ok: true, message: `Removed "${task.title}" from the schedule.`, outcome: "dispatched" };
+}
+
+async function handleRescheduleTask(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
+  const title = (action.title as string)?.trim();
+  const time = (action.time as string)?.trim();
+  if (!title || !time) {
+    await writeLedger(action, ctx, "skipped");
+    return { ok: false, message: "I need both the task name and the new time to reschedule it.", outcome: "skipped" };
+  }
+
+  const normalized = normalizeTimeToHHMM(time);
+  if (!normalized) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `"${time}" doesn't look like a valid time — could you give me a time like 3:00 PM?`, outcome: "failed" };
+  }
+
+  const matches = await findTaskMatches(ctx.tenantId, title);
+  if (matches.length === 0) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `I couldn't find a task called "${title}" on the schedule. Could you tell me the exact task name?`, outcome: "failed" };
+  }
+  if (matches.length > 1) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `I found more than one task matching "${title}": ${describeTasks(matches)}. Which one should I reschedule?`, outcome: "failed" };
+  }
+
+  const task = matches[0];
+  const quarter = quarterForTime(normalized);
+  const timeLabel = toStoredTimeLabel(normalized);
+  await db.update(scheduleTasksTable).set({ quarter, timeLabel }).where(eq(scheduleTasksTable.id, task.id));
+  logger.info({ action, taskId: task.id, tenantId: ctx.tenantId }, "[Hermes] RESCHEDULE_TASK → schedule_tasks");
+  await writeLedger(action, ctx, "dispatched", { doctorRelevant: true, learningRelevant: true });
+  return { ok: true, message: `Moved "${task.title}" to ${formatTimeLabel(normalized)}.`, outcome: "dispatched" };
+}
+
+async function handleUpdateCallSchedule(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
+  const hasEnabled = typeof action.enabled === "boolean";
+  const hasTime = typeof action.time === "string" && action.time.trim().length > 0;
+  if (!hasEnabled && !hasTime) {
+    await writeLedger(action, ctx, "skipped");
+    return { ok: false, message: "Do you want to turn the daily call on or off, or change what time it happens?", outcome: "skipped" };
+  }
+
+  let dailyCallTime: string | undefined;
+  if (hasTime) {
+    const normalized = normalizeTimeToHHMM(action.time as string);
+    const check = normalized ? dailyCallTimeSchema.safeParse(normalized) : null;
+    if (!normalized || !check?.success) {
+      await writeLedger(action, ctx, "failed");
+      return { ok: false, message: "The daily call can only be scheduled between 6:00 AM and 8:00 PM — what time in that range works?", outcome: "failed" };
+    }
+    dailyCallTime = normalized;
+  }
+
+  const merged = await applySettingsPatch({
+    ...(hasEnabled ? { dailyCallEnabled: action.enabled as boolean } : {}),
+    ...(dailyCallTime ? { dailyCallTime } : {}),
+  });
+  logger.info({ action, merged }, "[Hermes] UPDATE_CALL_SCHEDULE → assessment_settings");
+  await writeLedger(action, ctx, "dispatched", { doctorRelevant: false, learningRelevant: false });
+
+  const label = formatTimeLabel(merged.dailyCallTime);
+  const message = !merged.dailyCallEnabled
+    ? "Okay, I've turned off the daily call."
+    : hasEnabled && hasTime
+      ? `Got it — daily calls are on, and I'll call at ${label}.`
+      : hasTime
+        ? `Done — I'll call at ${label} from now on.`
+        : `Done — daily calls are turned on. I'll call at ${label}.`;
+  return { ok: true, message, outcome: "dispatched" };
 }
 
 async function handleToggleDevice(action: HermesAction, ctx: LedgerContext): Promise<void> {
@@ -253,35 +401,42 @@ async function handleWellbeingAlert(action: HermesAction, ctx: LedgerContext): P
  * and write a factual ledger entry to care_events.
  * Never throws — logs warnings on failure so one bad action never breaks a call.
  */
-export async function dispatch(action: HermesAction, ctx: LedgerContext): Promise<void> {
+export async function dispatch(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
   try {
     switch (action.type) {
       case "ADD_EVENT":
       case "ADD_TASK":
-        await handleAddScheduleItem(action, ctx);
-        break;
+        return await handleAddScheduleItem(action, ctx);
+      case "REMOVE_TASK":
+        return await handleRemoveTask(action, ctx);
+      case "RESCHEDULE_TASK":
+        return await handleRescheduleTask(action, ctx);
+      case "UPDATE_CALL_SCHEDULE":
+        return await handleUpdateCallSchedule(action, ctx);
       case "TOGGLE_SMART_DEVICE":
         await handleToggleDevice(action, ctx);
-        break;
+        return { ok: true, message: "Done.", outcome: "dispatched" };
       case "MED_CONFIRMED":
         await handleMedConfirmed(action, ctx);
-        break;
+        return { ok: true, message: "Noted.", outcome: "dispatched" };
       case "MED_REFUSED":
         await handleMedRefused(action, ctx);
-        break;
+        return { ok: true, message: "Noted.", outcome: "dispatched" };
       case "WELLBEING_ALERT":
         await handleWellbeingAlert(action, ctx);
-        break;
+        return { ok: true, message: "Logged.", outcome: "dispatched" };
       case "MEDICAL_DOC_APPLIED":
         await writeLedger(action, ctx, "completed");
-        break;
+        return { ok: true, message: "Applied.", outcome: "completed" };
       default:
         logger.warn({ action }, "[Hermes] Unknown action type — skipped");
         await writeLedger(action, ctx, "skipped");
+        return { ok: false, message: "I'm not able to do that yet.", outcome: "skipped" };
     }
   } catch (err) {
     logger.warn({ err, action }, "[Hermes] Dispatch failed — non-fatal");
     await writeLedger(action, ctx, "failed").catch(() => {});
+    return { ok: false, message: "Something went wrong on my end — let's try that again in a moment.", outcome: "failed" };
   }
 }
 
@@ -289,6 +444,9 @@ export async function dispatch(action: HermesAction, ctx: LedgerContext): Promis
  * Dispatch multiple actions in parallel.
  * Uses allSettled so one failure never blocks the others.
  */
-export async function dispatchAll(actions: HermesAction[], ctx: LedgerContext): Promise<void> {
-  await Promise.allSettled(actions.map((a) => dispatch(a, ctx)));
+export async function dispatchAll(actions: HermesAction[], ctx: LedgerContext): Promise<HermesDispatchResult[]> {
+  const settled = await Promise.allSettled(actions.map((a) => dispatch(a, ctx)));
+  return settled.map((s) =>
+    s.status === "fulfilled" ? s.value : { ok: false, message: "Something went wrong.", outcome: "failed" as HermesOutcome }
+  );
 }

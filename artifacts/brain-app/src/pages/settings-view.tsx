@@ -268,6 +268,8 @@ function JessicaTab() {
   const { data: healthSettings } = useGetAssessmentSettings();
   const updateHealthSettings = useUpdateAssessmentSettings();
   const [callForm, setCallForm] = useState({ dailyCallEnabled: false, dailyCallTime: "10:00" });
+  const [syncingTools, setSyncingTools] = useState(false);
+  const [toolsSyncResult, setToolsSyncResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (!loading) setPhone(settings.pops_phone_number ?? "");
@@ -309,6 +311,20 @@ function JessicaTab() {
     const ok = await save({ pops_phone_number: trimmed });
     if (ok) flash("phone");
     else toast({ title: "Failed to save phone number", variant: "destructive" });
+  };
+
+  const handleSyncTools = async () => {
+    setSyncingTools(true);
+    setToolsSyncResult(null);
+    try {
+      const res = await fetch(`${WORKSPACE_BASE}/api/jessica/sync-tools`, { method: "POST" });
+      const data = await res.json();
+      setToolsSyncResult({ ok: !!data.ok, message: data.message ?? (data.ok ? "Synced." : "Sync failed.") });
+    } catch {
+      setToolsSyncResult({ ok: false, message: "Couldn't reach the server — try again in a moment." });
+    } finally {
+      setSyncingTools(false);
+    }
   };
 
   return (
@@ -431,6 +447,34 @@ function JessicaTab() {
           <p className="text-xs text-muted-foreground/60">
             Set the event type to <span className="font-mono">post_call_transcription</span> in ElevenLabs.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Activity size={14} className="text-primary" /> Voice Task Tools
+          </CardTitle>
+          <CardDescription>
+            Lets Jessica add, remove, and reschedule tasks — and turn the daily call on/off — right during a phone
+            call, no dashboard needed. Run this once ElevenLabs is set up above, and again anytime the tools need
+            to be refreshed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button onClick={handleSyncTools} disabled={syncingTools} variant="outline">
+            {syncingTools ? "Syncing…" : "Sync Jessica's Tools"}
+          </Button>
+          {toolsSyncResult && (
+            <p className={`text-xs flex items-start gap-1.5 ${toolsSyncResult.ok ? "text-emerald-500" : "text-amber-500"}`}>
+              {toolsSyncResult.ok ? (
+                <Check size={12} className="mt-0.5 shrink-0" />
+              ) : (
+                <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+              )}
+              <span>{toolsSyncResult.message}</span>
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

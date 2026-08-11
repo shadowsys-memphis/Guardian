@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runTenantMigration } from "./lib/tenant-migration";
 import { startCronScheduler } from "./lib/call-scheduler";
+import { syncJessicaToolsToElevenLabs } from "./lib/elevenlabs-tools-sync";
 
 const rawPort = process.env["PORT"] ?? process.env["API_PORT"] ?? "8080";
 
@@ -27,6 +28,22 @@ async function start() {
   });
 
   startCronScheduler();
+
+  // Best-effort: register Jessica's voice tools with ElevenLabs so they're
+  // available on the next call. Never blocks startup and never throws —
+  // if ElevenLabs isn't configured yet, this just logs and no-ops; Ray can
+  // re-run it anytime from Settings once it is.
+  syncJessicaToolsToElevenLabs()
+    .then((result) => {
+      if (result.ok) {
+        logger.info({ tools: result.tools }, "[JessicaTools] Synced voice tools with ElevenLabs at startup");
+      } else {
+        logger.info({ reason: result.reason, message: result.message }, "[JessicaTools] Skipped syncing voice tools at startup");
+      }
+    })
+    .catch((err) => {
+      logger.warn({ err }, "[JessicaTools] Unexpected error syncing voice tools at startup");
+    });
 }
 
 start();

@@ -190,7 +190,12 @@ ${symptomStr}`;
   }
 }
 
-export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string, overdue?: { isOverdue: boolean; daysOverdue: number; intervalDays?: number; zombiePhaseDays?: number }): string {
+export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string, overdue?: { isOverdue: boolean; daysOverdue: number; intervalDays?: number; zombiePhaseDays?: number }, opts?: { channel?: "phone" | "text" }): string {
+  // Phone calls use ElevenLabs' real-time tool-calling (Task #116) instead of
+  // the invisible ---ACTION--- text markers below — the phone webhook never
+  // parses those blocks, so on a live call they'd silently do nothing. Text
+  // chat (the default) keeps the original marker-based flow unchanged.
+  const channel = opts?.channel ?? "text";
   const toneProfile = overdue?.isOverdue
     ? `Pops' Haldol injection is overdue — his caregiver has not logged a new dose within the expected ${overdue?.intervalDays ?? DEFAULT_INTERVAL_DAYS}-day window. Gently ask whether he's seen anyone about his injection recently, without alarming him, and keep the check-in soft and brief either way.`
     : isZombiePhase
@@ -200,6 +205,31 @@ export function buildJessicaSystemPrompt(questions: { id: number; text: string; 
   const questionList = questions.slice(0, 12).map((q, i) => `${i + 1}. [${q.category}|qid:${q.id}] "${q.text}"`).join("\n");
 
   const scriptSection = "";
+
+  // Text chat keeps the original invisible-marker instructions verbatim.
+  // Phone calls get real ElevenLabs tool-calling guidance instead (Task
+  // #116) — the phone webhook never parses ---ACTION--- blocks, so on a live
+  // call the old instructions would just silently do nothing.
+  const addEventGuidance = channel === "phone" ? "" : `ADD_EVENT — Pops mentions or confirms an upcoming appointment or event:
+---ACTION---
+{"type":"ADD_EVENT","title":"event title","quarter":"Q1","details":"brief context"}
+---END_ACTION---
+
+`;
+  const addTaskGuidance = channel === "phone" ? `TASK & SCHEDULE TOOLS — CRITICAL (these are real tool calls, not text blocks):
+- add_task(title, time, details?) — Pops or Ray asks to add something to the daily schedule (a task, reminder, or event). Always get a specific time in 24-hour HH:MM Pacific before calling it — if Pops/Ray only says something vague like "in the morning", ask what time it should be first.
+- remove_task(title) — Pops or Ray asks to take something off the schedule.
+- reschedule_task(title, time) — Pops or Ray asks to move an existing task to a new time (HH:MM Pacific).
+- update_daily_call_schedule(enabled?, time?) — Ray asks to turn the automated daily call on/off, or change what time it happens (must be between 6:00 AM and 8:00 PM).
+
+After any of these tool calls, speak the tool's returned confirmation message back naturally in your own words — that's how Pops/Ray know it actually worked. If a call fails (ambiguous task name, an invalid time, or a system hiccup), read back the tool's message as a spoken clarifying question instead of staying silent, guessing, or claiming it worked when it didn't.
+
+` : `ADD_TASK — Pops confirms a care task, medication, or routine action was completed or should be logged:
+---ACTION---
+{"type":"ADD_TASK","title":"task title","quarter":"Q1","details":"brief context"}
+---END_ACTION---
+
+`;
 
   return `You are Jessica, the AI companion and care coordinator for a veteran named Pops who lives with his caregiver Ray (Raymo). You have a warm, grounding, and calm voice. You speak clearly and gently — never rushed, never clinical.
 
@@ -253,23 +283,13 @@ When you identify a discrete actionable event, emit an invisible action block AF
 
 Use exactly these action types and flat payload fields:
 
-ADD_EVENT — Pops mentions or confirms an upcoming appointment or event:
----ACTION---
-{"type":"ADD_EVENT","title":"event title","quarter":"Q1","details":"brief context"}
----END_ACTION---
-
-TOGGLE_SMART_DEVICE — Pops requests a device on/off:
+${addEventGuidance}TOGGLE_SMART_DEVICE — Pops requests a device on/off:
 ---ACTION---
 {"type":"TOGGLE_SMART_DEVICE","device":"device_key","state":"on","details":"brief context"}
 ---END_ACTION---
 device must be one of: living_room_echo, bedroom_echo, kitchen_echo, sonos_living, sonos_bedroom, porch_light, kitchen_light, living_room_light
 
-ADD_TASK — Pops confirms a care task, medication, or routine action was completed or should be logged:
----ACTION---
-{"type":"ADD_TASK","title":"task title","quarter":"Q1","details":"brief context"}
----END_ACTION---
-
-GROCERY_ORDER — Ray (or Pops) asks to build, review, check, or order the weekly grocery cart. Triggers: "order groceries", "build the cart", "what's on the shopping list", "what are we eating this week", "order food":
+${addTaskGuidance}GROCERY_ORDER — Ray (or Pops) asks to build, review, check, or order the weekly grocery cart. Triggers: "order groceries", "build the cart", "what's on the shopping list", "what are we eating this week", "order food":
 ---ACTION---
 {"type":"GROCERY_ORDER","details":"brief context"}
 ---END_ACTION---
