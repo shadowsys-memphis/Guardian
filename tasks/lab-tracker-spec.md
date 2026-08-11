@@ -1,6 +1,7 @@
 # Spec — Blood-Work Tracker (lab_protocols / lab_phases / lab_draws)
 
-**Status:** locked 2026-07-28 · Architect+Builder: Fable (tenant-scoped ⇒ not routed to cheap model per spec-first-routing)
+**Status:** SHIPPED — schema in `lib/db/src/schema/index.ts`, 8 handlers in `routes/labs.ts` _(audited 2026-08-11)_
+**Originally:** locked 2026-07-28 · Architect+Builder: Fable (tenant-scoped ⇒ not routed to cheap model per spec-first-routing)
 **Driver:** clozapine monitoring — blood draws weekly, stepping down to biweekly.
 
 ## Goal

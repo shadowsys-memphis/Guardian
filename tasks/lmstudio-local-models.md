@@ -1,5 +1,7 @@
 # Local LM Studio Models Integration
 
+**Status:** SHIPPED — `getActiveModel()` / `streamLmStudio()` in `routes/gemini.ts`, with Gemini fallback. _(audited 2026-08-11)_
+
 ## What & Why
 Allow the br(AI)n app to use Ray's local LM Studio models — Qwen3.5 9B (4bit MLX), Gemma 4 12B (Q6_K GGUF), and Gemma 4 E4B (4bit MLX) — as alternatives to Gemini for Jessica's conversations and the health-data extraction pipeline. LM Studio exposes an OpenAI-compatible REST API (`/v1/chat/completions`), so the integration is a clean adapter alongside the existing Gemini path. Ray can switch the active model from the Admin panel without touching code.
 

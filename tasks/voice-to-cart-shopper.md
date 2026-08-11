@@ -1,6 +1,6 @@
 # Admin Shopper Module (Meal Planning + Cart)
 
-**Status:** Implementation pending harness + Sheets audit. See `tasks/shopper-sheets-audit.md` before building Google Sheets sync.
+**Status:** MOSTLY SHIPPED — core meal/cart module is live (`routes/shopper.ts`, `/shopper` page, `meals`/`grocery_carts`/`cart_items` tables). Google Sheets sync remains unbuilt and still gated on `tasks/shopper-sheets-audit.md`. _(audited 2026-08-11)_
 
 ## What & Why
 The **caregiver logistics engine** for weekly meal planning, grocery cart management, and household supply tracking. The real work — recipe sync, cart building, budget tracking, and order approval — happens entirely in the admin panel. The patient never interacts with the shopping system directly.

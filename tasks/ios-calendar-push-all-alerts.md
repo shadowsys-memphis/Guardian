@@ -1,5 +1,7 @@
 # iOS Calendar: Push All Alerts & Reminders
 
+**Status:** OPEN (partial) — `POST /calendar/events` exists at `routes/workspace.ts:43`, but app-wide wiring is unverified. _(audited 2026-08-11)_
+
 ## What & Why
 Ray needs to respond to time-sensitive events — appointments, medication windows, shopping alerts, task reminders — from his iOS Calendar, which is far more reliable for action-required notifications than ntfy. The Google Calendar API endpoint already exists (`POST /api/calendar/events`). This task wires it up across the entire app so everything important flows to iOS Calendar automatically.
 

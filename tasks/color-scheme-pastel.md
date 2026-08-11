@@ -1,5 +1,7 @@
 # Pastel Color Scheme Redesign
 
+**Status:** SHIPPED — `--primary: 142 38% 44%` (green) in `index.css`; navy/gold is gone. _(audited 2026-08-11)_
+
 ## What & Why
 Replace the current military navy/gold theme with a softer palette: muted pastel greens as the primary tone, pastel light reds as accent/highlight color, and crisp off-white as the base background. This gives the app a cleaner, more approachable feel.
 

@@ -1,5 +1,7 @@
 # Weekly & Monthly Doctor Report
 
+**Status:** SHIPPED — `DoctorReport` routed at `/admin/report` in App.tsx. _(audited 2026-08-11)_
+
 ## What & Why
 Generate a structured health report — weekly and monthly — that Raymo's doctor can review. It pulls together everything Jessica collects: daily check-in data (mood, sleep, medication, voices, energy, appetite, cognition), flagged/unusual events, symptom logs, and his weekly food tastes and preferences from the meal planning module. The goal is a clean, readable document the doctor can open without logging in or navigating the app.
 

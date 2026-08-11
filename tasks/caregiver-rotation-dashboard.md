@@ -1,5 +1,7 @@
 # Caregiver Rotation Dashboard + AI Clinical Summary
 
+**Status:** SHIPPED — `artifacts/api-server/src/routes/rotation.ts` + `rotation_tasks` table. _(audited 2026-08-11)_
+
 ## What & Why
 Port the core caregiving rotation system from the `care-giver-os` iteration into the existing Admin view. This adds structured patient task tracking by time-of-day, medication response logging, weekly efficacy history, a 1-button AI clinical summary compiler, and a System AI chat panel — all of which are absent from the current app.
 

@@ -1,5 +1,7 @@
 # Google Workspace Integration + Enhanced Zero-Touch Dialer
 
+**Status:** SHIPPED — `routes/workspace.ts`; Replit-managed Calendar/Drive connectors landed in `18b19c0`. _(audited 2026-08-11)_
+
 ## What & Why
 Two complementary integrations from the `care-giver-os` iteration: (1) Google Calendar and Google Drive export hooks so Raymo can push care tasks to his calendar and save clinical summaries/meal plans to Drive; (2) upgrade the existing Jessica Phone page with the full TwilioAssistant UX — call state machine, TTS audio playback, action-parsing dispatch stream, and speaker toggle.
 

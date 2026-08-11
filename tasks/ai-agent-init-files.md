@@ -1,5 +1,7 @@
 # AI Agent Init Files
 
+**Status:** SHIPPED — `.claude/CLAUDE.md`, `.gemini/GEMINI.md`, `.codex/AGENTS.md` all present. _(audited 2026-08-11)_
+
 ## What & Why
 Create three separate, comprehensive project-context files — one for each major AI coding assistant (Claude Code, Gemini Code Assist, OpenAI Codex) — so any of them can immediately understand the br(AI)n codebase without manual onboarding. Each file lives in its own directory (`.claude/CLAUDE.md`, `.gemini/GEMINI.md`, `.codex/AGENTS.md`) and is tuned to that assistant's conventions and reading format. The content is sourced from a thorough audit of the real codebase — schema, routes, patterns, constraints, and dev commands — not a generic template.
 

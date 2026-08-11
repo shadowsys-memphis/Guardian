@@ -1,5 +1,7 @@
 # Health Intelligence System (Jessica Assessments + Dashboard)
 
+**Status:** SHIPPED — `routes/health-assessment.ts`, `health_data_points`, anomaly detection. _(audited 2026-08-11)_
+
 ## What & Why
 Jessica's daily calls to Pops are structured health assessments in disguise. She asks optimized questions — covering mood, medication side effects, sleep, appetite, cognitive clarity, voice activity, and energy — and his natural spoken answers become the primary health data source. Ray's dashboard surfaces that data as actionable intelligence: trends, cycle-day correlations, anomaly flags, and a running health picture that would otherwise require a clinical visit to get.
 
