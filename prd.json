@@ -21,7 +21,8 @@
       "`pnpm --filter @workspace/brain-app run build` completes without error",
       "The `/guardian` route still serves the correct MPA entry in production"
     ],
-    "passes": false
+    "passes": true,
+    "verified": "2026-08-11 — public/guardian.html deleted; MPA entry unchanged; brain-app build clean; dist/public/guardian.html carries the MPA title ('AI Caregiving OS for Veteran Families'), both module script tags, and 155 chars of prerendered markup"
   },
   {
     "id": "BR-003",
