@@ -1,0 +1,202 @@
+# Deploy ElevenLabs Conversational AI Agent
+
+Agent name: Jessica
+Agent ID: agent_2101kkxm5vnwety8ycdrv0d1fadn
+
+## Integration Methods
+
+### 1. React SDK (@elevenlabs/react)
+
+npm install @elevenlabs/react
+
+import { useConversation } from "@elevenlabs/react";
+
+function Agent() {
+  const conversation = useConversation({
+    onConnect: () => console.log("Connected"),
+    onDisconnect: () => console.log("Disconnected"),
+    onMessage: (message) => console.log("Message:", message),
+    onError: (error) => console.error("Error:", error),
+    onModeChange: (mode) => console.log("Mode:", mode),
+  });
+
+  const startConversation = async () => {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    await conversation.startSession({
+      agentId: "agent_2101kkxm5vnwety8ycdrv0d1fadn",
+      connectionType: "webrtc", // or "websocket"
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={startConversation}>Start</button>
+      <button onClick={() => conversation.endSession()}>Stop</button>
+      <p>Status: {conversation.status}</p>
+      <p>Agent is {conversation.isSpeaking ? "speaking" : "listening"}</p>
+    </div>
+  );
+}
+
+Key features:
+- connectionType: "webrtc" (recommended, lower latency) or "websocket"
+- conversation.sendUserMessage(text) — send text messages to the agent
+- conversation.sendContextualUpdate(text) — send context without triggering a response
+- conversation.sendFeedback(true/false) — provide conversation feedback
+- conversation.sendUserActivity() — signal user activity to prevent interruptions
+- conversation.setVolume({ volume: 0.5 }) — adjust output volume
+- conversation.getInputVolume() / getOutputVolume() — get current audio levels
+- Client tools: define clientTools in options to let the agent invoke client-side functions
+- Overrides: customize prompt, firstMessage, language, voiceId via overrides option
+
+### 2. React Native SDK (@elevenlabs/react-native)
+
+npm install @elevenlabs/react-native @livekit/react-native @livekit/react-native-webrtc livekit-client
+
+Wrap your app with the provider:
+
+import { ElevenLabsProvider, useConversation } from "@elevenlabs/react-native";
+
+function App() {
+  return (
+    <ElevenLabsProvider>
+      <ConversationScreen />
+    </ElevenLabsProvider>
+  );
+}
+
+function ConversationScreen() {
+  const conversation = useConversation({
+    onConnect: () => console.log("Connected"),
+    onDisconnect: () => console.log("Disconnected"),
+    onMessage: (message) => console.log("Message:", message),
+    onError: (error) => console.error("Error:", error),
+  });
+
+  const start = async () => {
+    await conversation.startSession({ agentId: "agent_2101kkxm5vnwety8ycdrv0d1fadn" });
+  };
+
+  return (
+    <View>
+      <Button title={conversation.status === "connected" ? "Stop" : "Start"}
+        onPress={conversation.status === "connected" ? () => conversation.endSession() : start}
+      />
+      <Text>Agent is {conversation.isSpeaking ? "speaking" : "listening"}</Text>
+    </View>
+  );
+}
+
+Note: Requires Expo development builds (not compatible with Expo Go). Configure microphone permissions in Info.plist (iOS) and AndroidManifest.xml (Android).
+
+### 3. Embeddable Widget (@elevenlabs/convai-widget)
+
+npm install @elevenlabs/convai-widget
+
+import "@elevenlabs/convai-widget";
+
+function App() {
+  return <elevenlabs-convai agent-id="agent_2101kkxm5vnwety8ycdrv0d1fadn"></elevenlabs-convai>;
+}
+
+Or use the CDN directly in HTML:
+
+<script src="https://elevenlabs.io/convai-widget/index.js" async></script>
+<elevenlabs-convai agent-id="agent_2101kkxm5vnwety8ycdrv0d1fadn"></elevenlabs-convai>
+
+### 4. Python SDK (elevenlabs)
+
+pip install "elevenlabs[pyaudio]"
+
+Note: pyaudio may require system dependencies — on macOS: brew install portaudio, on Debian/Ubuntu: sudo apt-get install libportaudio2 portaudio19-dev
+
+import os
+import signal
+from elevenlabs.client import ElevenLabs
+from elevenlabs.conversational_ai.conversation import Conversation
+from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface
+
+client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+
+conversation = Conversation(
+    client,
+    agent_id="agent_2101kkxm5vnwety8ycdrv0d1fadn",
+    requires_auth=False,
+    audio_interface=DefaultAudioInterface(),
+    callback_agent_response=lambda response: print(f"Agent: {response}"),
+    callback_agent_response_correction=lambda original, corrected: print(f"Agent: {original} -> {corrected}"),
+    callback_user_transcript=lambda transcript: print(f"User: {transcript}"),
+)
+
+conversation.start_session()
+signal.signal(signal.SIGINT, lambda sig, frame: conversation.end_session())
+conversation_id = conversation.wait_for_session_end()
+print(f"Conversation ID: {conversation_id}")
+
+### 5. Direct WebSocket
+
+Endpoint: wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent_2101kkxm5vnwety8ycdrv0d1fadn
+
+const ws = new WebSocket(
+  "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent_2101kkxm5vnwety8ycdrv0d1fadn"
+);
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: "conversation_initiation_client_data",
+  }));
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  switch (data.type) {
+    case "user_transcript":
+      console.log("User:", data.user_transcription_event.user_transcript);
+      break;
+    case "agent_response":
+      console.log("Agent:", data.agent_response_event.agent_response);
+      break;
+    case "audio":
+      // data.audio_event.audio_base_64 contains the audio chunk
+      // data.audio_event.alignment contains character-level timing
+      break;
+    case "ping":
+      setTimeout(() => {
+        ws.send(JSON.stringify({
+          type: "pong",
+          event_id: data.ping_event.event_id,
+        }));
+      }, data.ping_event.ping_ms);
+      break;
+  }
+};
+
+// Send audio chunks as base64-encoded messages:
+// ws.send(JSON.stringify({ user_audio_chunk: base64AudioData }));
+
+// Send contextual updates (non-interrupting):
+// ws.send(JSON.stringify({ type: "contextual_update", text: "User clicked pricing page" }));
+
+### 6. WebRTC
+
+For low-latency, production-grade voice conversations, obtain a conversation token server-side:
+
+// Server-side
+const response = await fetch(
+  `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=agent_2101kkxm5vnwety8ycdrv0d1fadn`,
+  { headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY } }
+);
+const { token } = await response.json();
+
+Then use the token with any ElevenLabs client SDK that supports WebRTC:
+- React: conversation.startSession({ conversationToken: token, connectionType: "webrtc" })
+- React Native: conversation.startSession({ conversationToken: token })
+- Also available for Kotlin, Flutter, and Swift SDKs
+
+## Documentation & API Reference
+
+- Full documentation: https://elevenlabs.io/docs/eleven-agents
+- API reference: https://elevenlabs.io/docs/api-reference/introduction
+- Agents API: https://elevenlabs.io/docs/api-reference/agents/get
+- Conversations API: https://elevenlabs.io/docs/api-reference/conversations/get
