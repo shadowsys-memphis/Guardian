@@ -31,7 +31,7 @@ const router: IRouter = Router();
 
 // ─── PUBLIC ROUTES — no authentication required ──────────────────────────────
 router.use(healthRouter);
-router.use(tenantsRouter);   // /tenants/auth, /tenants/setup
+router.use(tenantsRouter);   // /tenants/auth, /tenants/demo (no-passphrase demo session), /tenants/setup
 router.use(jessicaRouter);   // jessica public: /jessica/elevenlabs-webhook
                               // jessica private: /jessica/outbound-call, /jessica/call-status/:id
                               // carry inline requireLocalSession.
@@ -48,9 +48,6 @@ coreRouter.use(scheduleRouter);
 coreRouter.use(symptomsRouter);
 coreRouter.use(inventoryRouter);
 coreRouter.use(labsRouter);             // blood-work tracker, tenant-scoped from day one
-coreRouter.use(adminRouter);            // no direct DB queries (AI proxy)
-coreRouter.use(intakeRouter);           // no direct DB queries (AI proxy)
-coreRouter.use(geminiRouter);           // no direct DB queries (AI proxy)
 
 router.use(coreRouter);
 
@@ -72,6 +69,16 @@ localRouter.use(medicationsRouter);
 localRouter.use(documentsRouter);
 localRouter.use(cronRouter);
 localRouter.use(authRouter);
+localRouter.use(adminRouter);           // /admin/summary (reads Ray's real haldolCycleTable)
+                                         // and /assistant (unmetered billed Gemini call)
+localRouter.use(intakeRouter);          // /intake/image, /intake/vision — unmetered billed
+                                         // Gemini vision calls, same reasoning as adminRouter
+// conversations/messages/call_sessions/health_data_points/meal_cravings have
+// no tenant_id column and every gemini.ts query reads/writes them globally
+// (including loadLiveContext(), which pulls schedule/symptom/meal/cart rows
+// with no tenant filter at all) — a tenant or demo session must never reach
+// these routes, or it can read or delete Ray's real AI conversation history.
+localRouter.use(geminiRouter);
 // Google Calendar/Drive via the workspace's managed Replit connector — this
 // is Ray's own connected Google account, a single workspace-owner-level
 // credential with no per-tenant isolation (see workspace.ts: it calls

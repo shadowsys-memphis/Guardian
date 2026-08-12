@@ -41,3 +41,12 @@ export const loginRateLimit = rateLimit({
   max: 10,
   message: "Too many attempts. Please wait a few minutes and try again.",
 });
+
+// There's no secret to brute-force here (no passphrase), so this exists purely
+// to cap automated abuse/DoS of the public demo-session endpoint — generous
+// enough that a visitor re-clicking "View Demo" a few times never gets blocked.
+export const demoSessionRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: "Too many demo requests. Please wait a few minutes and try again.",
+});

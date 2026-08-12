@@ -69,9 +69,9 @@ import {
 import {
   useGetAppState, useUpdateAppState,
   useGetSchedule, useCreateScheduleTask, useUpdateScheduleTask, useDeleteScheduleTask, useCompleteScheduleTask, useUncompleteScheduleTask,
-  useGetSymptomLogs, useCreateSymptomLog,
+  useGetSymptomLogs, useCreateSymptomLog, getGetSymptomLogsQueryKey,
   useGetVoiceScripts, useUpdateVoiceScript,
-  useGetHaldolCycle, useUpdateHaldolCycle,
+  useGetHaldolCycle, useUpdateHaldolCycle, getGetHaldolCycleQueryKey,
   useListHealthQuestions, useCreateHealthQuestion, useUpdateHealthQuestion, useDeleteHealthQuestion,
   useGetTodaySummary, getGetTodaySummaryQueryKey, useListCallSessions, useGetSessionDataPoints, getGetSessionDataPointsQueryKey, useGetAssessmentTrends, useGetAssessmentAnomalies,
   useGetAssessmentSettings, useUpdateAssessmentSettings,
@@ -79,7 +79,7 @@ import {
   useGetLmStudioUrl, useSetLmStudioUrl, testLmStudioConnection,
   type LmStudioConnectionResult,
   useListMeals, useCreateMeal, useDeleteMeal, useSyncFromSheets,
-  useGetCart, useAddMealToCart, useRemoveMealFromCart, useApproveCart, useDismissCart,
+  useGetCart, useAddMealToCart, useRemoveMealFromCart, useApproveCart, useDismissCart, getGetCartQueryKey,
   useListCravings, useCreateCraving, useUpdateCraving,
   useListRotationTasks, useCreateRotationTask, useUpdateRotationTask, useDeleteRotationTask, getListRotationTasksQueryKey,
   useListCareLogs, useCreateCareLog, getListCareLogsQueryKey,
@@ -121,6 +121,7 @@ const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [, navigate] = useLocation();
+  const { isLocal, isDemo } = useVault();
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
@@ -130,7 +131,9 @@ export function AdminView() {
             <ShieldAlert className="h-8 w-8 text-primary" />
             <div>
               <h1 className="text-2xl font-display font-bold text-primary tracking-widest leading-none">COMMAND</h1>
-              <p className="text-xs text-muted-foreground uppercase tracking-widest">Raymo / Admin</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-widest">
+                {isLocal ? "Raymo / Admin" : isDemo ? "Live Demo" : "Family Workspace"}
+              </p>
             </div>
           </div>
         </div>
@@ -139,19 +142,26 @@ export function AdminView() {
           <NavButton active={activeTab === "dashboard"} onClick={() => setActiveTab("dashboard")} icon={<Activity size={18} />} label="Dashboard" />
           <NavButton active={activeTab === "schedule"} onClick={() => setActiveTab("schedule")} icon={<Calendar size={18} />} label="Schedule Editor" />
           <NavButton active={activeTab === "symptoms"} onClick={() => setActiveTab("symptoms")} icon={<HeartPulse size={18} />} label="Symptom Log" />
-          <NavButton active={activeTab === "scripts"} onClick={() => setActiveTab("scripts")} icon={<Mic size={18} />} label="Voice Scripts" />
-          <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
-          <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
-          <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
-          <NavButton active={activeTab === "devices"} onClick={() => setActiveTab("devices")} icon={<Zap size={18} />} label="Devices" />
           <NavButton active={activeTab === "inventory"} onClick={() => setActiveTab("inventory")} icon={<Package size={18} />} label="Inventory" />
-          <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
-          <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
-          <div className="pt-2 border-t border-border/30 mt-2">
-            <NavButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} icon={<Stethoscope size={18} />} label="Appointments" />
-            <NavButton active={activeTab === "documents"} onClick={() => setActiveTab("documents")} icon={<Scan size={18} />} label="Scan Docs" />
-            <NavButton active={false} onClick={() => navigate("/settings")} icon={<SlidersHorizontal size={18} />} label="Settings" />
-          </div>
+          {/* Everything below depends on Ray's local-only specialty tools (see
+              api-server routes/index.ts localRouter) and isn't available to
+              tenant/demo sessions — hide rather than show a dead/erroring tab. */}
+          {isLocal && (
+            <>
+              <NavButton active={activeTab === "scripts"} onClick={() => setActiveTab("scripts")} icon={<Mic size={18} />} label="Voice Scripts" />
+              <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
+              <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
+              <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
+              <NavButton active={activeTab === "devices"} onClick={() => setActiveTab("devices")} icon={<Zap size={18} />} label="Devices" />
+              <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
+              <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
+              <div className="pt-2 border-t border-border/30 mt-2">
+                <NavButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} icon={<Stethoscope size={18} />} label="Appointments" />
+                <NavButton active={activeTab === "documents"} onClick={() => setActiveTab("documents")} icon={<Scan size={18} />} label="Scan Docs" />
+                <NavButton active={false} onClick={() => navigate("/settings")} icon={<SlidersHorizontal size={18} />} label="Settings" />
+              </div>
+            </>
+          )}
         </nav>
 
         <div className="p-4 border-t border-border/30">
@@ -164,16 +174,16 @@ export function AdminView() {
           {activeTab === "dashboard" && <DashboardTab onNavigate={setActiveTab} />}
           {activeTab === "schedule" && <ScheduleTab />}
           {activeTab === "symptoms" && <SymptomsTab />}
-          {activeTab === "scripts" && <ScriptsTab />}
-          {activeTab === "haldol" && <HaldolTab />}
-          {activeTab === "health" && <HealthIntelligenceTab />}
-          {activeTab === "shopper" && <ShopperTab />}
-          {activeTab === "devices" && <DevicesTab />}
           {activeTab === "inventory" && <InventoryTab />}
-          {activeTab === "rotation" && <RotationTab />}
-          {activeTab === "calendar-sync" && <CalendarSyncTab />}
-          {activeTab === "appointments" && <AppointmentsTab />}
-          {activeTab === "documents" && <DocumentsTab />}
+          {isLocal && activeTab === "scripts" && <ScriptsTab />}
+          {isLocal && activeTab === "haldol" && <HaldolTab />}
+          {isLocal && activeTab === "health" && <HealthIntelligenceTab />}
+          {isLocal && activeTab === "shopper" && <ShopperTab />}
+          {isLocal && activeTab === "devices" && <DevicesTab />}
+          {isLocal && activeTab === "rotation" && <RotationTab />}
+          {isLocal && activeTab === "calendar-sync" && <CalendarSyncTab />}
+          {isLocal && activeTab === "appointments" && <AppointmentsTab />}
+          {isLocal && activeTab === "documents" && <DocumentsTab />}
         </div>
       </main>
     </div>
@@ -939,12 +949,17 @@ function NavButton({ active, onClick, icon, label }: { active: boolean; onClick:
 }
 
 function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+  const { isLocal } = useVault();
   const { data: state } = useGetAppState();
-  const { data: haldol } = useGetHaldolCycle();
+  // Haldol, today's call-assessment summary, and the grocery cart all live
+  // behind Ray's local-only specialty tools (see api-server routes/index.ts
+  // localRouter) — skip fetching them entirely for tenant/demo sessions
+  // instead of surfacing a 403 in the console.
+  const { data: haldol } = useGetHaldolCycle({ query: { queryKey: getGetHaldolCycleQueryKey(), enabled: isLocal } });
   const { data: schedule } = useGetSchedule();
   const { data: symptomLogs } = useGetSymptomLogs();
-  const { data: todaySummary } = useGetTodaySummary();
-  const { data: cart } = useGetCart();
+  const { data: todaySummary } = useGetTodaySummary({ query: { queryKey: getGetTodaySummaryQueryKey(), enabled: isLocal } });
+  const { data: cart } = useGetCart({ query: { queryKey: getGetCartQueryKey(), enabled: isLocal } });
   const { data: rawInventory } = useListInventory({ query: { queryKey: getListInventoryQueryKey() } });
   const updateState = useUpdateAppState();
   const { toast } = useToast();
@@ -953,6 +968,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const [activityRestrictions, setActivityRestrictions] = useState<{ restrictions?: string[]; source?: string; updated_at?: string } | null>(null);
 
   useEffect(() => {
+    if (!isLocal) return; // documents router (care-context) is local-only
     fetch(`${WORKSPACE_BASE}/api/documents/care-context`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
@@ -961,7 +977,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         if (data.activity_restrictions) setActivityRestrictions(data.activity_restrictions);
       })
       .catch(() => {});
-  }, []);
+  }, [isLocal]);
 
   const handleStateChange = (updates: UpdateAppStateInput) => {
     updateState.mutate({ data: updates }, {
@@ -1064,24 +1080,26 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           </CardContent>
         </Card>
 
-        <Card className={haldol?.isOverdue ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : undefined}>
-          <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold">Haldol Cycle</CardDescription>
-            <CardTitle className="text-5xl">Day {haldol?.cycleDay ?? "-"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mt-2">
-              Next: {haldol ? haldol.nextInjectionDate : "--"}
-            </p>
-            {haldol?.isOverdue ? (
-              <Badge variant="destructive" className="mt-2 flex items-center gap-1 w-fit">
-                <ShieldAlert size={12} /> Injection Overdue — {haldol.daysOverdue} day{haldol.daysOverdue === 1 ? "" : "s"}
-              </Badge>
-            ) : haldol?.isZombiePhase ? (
-              <Badge variant="destructive" className="mt-2">High Symptom Phase</Badge>
-            ) : null}
-          </CardContent>
-        </Card>
+        {isLocal && (
+          <Card className={haldol?.isOverdue ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : undefined}>
+            <CardHeader className="pb-2">
+              <CardDescription className="uppercase tracking-widest font-bold">Haldol Cycle</CardDescription>
+              <CardTitle className="text-5xl">Day {haldol?.cycleDay ?? "-"}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mt-2">
+                Next: {haldol ? haldol.nextInjectionDate : "--"}
+              </p>
+              {haldol?.isOverdue ? (
+                <Badge variant="destructive" className="mt-2 flex items-center gap-1 w-fit">
+                  <ShieldAlert size={12} /> Injection Overdue — {haldol.daysOverdue} day{haldol.daysOverdue === 1 ? "" : "s"}
+                </Badge>
+              ) : haldol?.isZombiePhase ? (
+                <Badge variant="destructive" className="mt-2">High Symptom Phase</Badge>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
 
         <Card
           className={`cursor-pointer transition-colors hover:border-primary/40 ${overdueInventory.length > 0 ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : ""}`}
@@ -1199,7 +1217,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
       </Card>
 
       {/* ── Pops Status Card ───────────────────────────────────────────── */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className={`mt-8 grid grid-cols-1 gap-6 ${isLocal ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
@@ -1290,53 +1308,56 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         </Card>
 
         {/* ── Cart Status ────────────────────────────────────────────────── */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
-              <ShoppingCart size={14} /> Grocery Cart
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {!cart ? (
-              <p className="text-xs text-muted-foreground">No cart this week yet.</p>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-sm uppercase tracking-widest ${
-                    (cart as any).status === "approved" ? "bg-success/10 text-success" :
-                    "bg-secondary text-muted-foreground"
-                  }`}>
-                    {(cart as any).status ?? "pending"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground uppercase tracking-widest">Estimated</span>
-                  <span className="text-sm font-bold">${(((cart as any).totalEstimatedCostCents ?? 0) / 100).toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground uppercase tracking-widest">Budget</span>
-                  <span className="text-sm font-bold">${(((cart as any).budgetCents ?? 15000) / 100).toFixed(2)}</span>
-                </div>
-                <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${((cart as any).totalEstimatedCostCents ?? 0) > ((cart as any).budgetCents ?? 15000) ? "bg-destructive" : "bg-success"}`}
-                    style={{ width: `${Math.min(100, (((cart as any).totalEstimatedCostCents ?? 0) / ((cart as any).budgetCents ?? 15000)) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-muted-foreground/50">
-                  Week of {(cart as any).weekStartDate}
-                  {(cart as any).approvedAt ? ` · Approved ${formatPacificDate((cart as any).approvedAt)}` : ""}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        {isLocal && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
+                <ShoppingCart size={14} /> Grocery Cart
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!cart ? (
+                <p className="text-xs text-muted-foreground">No cart this week yet.</p>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-sm uppercase tracking-widest ${
+                      (cart as any).status === "approved" ? "bg-success/10 text-success" :
+                      "bg-secondary text-muted-foreground"
+                    }`}>
+                      {(cart as any).status ?? "pending"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground uppercase tracking-widest">Estimated</span>
+                    <span className="text-sm font-bold">${(((cart as any).totalEstimatedCostCents ?? 0) / 100).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground uppercase tracking-widest">Budget</span>
+                    <span className="text-sm font-bold">${(((cart as any).budgetCents ?? 15000) / 100).toFixed(2)}</span>
+                  </div>
+                  <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${((cart as any).totalEstimatedCostCents ?? 0) > ((cart as any).budgetCents ?? 15000) ? "bg-destructive" : "bg-success"}`}
+                      style={{ width: `${Math.min(100, (((cart as any).totalEstimatedCostCents ?? 0) / ((cart as any).budgetCents ?? 15000)) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/50">
+                    Week of {(cart as any).weekStartDate}
+                    {(cart as any).approvedAt ? ` · Approved ${formatPacificDate((cart as any).approvedAt)}` : ""}
+                  </p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
 }
 
 function ScheduleTab() {
+  const { isLocal } = useVault();
   const { data: schedule } = useGetSchedule();
   const createTask = useCreateScheduleTask();
   const updateTask = useUpdateScheduleTask();
@@ -1432,6 +1453,7 @@ function ScheduleTab() {
         onEdit={(task) => { setEditingTask(task); setIsModalOpen(true); }}
         onCalendar={handlePushTaskToCalendar}
         calSyncingId={calSyncingId}
+        showCalendar={isLocal}
       />
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingTask ? "Edit Task" : "New Task"}>
@@ -1474,9 +1496,11 @@ function ScheduleTab() {
 }
 
 function SymptomsTab() {
+  const { isLocal } = useVault();
   const { data: logs } = useGetSymptomLogs();
   const createLog = useCreateSymptomLog();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [hiVal, setHiVal] = useState(0);
   const [mlVal, setMlVal] = useState(3);
 
@@ -1488,11 +1512,15 @@ function SymptomsTab() {
       hallucinationIntensity: hiVal,
       motivationLevel: mlVal,
       behaviorNotes: formData.get("behaviorNotes") as string,
-      loggedBy: "Raymo",
+      loggedBy: isLocal ? "Raymo" : "Demo Caregiver",
     };
 
     createLog.mutate({ data }, {
       onSuccess: () => {
+        // The generated mutation doesn't invalidate anything, and
+        // refetchOnWindowFocus is off globally — without this the new entry
+        // wouldn't appear in Recent History until a manual reload.
+        queryClient.invalidateQueries({ queryKey: getGetSymptomLogsQueryKey() });
         toast({ title: "Symptom logged successfully" });
         (e.target as HTMLFormElement).reset();
         setHiVal(0);
@@ -2679,6 +2707,7 @@ const MED_RESPONSES = [
 
 function InventoryTab() {
   const { toast } = useToast();
+  const { isLocal } = useVault();
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState({ itemName: "", category: "food", replenishmentCycle: "weekly", notes: "" });
   const [intakeImagePreview, setIntakeImagePreview] = useState<string | null>(null);
@@ -2915,7 +2944,11 @@ function InventoryTab() {
 
       {(["weekly", "monthly", "quarterly", "yearly"] as const).map(renderGroup)}
 
-      {/* Phone Intake */}
+      {/* Phone Intake — Gemini-powered (photo scan + voice/text note), each a
+          billed AI call with no per-caller quota. Local-only: a freely
+          obtainable session (the public demo) must not get unmetered access
+          to paid AI endpoints (see api-server routes/index.ts). */}
+      {isLocal && (
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
@@ -3054,6 +3087,7 @@ function InventoryTab() {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

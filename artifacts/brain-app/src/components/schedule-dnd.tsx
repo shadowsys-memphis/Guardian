@@ -81,6 +81,10 @@ interface TaskCardProps {
   onDelete: () => void;
   onCalendar: () => void;
   calSyncing: boolean;
+  /** Hide the calendar-push button — calendar sync is one of Ray's local-only
+   *  tools (Google Calendar is a single workspace-owner credential), so
+   *  tenant/demo sessions don't get a button that would just 403. */
+  showCalendar?: boolean;
 }
 
 function TaskCard({
@@ -105,6 +109,7 @@ function TaskCard({
   onDelete,
   onCalendar,
   calSyncing,
+  showCalendar = true,
 }: TaskCardProps) {
   return (
     <div
@@ -190,20 +195,22 @@ function TaskCard({
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        <Button
-          size="icon"
-          variant="outline"
-          className="h-7 w-7 text-primary/60 hover:text-primary hover:bg-primary/10 border-primary/20"
-          title="Push to Calendar"
-          disabled={calSyncing}
-          onClick={onCalendar}
-        >
-          {calSyncing ? (
-            <RefreshCw className="h-3 w-3 animate-spin" />
-          ) : (
-            <CalendarPlus className="h-3 w-3" />
-          )}
-        </Button>
+        {showCalendar && (
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-7 w-7 text-primary/60 hover:text-primary hover:bg-primary/10 border-primary/20"
+            title="Push to Calendar"
+            disabled={calSyncing}
+            onClick={onCalendar}
+          >
+            {calSyncing ? (
+              <RefreshCw className="h-3 w-3 animate-spin" />
+            ) : (
+              <CalendarPlus className="h-3 w-3" />
+            )}
+          </Button>
+        )}
         <Button
           size="icon"
           variant="outline"
@@ -284,6 +291,7 @@ export interface ScheduleTabDnDProps {
   onEdit: (task: ScheduleTask) => void;
   onCalendar: (task: ScheduleTask) => void;
   calSyncingId: number | null;
+  showCalendar?: boolean;
 }
 
 export function ScheduleTabDnD({
@@ -295,6 +303,7 @@ export function ScheduleTabDnD({
   onEdit,
   onCalendar,
   calSyncingId,
+  showCalendar = true,
 }: ScheduleTabDnDProps) {
   const [items, setItems] = useState<Record<Quarter, ScheduleTask[]>>(() =>
     groupByQuarter(schedule ?? [])
@@ -460,6 +469,7 @@ export function ScheduleTabDnD({
                       }}
                       onCalendar={() => onCalendar(task)}
                       calSyncing={calSyncingId === task.id}
+                      showCalendar={showCalendar}
                     />
                   ))
                 )}
@@ -492,6 +502,7 @@ export function ScheduleTabDnD({
             onDelete={() => {}}
             onCalendar={() => {}}
             calSyncing={false}
+            showCalendar={showCalendar}
           />
         ) : null}
       </DragOverlay>

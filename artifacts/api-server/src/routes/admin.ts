@@ -4,6 +4,14 @@ import { z } from "zod";
 import { db, haldolCycleTable } from "@workspace/db";
 import { DEFAULT_INTERVAL_DAYS } from "../lib/haldol-cycle";
 
+// Both routes in this file are mounted under requireLocalSession (see
+// routes/index.ts), not the tenant-accessible core router:
+// - /admin/summary reads haldolCycleTable directly (Ray's real, global
+//   Haldol dosing interval — no tenant_id column).
+// - /assistant has no DB reads, but every call is a billed Gemini request
+//   with no per-caller quota. A freely-obtainable session (e.g. the public
+//   demo login) must not get unmetered access to a paid AI endpoint, so it
+//   stays local-only alongside intake.ts for the same reason.
 const router: IRouter = Router();
 
 router.post("/admin/summary", async (req, res) => {

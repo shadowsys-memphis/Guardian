@@ -1,5 +1,5 @@
 - [DB migration via raw SQL](db-migration-raw-sql.md) — drizzle-kit push needs interactive TTY; use `node -e` with pg Pool for non-interactive migrations.
-- [Brain Guardian tenant auth](tenant-auth-pattern.md) — multi-tenant auth uses JWT + bcrypt; VAULT_PASSPHRASE env var gates Ray's local access; legacy fallback if neither set.
+- [Brain Guardian tenant auth](tenant-auth-pattern.md) — 3-tier JWT session auth; re-audit a tier's data scope AND paid-API cost whenever it gets an easier entry point (e.g. a public demo login).
 - [Hermes adapter + careEventsTable](hermes-care-events.md) — task agents can add new DB tables to hermes.ts without adding the schema; always check lib/db/src/schema/index.ts export when API server build fails on missing import.
 - [api-server has no backend hot-reload](api-server-hot-reload.md) — dev script is build+start; restart the workflow to make backend source changes take effect.
 - [Audio-first interaction mandate](audio-first-interaction-mandate.md) — Ray requires phone/voice with Jessica as the primary interface; never propose web-dashboard/Settings changes as the fix for routine Pops-schedule work.
@@ -15,3 +15,4 @@
 - [Channel-specific action parsing](phone-call-action-blocks-broken.md) — a new Hermes action type isn't automatically usable on every channel; check each channel's parser/trigger explicitly.
 - [schedule_tasks.timeLabel format](schedule-tasks-timelabel-format.md) — always raw 24-hour "HHMM", no colon/AM-PM; don't confuse with assessment_settings.dailyCallTime which IS "HH:MM".
 - [ElevenLabs caller identity verification](elevenlabs-caller-identity-verification.md) — a shared tool secret proves "ElevenLabs sent this," not who's on the call; use system__called_number/system__caller_id to check that too.
+- [orval react-query hook gotchas](orval-react-query-hooks.md) — `enabled` needs a paired `queryKey`; generated mutations never auto-invalidate, so lists silently go stale without a manual invalidate/refetch.

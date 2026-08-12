@@ -3,8 +3,9 @@ import { z } from "zod";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { loginRateLimit } from "../middlewares/rate-limit";
+import { loginRateLimit, demoSessionRateLimit } from "../middlewares/rate-limit";
 import { requireLocalSession } from "../middlewares/tenant-auth";
+import { DEMO_TENANT_ID } from "../lib/demo-tenant";
 
 const router: IRouter = Router();
 
@@ -108,6 +109,44 @@ router.post("/tenants/auth", loginRateLimit, async (req: Request, res: Response)
     }
     req.log.error({ err }, "Tenant auth failed");
     res.status(500).json({ error: "Authentication failed" });
+  }
+});
+
+/**
+ * POST /tenants/demo — start a public, no-passphrase session for the shared
+ * "View Demo" workspace. The demo tenant row is created once (and re-seeded
+ * if ever missing) by runTenantMigration() — see lib/tenant-migration.ts —
+ * so this endpoint only issues a normal tenant JWT for it. That means the
+ * demo session is scoped and revocable exactly like any real tenant's: it
+ * can never read or write Ray's local data, and Ray's passphrase login above
+ * is completely untouched by this route.
+ */
+router.post("/tenants/demo", demoSessionRateLimit, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, plan, status, session_version FROM tenants WHERE id = $1 LIMIT 1`,
+      [DEMO_TENANT_ID]
+    );
+    const demoTenant = result.rows[0];
+    if (!demoTenant || demoTenant.status !== "active") {
+      res.status(503).json({ error: "Demo is not available right now. Please try again shortly." });
+      return;
+    }
+    const token = jwt.sign(
+      {
+        sub: demoTenant.id,
+        type: "tenant",
+        plan: demoTenant.plan,
+        status: "active",
+        sessionVersion: demoTenant.session_version,
+      },
+      getJwtSecret(),
+      { expiresIn: "24h" }
+    );
+    res.json({ token, type: "tenant", plan: demoTenant.plan, status: "active" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to start demo session");
+    res.status(500).json({ error: "Failed to start demo session" });
   }
 });
 

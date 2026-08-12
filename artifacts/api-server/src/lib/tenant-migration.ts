@@ -1,5 +1,82 @@
-import { pool } from "@workspace/db";
+import { pool, db } from "@workspace/db";
+import { scheduleTasksTable, symptomLogsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import { DEMO_TENANT_ID } from "./demo-tenant";
+
+// ── Demo workspace sample data ──────────────────────────────────────────────
+// Realistic but clearly fictional — never Ray/Pops' real schedule or history.
+// timeLabel is raw 24h "HHMM" (no colon), matching every other schedule_tasks row.
+const DEMO_SCHEDULE_TASKS = [
+  { quarter: "Q1", timeLabel: "0700", title: "Morning Medication", description: "Take morning medication with breakfast.", order: 1, isCompleted: true },
+  { quarter: "Q1", timeLabel: "0800", title: "Breakfast", description: "Oatmeal and fruit — a favorite.", order: 2, isCompleted: true },
+  { quarter: "Q1", timeLabel: "1000", title: "Morning Walk", description: "Short walk around the block, weather permitting.", order: 3, isCompleted: false },
+  { quarter: "Q2", timeLabel: "1200", title: "Lunch", description: "Sandwich and soup.", order: 1, isCompleted: true },
+  { quarter: "Q2", timeLabel: "1400", title: "Afternoon Check-in", description: "Quick call just to chat and see how the day's going.", order: 2, isCompleted: false },
+  { quarter: "Q2", timeLabel: "1600", title: "Hobby Time", description: "Puzzles or music, whatever sounds good today.", order: 3, isCompleted: false },
+  { quarter: "Q3", timeLabel: "1800", title: "Dinner", description: "Balanced plate, easy on the spice.", order: 1, isCompleted: false },
+  { quarter: "Q3", timeLabel: "1930", title: "Evening Medication", description: "Evening dose with a light snack.", order: 2, isCompleted: false },
+  { quarter: "Q3", timeLabel: "2100", title: "Wind Down", description: "TV or reading, lights dimmed low.", order: 3, isCompleted: false },
+  { quarter: "Q4", timeLabel: "2200", title: "Bedtime Check-in", description: "Doors locked, lights off, settled in for the night.", order: 1, isCompleted: false },
+] as const;
+
+// Offsets (days ago, hour) are computed at seed time so the demo always looks
+// like a recent, lived-in log rather than a fixed historical date.
+const DEMO_SYMPTOM_LOGS = [
+  { daysAgo: 5, hour: 8, ptsdTrigger: false, hallucinationIntensity: 1, motivationLevel: 4, behaviorNotes: "Calm morning, ate a full breakfast, chatted about the game on TV." },
+  { daysAgo: 4, hour: 19, ptsdTrigger: true, hallucinationIntensity: 2, motivationLevel: 3, behaviorNotes: "A loud truck outside startled him; settled down after a few minutes of music." },
+  { daysAgo: 3, hour: 9, ptsdTrigger: false, hallucinationIntensity: 0, motivationLevel: 5, behaviorNotes: "Great mood — asked to go for an extra walk after lunch." },
+  { daysAgo: 2, hour: 18, ptsdTrigger: false, hallucinationIntensity: 3, motivationLevel: 2, behaviorNotes: "Mentioned hearing voices during dinner; redirected with a favorite show." },
+  { daysAgo: 1, hour: 8, ptsdTrigger: false, hallucinationIntensity: 1, motivationLevel: 4, behaviorNotes: "Slept well, in good spirits at breakfast." },
+  { daysAgo: 0, hour: 7, ptsdTrigger: false, hallucinationIntensity: 0, motivationLevel: 4, behaviorNotes: "Easy morning, medication taken on time." },
+] as const;
+
+async function seedDemoWorkspaceData(): Promise<void> {
+  const existingSchedule = await db
+    .select({ id: scheduleTasksTable.id })
+    .from(scheduleTasksTable)
+    .where(eq(scheduleTasksTable.tenantId, DEMO_TENANT_ID))
+    .limit(1);
+  if (existingSchedule.length === 0) {
+    await db.insert(scheduleTasksTable).values(
+      DEMO_SCHEDULE_TASKS.map((t) => ({
+        tenantId: DEMO_TENANT_ID,
+        quarter: t.quarter,
+        timeLabel: t.timeLabel,
+        title: t.title,
+        description: t.description,
+        order: t.order,
+        isActive: true,
+        isCompleted: t.isCompleted,
+        completedAt: t.isCompleted ? new Date() : null,
+      }))
+    );
+  }
+
+  const existingSymptoms = await db
+    .select({ id: symptomLogsTable.id })
+    .from(symptomLogsTable)
+    .where(eq(symptomLogsTable.tenantId, DEMO_TENANT_ID))
+    .limit(1);
+  if (existingSymptoms.length === 0) {
+    await db.insert(symptomLogsTable).values(
+      DEMO_SYMPTOM_LOGS.map((l) => {
+        const loggedAt = new Date();
+        loggedAt.setDate(loggedAt.getDate() - l.daysAgo);
+        loggedAt.setHours(l.hour, 0, 0, 0);
+        return {
+          tenantId: DEMO_TENANT_ID,
+          loggedAt,
+          ptsdTrigger: l.ptsdTrigger,
+          hallucinationIntensity: l.hallucinationIntensity,
+          motivationLevel: l.motivationLevel,
+          behaviorNotes: l.behaviorNotes,
+          loggedBy: "Demo Caregiver",
+        };
+      })
+    );
+  }
+}
 
 export async function runTenantMigration(): Promise<void> {
   try {
@@ -83,6 +160,18 @@ export async function runTenantMigration(): Promise<void> {
         END IF;
       END $$
     `);
+
+    // ── Demo workspace — a fixed, publicly-reachable tenant with no passphrase
+    //    (see routes/tenants.ts POST /tenants/demo). Created once; inventory
+    //    seeds itself lazily via ensureInventorySeeded() on first request like
+    //    it does for every tenant, so only schedule/symptoms need seeding here.
+    await pool.query(
+      `INSERT INTO tenants (id, name, email, plan, status, setup_completed_at)
+       VALUES ($1, 'Demo Workspace', 'demo@brain-app.invalid', 'demo', 'active', NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      [DEMO_TENANT_ID]
+    );
+    await seedDemoWorkspaceData();
 
     // ── call_sessions — add elevenlabs_conversation_id if not yet present ─────
     await pool.query(`

@@ -82,11 +82,31 @@ function BottomNav() {
 }
 
 function PrivateWorkspace() {
-  const { isUnlocked } = useVault();
+  const { isUnlocked, isLocal } = useVault();
   const [location] = useLocation();
 
   if (!isUnlocked) {
     return <VaultGate>{null}</VaultGate>;
+  }
+
+  // Tenant sessions (including the public demo) are scoped to br(AI)n's
+  // multi-tenant core — dashboard, schedule, symptoms, inventory — all
+  // reachable inside AdminView. Every other top-level route (Pops' ambient
+  // view, Jessica's phone line, Calls, Shopper, Settings, subscription)
+  // calls one of Ray's local-only specialty tools (see api-server
+  // routes/index.ts localRouter) and would just 403. Keep these sessions
+  // inside /admin instead of exposing dead links to those routes.
+  if (!isLocal) {
+    return (
+      <Suspense fallback={null}>
+        <Switch>
+          <Route path="/admin" component={AdminView} />
+          <Route>
+            <Redirect to="/admin" />
+          </Route>
+        </Switch>
+      </Suspense>
+    );
   }
 
   const isFullPageRoute = location.startsWith("/admin");

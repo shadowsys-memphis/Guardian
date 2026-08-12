@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Lock, Eye, EyeOff } from "lucide-react";
+import { Lock, Eye, EyeOff, Sparkles } from "lucide-react";
 import { useVault } from "@/lib/vault-context";
 
 interface VaultGateProps {
@@ -7,11 +7,13 @@ interface VaultGateProps {
 }
 
 export function VaultGate({ children: _children }: VaultGateProps) {
-  const { unlock } = useVault();
+  const { unlock, viewDemo } = useVault();
   const [passphrase, setPassphrase] = useState("");
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +27,19 @@ export function VaultGate({ children: _children }: VaultGateProps) {
       setError("Unlock failed. Try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewDemo = async () => {
+    setDemoLoading(true);
+    setDemoError(null);
+    try {
+      const ok = await viewDemo();
+      if (!ok) setDemoError("Demo is unavailable right now. Please try again shortly.");
+    } catch {
+      setDemoError("Demo is unavailable right now. Please try again shortly.");
+    } finally {
+      setDemoLoading(false);
     }
   };
 
@@ -70,6 +85,28 @@ export function VaultGate({ children: _children }: VaultGateProps) {
             {loading ? "Unlocking..." : "Unlock Vault"}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-6">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground/50 font-display">or</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleViewDemo}
+          disabled={demoLoading}
+          className="w-full py-3 border border-primary/40 text-primary font-display uppercase tracking-widest rounded-sm hover:bg-primary/10 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+        >
+          <Sparkles size={16} />
+          {demoLoading ? "Loading Demo..." : "View Live Demo"}
+        </button>
+        <p className="text-[11px] text-center text-muted-foreground/60 mt-2 font-display">
+          No passphrase needed — explore with sample data.
+        </p>
+        {demoError && (
+          <p className="text-sm text-destructive font-display text-center mt-2">{demoError}</p>
+        )}
 
         <p className="text-xs text-center text-muted-foreground/40 mt-8 font-display uppercase tracking-widest">
           br(AI)n · Unconditional Software
