@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AddLabPhaseInput,
   AddMealToCartInput,
   AdminSummaryInput,
   AdminSummaryResult,
@@ -38,6 +39,7 @@ import type {
   CreateHealthQuestionInput,
   CreateIntercomMessageInput,
   CreateInventoryItemInput,
+  CreateLabProtocolInput,
   CreateMealInput,
   CreateRotationTaskInput,
   CreateScheduleTaskInput,
@@ -52,6 +54,7 @@ import type {
   GeminiMessage,
   GeminiMessageInput,
   GetIntercomMessagesParams,
+  GetLabDrawsParams,
   GetSymptomLogsParams,
   HaldolCycle,
   HealthDataPoint,
@@ -62,6 +65,12 @@ import type {
   IntakeImageResult,
   IntercomMessage,
   InventoryItem,
+  LabDraw,
+  LabDrawRescheduled,
+  LabDrawTransition,
+  LabPhaseCreated,
+  LabProtocolCreated,
+  LabProtocolWithState,
   ListCallSessionsParams,
   LmStudioConnectionResult,
   LmStudioUrlResponse,
@@ -71,6 +80,7 @@ import type {
   MealRemixResult,
   MealWithIngredients,
   MonthlyReport,
+  RescheduleLabDrawInput,
   RotationTask,
   ScheduleTask,
   SetAiModelInput,
@@ -79,6 +89,7 @@ import type {
   SheetsSyncResult,
   ShuffleCartInput,
   ShuffleCartResult,
+  SkipLabDrawInput,
   SmartHomeDevice,
   StartCallSessionInput,
   SwapCartMealInput,
@@ -6586,4 +6597,688 @@ export const useExportToDrive = <
   TContext
 > => {
   return useMutation(getExportToDriveMutationOptions(options));
+};
+
+/**
+ * @summary List lab protocols with current phase and next pending draw
+ */
+export const getGetLabProtocolsUrl = () => {
+  return `/api/labs/protocols`;
+};
+
+export const getLabProtocols = async (
+  options?: RequestInit,
+): Promise<LabProtocolWithState[]> => {
+  return customFetch<LabProtocolWithState[]>(getGetLabProtocolsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLabProtocolsQueryKey = () => {
+  return [`/api/labs/protocols`] as const;
+};
+
+export const getGetLabProtocolsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLabProtocols>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLabProtocols>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLabProtocolsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLabProtocols>>> = ({
+    signal,
+  }) => getLabProtocols({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLabProtocols>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLabProtocolsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLabProtocols>>
+>;
+export type GetLabProtocolsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List lab protocols with current phase and next pending draw
+ */
+
+export function useGetLabProtocols<
+  TData = Awaited<ReturnType<typeof getLabProtocols>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLabProtocols>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLabProtocolsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a protocol, its first phase, and its first pending draw
+ */
+export const getCreateLabProtocolUrl = () => {
+  return `/api/labs/protocols`;
+};
+
+export const createLabProtocol = async (
+  createLabProtocolInput: CreateLabProtocolInput,
+  options?: RequestInit,
+): Promise<LabProtocolCreated> => {
+  return customFetch<LabProtocolCreated>(getCreateLabProtocolUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createLabProtocolInput),
+  });
+};
+
+export const getCreateLabProtocolMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLabProtocol>>,
+    TError,
+    { data: BodyType<CreateLabProtocolInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createLabProtocol>>,
+  TError,
+  { data: BodyType<CreateLabProtocolInput> },
+  TContext
+> => {
+  const mutationKey = ["createLabProtocol"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createLabProtocol>>,
+    { data: BodyType<CreateLabProtocolInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createLabProtocol(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateLabProtocolMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createLabProtocol>>
+>;
+export type CreateLabProtocolMutationBody = BodyType<CreateLabProtocolInput>;
+export type CreateLabProtocolMutationError = ErrorType<void>;
+
+/**
+ * @summary Create a protocol, its first phase, and its first pending draw
+ */
+export const useCreateLabProtocol = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLabProtocol>>,
+    TError,
+    { data: BodyType<CreateLabProtocolInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createLabProtocol>>,
+  TError,
+  { data: BodyType<CreateLabProtocolInput> },
+  TContext
+> => {
+  return useMutation(getCreateLabProtocolMutationOptions(options));
+};
+
+/**
+ * @summary Add a cadence phase, regenerating the future pending draw onto the new grid
+ */
+export const getAddLabPhaseUrl = (id: number) => {
+  return `/api/labs/protocols/${id}/phases`;
+};
+
+export const addLabPhase = async (
+  id: number,
+  addLabPhaseInput: AddLabPhaseInput,
+  options?: RequestInit,
+): Promise<LabPhaseCreated> => {
+  return customFetch<LabPhaseCreated>(getAddLabPhaseUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addLabPhaseInput),
+  });
+};
+
+export const getAddLabPhaseMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addLabPhase>>,
+    TError,
+    { id: number; data: BodyType<AddLabPhaseInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addLabPhase>>,
+  TError,
+  { id: number; data: BodyType<AddLabPhaseInput> },
+  TContext
+> => {
+  const mutationKey = ["addLabPhase"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addLabPhase>>,
+    { id: number; data: BodyType<AddLabPhaseInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addLabPhase(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddLabPhaseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addLabPhase>>
+>;
+export type AddLabPhaseMutationBody = BodyType<AddLabPhaseInput>;
+export type AddLabPhaseMutationError = ErrorType<void>;
+
+/**
+ * @summary Add a cadence phase, regenerating the future pending draw onto the new grid
+ */
+export const useAddLabPhase = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addLabPhase>>,
+    TError,
+    { id: number; data: BodyType<AddLabPhaseInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addLabPhase>>,
+  TError,
+  { id: number; data: BodyType<AddLabPhaseInput> },
+  TContext
+> => {
+  return useMutation(getAddLabPhaseMutationOptions(options));
+};
+
+/**
+ * @summary List lab draws, each with a derived alert
+ */
+export const getGetLabDrawsUrl = (params?: GetLabDrawsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/labs/draws?${stringifiedParams}`
+    : `/api/labs/draws`;
+};
+
+export const getLabDraws = async (
+  params?: GetLabDrawsParams,
+  options?: RequestInit,
+): Promise<LabDraw[]> => {
+  return customFetch<LabDraw[]>(getGetLabDrawsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLabDrawsQueryKey = (params?: GetLabDrawsParams) => {
+  return [`/api/labs/draws`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetLabDrawsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLabDraws>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetLabDrawsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLabDraws>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLabDrawsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLabDraws>>> = ({
+    signal,
+  }) => getLabDraws(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLabDraws>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLabDrawsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLabDraws>>
+>;
+export type GetLabDrawsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List lab draws, each with a derived alert
+ */
+
+export function useGetLabDraws<
+  TData = Awaited<ReturnType<typeof getLabDraws>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetLabDrawsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLabDraws>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLabDrawsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record that the draw was taken (completion 1 of 2)
+ */
+export const getMarkLabDrawDrawnUrl = (id: number) => {
+  return `/api/labs/draws/${id}/drawn`;
+};
+
+export const markLabDrawDrawn = async (
+  id: number,
+  options?: RequestInit,
+): Promise<LabDrawTransition> => {
+  return customFetch<LabDrawTransition>(getMarkLabDrawDrawnUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkLabDrawDrawnMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markLabDrawDrawn>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markLabDrawDrawn>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["markLabDrawDrawn"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markLabDrawDrawn>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return markLabDrawDrawn(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkLabDrawDrawnMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markLabDrawDrawn>>
+>;
+
+export type MarkLabDrawDrawnMutationError = ErrorType<void>;
+
+/**
+ * @summary Record that the draw was taken (completion 1 of 2)
+ */
+export const useMarkLabDrawDrawn = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markLabDrawDrawn>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markLabDrawDrawn>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getMarkLabDrawDrawnMutationOptions(options));
+};
+
+/**
+ * @summary Record that the result came back (completion 2 of 2)
+ */
+export const getMarkLabDrawResultedUrl = (id: number) => {
+  return `/api/labs/draws/${id}/resulted`;
+};
+
+export const markLabDrawResulted = async (
+  id: number,
+  options?: RequestInit,
+): Promise<LabDraw> => {
+  return customFetch<LabDraw>(getMarkLabDrawResultedUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkLabDrawResultedMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markLabDrawResulted>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markLabDrawResulted>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["markLabDrawResulted"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markLabDrawResulted>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return markLabDrawResulted(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkLabDrawResultedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markLabDrawResulted>>
+>;
+
+export type MarkLabDrawResultedMutationError = ErrorType<void>;
+
+/**
+ * @summary Record that the result came back (completion 2 of 2)
+ */
+export const useMarkLabDrawResulted = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markLabDrawResulted>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markLabDrawResulted>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getMarkLabDrawResultedMutationOptions(options));
+};
+
+/**
+ * @summary Skip a draw (reason required); does not count as coverage
+ */
+export const getSkipLabDrawUrl = (id: number) => {
+  return `/api/labs/draws/${id}/skip`;
+};
+
+export const skipLabDraw = async (
+  id: number,
+  skipLabDrawInput: SkipLabDrawInput,
+  options?: RequestInit,
+): Promise<LabDrawTransition> => {
+  return customFetch<LabDrawTransition>(getSkipLabDrawUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(skipLabDrawInput),
+  });
+};
+
+export const getSkipLabDrawMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof skipLabDraw>>,
+    TError,
+    { id: number; data: BodyType<SkipLabDrawInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof skipLabDraw>>,
+  TError,
+  { id: number; data: BodyType<SkipLabDrawInput> },
+  TContext
+> => {
+  const mutationKey = ["skipLabDraw"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof skipLabDraw>>,
+    { id: number; data: BodyType<SkipLabDrawInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return skipLabDraw(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SkipLabDrawMutationResult = NonNullable<
+  Awaited<ReturnType<typeof skipLabDraw>>
+>;
+export type SkipLabDrawMutationBody = BodyType<SkipLabDrawInput>;
+export type SkipLabDrawMutationError = ErrorType<void>;
+
+/**
+ * @summary Skip a draw (reason required); does not count as coverage
+ */
+export const useSkipLabDraw = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof skipLabDraw>>,
+    TError,
+    { id: number; data: BodyType<SkipLabDrawInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof skipLabDraw>>,
+  TError,
+  { id: number; data: BodyType<SkipLabDrawInput> },
+  TContext
+> => {
+  return useMutation(getSkipLabDrawMutationOptions(options));
+};
+
+/**
+ * @summary Reschedule a draw; the old row is kept as history and a new row is created
+ */
+export const getRescheduleLabDrawUrl = (id: number) => {
+  return `/api/labs/draws/${id}/reschedule`;
+};
+
+export const rescheduleLabDraw = async (
+  id: number,
+  rescheduleLabDrawInput: RescheduleLabDrawInput,
+  options?: RequestInit,
+): Promise<LabDrawRescheduled> => {
+  return customFetch<LabDrawRescheduled>(getRescheduleLabDrawUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(rescheduleLabDrawInput),
+  });
+};
+
+export const getRescheduleLabDrawMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rescheduleLabDraw>>,
+    TError,
+    { id: number; data: BodyType<RescheduleLabDrawInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rescheduleLabDraw>>,
+  TError,
+  { id: number; data: BodyType<RescheduleLabDrawInput> },
+  TContext
+> => {
+  const mutationKey = ["rescheduleLabDraw"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rescheduleLabDraw>>,
+    { id: number; data: BodyType<RescheduleLabDrawInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return rescheduleLabDraw(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RescheduleLabDrawMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rescheduleLabDraw>>
+>;
+export type RescheduleLabDrawMutationBody = BodyType<RescheduleLabDrawInput>;
+export type RescheduleLabDrawMutationError = ErrorType<void>;
+
+/**
+ * @summary Reschedule a draw; the old row is kept as history and a new row is created
+ */
+export const useRescheduleLabDraw = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rescheduleLabDraw>>,
+    TError,
+    { id: number; data: BodyType<RescheduleLabDrawInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rescheduleLabDraw>>,
+  TError,
+  { id: number; data: BodyType<RescheduleLabDrawInput> },
+  TContext
+> => {
+  return useMutation(getRescheduleLabDrawMutationOptions(options));
 };

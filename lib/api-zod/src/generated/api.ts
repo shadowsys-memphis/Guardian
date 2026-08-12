@@ -1641,3 +1641,453 @@ export const ExportToDriveResponse = zod.object({
   fileId: zod.string().nullish(),
   filename: zod.string().optional(),
 });
+
+/**
+ * @summary List lab protocols with current phase and next pending draw
+ */
+export const GetLabProtocolsResponseItem = zod
+  .object({
+    id: zod.number(),
+    tenantId: zod.string(),
+    label: zod.string().describe('e.g. \"clozapine ANC\"'),
+    active: zod
+      .boolean()
+      .describe(
+        "Deactivating stops new draws but does NOT clear existing pending ones",
+      ),
+    createdAt: zod.date(),
+  })
+  .and(
+    zod.object({
+      currentPhase: zod
+        .object({
+          id: zod.number(),
+          protocolId: zod.number(),
+          intervalDays: zod
+            .number()
+            .describe("e.g. 7, then a later row with 14"),
+          effectiveFrom: zod.date(),
+          createdAt: zod.date(),
+        })
+        .describe(
+          "A cadence step. Cadence changes by adding date-bounded rows, never by editing one.",
+        )
+        .nullish()
+        .describe(
+          "Phase governing today. Null if the first phase starts in the future.",
+        ),
+      nextDraw: zod
+        .object({
+          id: zod.number(),
+          tenantId: zod.string(),
+          protocolId: zod.number(),
+          dueDate: zod
+            .date()
+            .describe(
+              "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day",
+            ),
+          windowDays: zod.number(),
+          drawnAt: zod
+            .date()
+            .nullish()
+            .describe("Completion 1 - went to the lab"),
+          resultReceivedAt: zod
+            .date()
+            .nullish()
+            .describe("Completion 2 - the result actually came back"),
+          status: zod
+            .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+            .describe(
+              "Human-actioned state only. due\/overdue are never stored here.",
+            ),
+          reason: zod
+            .string()
+            .nullish()
+            .describe("Required for skip and reschedule"),
+          createdAt: zod.date(),
+        })
+        .describe(
+          "A stored draw row, without the derived alert (returned by scheduling side effects).",
+        )
+        .and(
+          zod.object({
+            alert: zod
+              .enum(["upcoming", "due", "overdue", "awaiting_result", "closed"])
+              .describe(
+                "Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it.",
+              ),
+          }),
+        )
+        .nullish()
+        .describe(
+          "Earliest pending draw, with its derived alert. Null if none is outstanding.",
+        ),
+    }),
+  );
+export const GetLabProtocolsResponse = zod.array(GetLabProtocolsResponseItem);
+
+/**
+ * @summary Create a protocol, its first phase, and its first pending draw
+ */
+
+export const createLabProtocolBodyIntervalDaysMax = 365;
+
+export const createLabProtocolBodyWindowDaysDefault = 2;
+export const createLabProtocolBodyWindowDaysMin = 0;
+export const createLabProtocolBodyWindowDaysMax = 14;
+
+export const CreateLabProtocolBody = zod.object({
+  label: zod.string().min(1),
+  intervalDays: zod.number().min(1).max(createLabProtocolBodyIntervalDaysMax),
+  effectiveFrom: zod.date(),
+  windowDays: zod
+    .number()
+    .min(createLabProtocolBodyWindowDaysMin)
+    .max(createLabProtocolBodyWindowDaysMax)
+    .default(createLabProtocolBodyWindowDaysDefault)
+    .describe(
+      "Grace days either side of due_date before a draw reads as overdue",
+    ),
+});
+
+/**
+ * @summary Add a cadence phase, regenerating the future pending draw onto the new grid
+ */
+export const AddLabPhaseParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const addLabPhaseBodyIntervalDaysMax = 365;
+
+export const AddLabPhaseBody = zod.object({
+  intervalDays: zod.number().min(1).max(addLabPhaseBodyIntervalDaysMax),
+  effectiveFrom: zod.date(),
+});
+
+/**
+ * @summary List lab draws, each with a derived alert
+ */
+export const GetLabDrawsQueryParams = zod.object({
+  status: zod
+    .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+    .optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+});
+
+export const GetLabDrawsResponseItem = zod
+  .object({
+    id: zod.number(),
+    tenantId: zod.string(),
+    protocolId: zod.number(),
+    dueDate: zod
+      .date()
+      .describe(
+        "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day",
+      ),
+    windowDays: zod.number(),
+    drawnAt: zod.date().nullish().describe("Completion 1 - went to the lab"),
+    resultReceivedAt: zod
+      .date()
+      .nullish()
+      .describe("Completion 2 - the result actually came back"),
+    status: zod
+      .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+      .describe(
+        "Human-actioned state only. due\/overdue are never stored here.",
+      ),
+    reason: zod.string().nullish().describe("Required for skip and reschedule"),
+    createdAt: zod.date(),
+  })
+  .describe(
+    "A stored draw row, without the derived alert (returned by scheduling side effects).",
+  )
+  .and(
+    zod.object({
+      alert: zod
+        .enum(["upcoming", "due", "overdue", "awaiting_result", "closed"])
+        .describe(
+          "Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it.",
+        ),
+    }),
+  );
+export const GetLabDrawsResponse = zod.array(GetLabDrawsResponseItem);
+
+/**
+ * @summary Record that the draw was taken (completion 1 of 2)
+ */
+export const MarkLabDrawDrawnParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkLabDrawDrawnResponse = zod
+  .object({
+    id: zod.number(),
+    tenantId: zod.string(),
+    protocolId: zod.number(),
+    dueDate: zod
+      .date()
+      .describe(
+        "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day",
+      ),
+    windowDays: zod.number(),
+    drawnAt: zod.date().nullish().describe("Completion 1 - went to the lab"),
+    resultReceivedAt: zod
+      .date()
+      .nullish()
+      .describe("Completion 2 - the result actually came back"),
+    status: zod
+      .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+      .describe(
+        "Human-actioned state only. due\/overdue are never stored here.",
+      ),
+    reason: zod.string().nullish().describe("Required for skip and reschedule"),
+    createdAt: zod.date(),
+  })
+  .describe(
+    "A stored draw row, without the derived alert (returned by scheduling side effects).",
+  )
+  .and(
+    zod.object({
+      alert: zod
+        .enum(["upcoming", "due", "overdue", "awaiting_result", "closed"])
+        .describe(
+          "Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it.",
+        ),
+    }),
+  )
+  .and(
+    zod.object({
+      nextDraw: zod
+        .object({
+          id: zod.number(),
+          tenantId: zod.string(),
+          protocolId: zod.number(),
+          dueDate: zod
+            .date()
+            .describe(
+              "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day",
+            ),
+          windowDays: zod.number(),
+          drawnAt: zod
+            .date()
+            .nullish()
+            .describe("Completion 1 - went to the lab"),
+          resultReceivedAt: zod
+            .date()
+            .nullish()
+            .describe("Completion 2 - the result actually came back"),
+          status: zod
+            .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+            .describe(
+              "Human-actioned state only. due\/overdue are never stored here.",
+            ),
+          reason: zod
+            .string()
+            .nullish()
+            .describe("Required for skip and reschedule"),
+          createdAt: zod.date(),
+        })
+        .describe(
+          "A stored draw row, without the derived alert (returned by scheduling side effects).",
+        )
+        .nullish()
+        .describe(
+          "The newly scheduled next draw, if one was generated. Null when the protocol is inactive or a pending draw already exists.",
+        ),
+    }),
+  );
+
+/**
+ * @summary Record that the result came back (completion 2 of 2)
+ */
+export const MarkLabDrawResultedParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkLabDrawResultedResponse = zod
+  .object({
+    id: zod.number(),
+    tenantId: zod.string(),
+    protocolId: zod.number(),
+    dueDate: zod
+      .date()
+      .describe(
+        "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day",
+      ),
+    windowDays: zod.number(),
+    drawnAt: zod.date().nullish().describe("Completion 1 - went to the lab"),
+    resultReceivedAt: zod
+      .date()
+      .nullish()
+      .describe("Completion 2 - the result actually came back"),
+    status: zod
+      .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+      .describe(
+        "Human-actioned state only. due\/overdue are never stored here.",
+      ),
+    reason: zod.string().nullish().describe("Required for skip and reschedule"),
+    createdAt: zod.date(),
+  })
+  .describe(
+    "A stored draw row, without the derived alert (returned by scheduling side effects).",
+  )
+  .and(
+    zod.object({
+      alert: zod
+        .enum(["upcoming", "due", "overdue", "awaiting_result", "closed"])
+        .describe(
+          "Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it.",
+        ),
+    }),
+  );
+
+/**
+ * @summary Skip a draw (reason required); does not count as coverage
+ */
+export const SkipLabDrawParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SkipLabDrawBody = zod.object({
+  reason: zod
+    .string()
+    .min(1)
+    .describe("Required - a draw can never be skipped silently"),
+});
+
+export const SkipLabDrawResponse = zod
+  .object({
+    id: zod.number(),
+    tenantId: zod.string(),
+    protocolId: zod.number(),
+    dueDate: zod
+      .date()
+      .describe(
+        "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day",
+      ),
+    windowDays: zod.number(),
+    drawnAt: zod.date().nullish().describe("Completion 1 - went to the lab"),
+    resultReceivedAt: zod
+      .date()
+      .nullish()
+      .describe("Completion 2 - the result actually came back"),
+    status: zod
+      .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+      .describe(
+        "Human-actioned state only. due\/overdue are never stored here.",
+      ),
+    reason: zod.string().nullish().describe("Required for skip and reschedule"),
+    createdAt: zod.date(),
+  })
+  .describe(
+    "A stored draw row, without the derived alert (returned by scheduling side effects).",
+  )
+  .and(
+    zod.object({
+      alert: zod
+        .enum(["upcoming", "due", "overdue", "awaiting_result", "closed"])
+        .describe(
+          "Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it.",
+        ),
+    }),
+  )
+  .and(
+    zod.object({
+      nextDraw: zod
+        .object({
+          id: zod.number(),
+          tenantId: zod.string(),
+          protocolId: zod.number(),
+          dueDate: zod
+            .date()
+            .describe(
+              "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day",
+            ),
+          windowDays: zod.number(),
+          drawnAt: zod
+            .date()
+            .nullish()
+            .describe("Completion 1 - went to the lab"),
+          resultReceivedAt: zod
+            .date()
+            .nullish()
+            .describe("Completion 2 - the result actually came back"),
+          status: zod
+            .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+            .describe(
+              "Human-actioned state only. due\/overdue are never stored here.",
+            ),
+          reason: zod
+            .string()
+            .nullish()
+            .describe("Required for skip and reschedule"),
+          createdAt: zod.date(),
+        })
+        .describe(
+          "A stored draw row, without the derived alert (returned by scheduling side effects).",
+        )
+        .nullish()
+        .describe(
+          "The newly scheduled next draw, if one was generated. Null when the protocol is inactive or a pending draw already exists.",
+        ),
+    }),
+  );
+
+/**
+ * @summary Reschedule a draw; the old row is kept as history and a new row is created
+ */
+export const RescheduleLabDrawParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RescheduleLabDrawBody = zod.object({
+  dueDate: zod.date(),
+  reason: zod.string().min(1),
+});
+
+export const RescheduleLabDrawResponse = zod
+  .object({
+    id: zod.number(),
+    tenantId: zod.string(),
+    protocolId: zod.number(),
+    dueDate: zod
+      .date()
+      .describe(
+        "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day",
+      ),
+    windowDays: zod.number(),
+    drawnAt: zod.date().nullish().describe("Completion 1 - went to the lab"),
+    resultReceivedAt: zod
+      .date()
+      .nullish()
+      .describe("Completion 2 - the result actually came back"),
+    status: zod
+      .enum(["pending", "drawn", "resulted", "skipped", "rescheduled"])
+      .describe(
+        "Human-actioned state only. due\/overdue are never stored here.",
+      ),
+    reason: zod.string().nullish().describe("Required for skip and reschedule"),
+    createdAt: zod.date(),
+  })
+  .describe(
+    "A stored draw row, without the derived alert (returned by scheduling side effects).",
+  )
+  .and(
+    zod.object({
+      alert: zod
+        .enum(["upcoming", "due", "overdue", "awaiting_result", "closed"])
+        .describe(
+          "Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it.",
+        ),
+    }),
+  )
+  .and(
+    zod.object({
+      rescheduledFrom: zod
+        .number()
+        .describe(
+          "Id of the superseded draw, which is kept as history with status rescheduled",
+        ),
+    }),
+  );

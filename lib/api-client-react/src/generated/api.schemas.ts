@@ -945,6 +945,148 @@ export interface IntakeImageResult {
   summary: string;
 }
 
+export interface LabProtocol {
+  id: number;
+  tenantId: string;
+  /** e.g. "clozapine ANC" */
+  label: string;
+  /** Deactivating stops new draws but does NOT clear existing pending ones */
+  active: boolean;
+  createdAt: string;
+}
+
+/**
+ * A cadence step. Cadence changes by adding date-bounded rows, never by editing one.
+ */
+export interface LabPhase {
+  id: number;
+  protocolId: number;
+  /** e.g. 7, then a later row with 14 */
+  intervalDays: number;
+  effectiveFrom: string;
+  createdAt: string;
+}
+
+/**
+ * Human-actioned state only. due/overdue are never stored here.
+ */
+export type LabDrawRowStatus =
+  (typeof LabDrawRowStatus)[keyof typeof LabDrawRowStatus];
+
+export const LabDrawRowStatus = {
+  pending: "pending",
+  drawn: "drawn",
+  resulted: "resulted",
+  skipped: "skipped",
+  rescheduled: "rescheduled",
+} as const;
+
+/**
+ * A stored draw row, without the derived alert (returned by scheduling side effects).
+ */
+export interface LabDrawRow {
+  id: number;
+  tenantId: string;
+  protocolId: number;
+  /** Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day */
+  dueDate: string;
+  windowDays: number;
+  /** Completion 1 - went to the lab */
+  drawnAt?: string | null;
+  /** Completion 2 - the result actually came back */
+  resultReceivedAt?: string | null;
+  /** Human-actioned state only. due/overdue are never stored here. */
+  status: LabDrawRowStatus;
+  /** Required for skip and reschedule */
+  reason?: string | null;
+  createdAt: string;
+}
+
+/**
+ * Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it.
+ */
+export type LabDrawAlert = (typeof LabDrawAlert)[keyof typeof LabDrawAlert];
+
+export const LabDrawAlert = {
+  upcoming: "upcoming",
+  due: "due",
+  overdue: "overdue",
+  awaiting_result: "awaiting_result",
+  closed: "closed",
+} as const;
+
+export type LabDraw = LabDrawRow & {
+  /** Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it. */
+  alert: LabDrawAlert;
+};
+
+export type LabDrawTransition = LabDraw & {
+  /** The newly scheduled next draw, if one was generated. Null when the protocol is inactive or a pending draw already exists. */
+  nextDraw?: LabDrawRow | null;
+};
+
+export type LabDrawRescheduled = LabDraw & {
+  /** Id of the superseded draw, which is kept as history with status rescheduled */
+  rescheduledFrom: number;
+};
+
+export type LabProtocolWithState = LabProtocol & {
+  /** Phase governing today. Null if the first phase starts in the future. */
+  currentPhase?: LabPhase | null;
+  /** Earliest pending draw, with its derived alert. Null if none is outstanding. */
+  nextDraw?: LabDraw | null;
+};
+
+export interface CreateLabProtocolInput {
+  /** @minLength 1 */
+  label: string;
+  /**
+   * @minimum 1
+   * @maximum 365
+   */
+  intervalDays: number;
+  effectiveFrom: string;
+  /**
+   * Grace days either side of due_date before a draw reads as overdue
+   * @minimum 0
+   * @maximum 14
+   */
+  windowDays?: number;
+}
+
+export type LabProtocolCreated = LabProtocol & {
+  /** First pending draw, generated on create */
+  firstDraw?: LabDrawRow | null;
+};
+
+export interface AddLabPhaseInput {
+  /**
+   * @minimum 1
+   * @maximum 365
+   */
+  intervalDays: number;
+  effectiveFrom: string;
+}
+
+export type LabPhaseCreated = LabPhase & {
+  /** Future pending draw re-anchored onto the new grid. A pending draw due before effectiveFrom is left untouched. */
+  regeneratedDraw?: LabDrawRow | null;
+};
+
+export interface SkipLabDrawInput {
+  /**
+   * Required - a draw can never be skipped silently
+   * @minLength 1
+   */
+  reason: string;
+}
+
+export interface RescheduleLabDrawInput {
+  dueDate: string;
+  /** @minLength 1 */
+  reason: string;
+}
+
 export type GetSymptomLogsParams = {
   limit?: number;
 };
@@ -963,3 +1105,20 @@ export type GetIntercomMessagesParams = {
 export type ListCallSessionsParams = {
   limit?: number;
 };
+
+export type GetLabDrawsParams = {
+  status?: GetLabDrawsStatus;
+  from?: string;
+  to?: string;
+};
+
+export type GetLabDrawsStatus =
+  (typeof GetLabDrawsStatus)[keyof typeof GetLabDrawsStatus];
+
+export const GetLabDrawsStatus = {
+  pending: "pending",
+  drawn: "drawn",
+  resulted: "resulted",
+  skipped: "skipped",
+  rescheduled: "rescheduled",
+} as const;
