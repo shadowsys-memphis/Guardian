@@ -1380,6 +1380,211 @@ paths:
         "403":
           description: Google Drive connector isn't connected
 
+  # ── Blood-work tracker ─────────────────────────────────────────────────────
+  # See tasks/lab-tracker-spec.md. `alert` is DERIVED at read time from
+  # due_date + window_days — never stored, so it can never go stale.
+  /labs/protocols:
+    get:
+      operationId: getLabProtocols
+      tags: [labs]
+      summary: List lab protocols with current phase and next pending draw
+      responses:
+        "200":
+          description: Protocols
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LabProtocolWithState"
+    post:
+      operationId: createLabProtocol
+      tags: [labs]
+      summary: Create a protocol, its first phase, and its first pending draw
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLabProtocolInput"
+      responses:
+        "201":
+          description: Protocol created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabProtocolCreated"
+        "400":
+          description: Invalid body
+
+  /labs/protocols/{id}/phases:
+    post:
+      operationId: addLabPhase
+      tags: [labs]
+      summary: Add a cadence phase, regenerating the future pending draw onto the new grid
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddLabPhaseInput"
+      responses:
+        "201":
+          description: Phase added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabPhaseCreated"
+        "400":
+          description: Invalid body
+        "404":
+          description: Protocol not found
+
+  /labs/draws:
+    get:
+      operationId: getLabDraws
+      tags: [labs]
+      summary: List lab draws, each with a derived alert
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, drawn, resulted, skipped, rescheduled]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Draws
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LabDraw"
+
+  /labs/draws/{id}/drawn:
+    post:
+      operationId: markLabDrawDrawn
+      tags: [labs]
+      summary: Record that the draw was taken (completion 1 of 2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Draw marked drawn; next draw scheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabDrawTransition"
+        "404":
+          description: Draw not found
+        "409":
+          description: Wrong state — drawn is only reachable from pending
+
+  /labs/draws/{id}/resulted:
+    post:
+      operationId: markLabDrawResulted
+      tags: [labs]
+      summary: Record that the result came back (completion 2 of 2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Draw marked resulted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabDraw"
+        "404":
+          description: Draw not found
+        "409":
+          description: Wrong state — a result needs a draw first
+
+  /labs/draws/{id}/skip:
+    post:
+      operationId: skipLabDraw
+      tags: [labs]
+      summary: Skip a draw (reason required); does not count as coverage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkipLabDrawInput"
+      responses:
+        "200":
+          description: Draw skipped; next draw scheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabDrawTransition"
+        "400":
+          description: A reason is required to skip a draw
+        "404":
+          description: Draw not found
+        "409":
+          description: Wrong state — skip is only reachable from pending
+
+  /labs/draws/{id}/reschedule:
+    post:
+      operationId: rescheduleLabDraw
+      tags: [labs]
+      summary: Reschedule a draw; the old row is kept as history and a new row is created
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RescheduleLabDrawInput"
+      responses:
+        "200":
+          description: Replacement draw created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabDrawRescheduled"
+        "400":
+          description: dueDate and reason are required
+        "404":
+          description: Draw not found
+        "409":
+          description: Wrong state — reschedule is only reachable from pending
+
 components:
   schemas:
     HealthStatus:
@@ -3079,3 +3284,235 @@ components:
       required:
         - items_detected
         - summary
+
+    # ── Blood-work tracker ───────────────────────────────────────────────────
+    # See tasks/lab-tracker-spec.md. Two invariants shape these: drawn ≠ resulted
+    # (two completions, two timestamps), and overdue never auto-clears. `status`
+    # is human-actioned state ONLY; `alert` is DERIVED server-side at read time
+    # from due_date + window_days and is never stored.
+
+    LabProtocol:
+      type: object
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: string
+        label:
+          type: string
+          description: 'e.g. "clozapine ANC"'
+        active:
+          type: boolean
+          description: "Deactivating stops new draws but does NOT clear existing pending ones"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenantId
+        - label
+        - active
+        - createdAt
+
+    LabPhase:
+      type: object
+      description: "A cadence step. Cadence changes by adding date-bounded rows, never by editing one."
+      properties:
+        id:
+          type: integer
+        protocolId:
+          type: integer
+        intervalDays:
+          type: integer
+          description: "e.g. 7, then a later row with 14"
+        effectiveFrom:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - protocolId
+        - intervalDays
+        - effectiveFrom
+        - createdAt
+
+    LabDrawRow:
+      type: object
+      description: "A stored draw row, without the derived alert (returned by scheduling side effects)."
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: string
+        protocolId:
+          type: integer
+        dueDate:
+          type: string
+          format: date
+          description: "Plain YYYY-MM-DD - a date, not a timestamp, so timezone drift can't move a draw by a day"
+        windowDays:
+          type: integer
+        drawnAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Completion 1 - went to the lab"
+        resultReceivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Completion 2 - the result actually came back"
+        status:
+          type: string
+          enum: [pending, drawn, resulted, skipped, rescheduled]
+          description: "Human-actioned state only. due/overdue are never stored here."
+        reason:
+          type: string
+          nullable: true
+          description: "Required for skip and reschedule"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenantId
+        - protocolId
+        - dueDate
+        - windowDays
+        - status
+        - createdAt
+
+    LabDraw:
+      allOf:
+        - $ref: "#/components/schemas/LabDrawRow"
+        - type: object
+          properties:
+            alert:
+              type: string
+              enum: [upcoming, due, overdue, awaiting_result, closed]
+              description: "Derived at read time, never stored. awaiting_result = drawn but no result after 7 days. overdue persists until a human resolves it."
+          required:
+            - alert
+
+    LabDrawTransition:
+      allOf:
+        - $ref: "#/components/schemas/LabDraw"
+        - type: object
+          properties:
+            nextDraw:
+              nullable: true
+              description: "The newly scheduled next draw, if one was generated. Null when the protocol is inactive or a pending draw already exists."
+              allOf:
+                - $ref: "#/components/schemas/LabDrawRow"
+
+    LabDrawRescheduled:
+      allOf:
+        - $ref: "#/components/schemas/LabDraw"
+        - type: object
+          properties:
+            rescheduledFrom:
+              type: integer
+              description: "Id of the superseded draw, which is kept as history with status rescheduled"
+          required:
+            - rescheduledFrom
+
+    LabProtocolWithState:
+      allOf:
+        - $ref: "#/components/schemas/LabProtocol"
+        - type: object
+          properties:
+            currentPhase:
+              nullable: true
+              description: "Phase governing today. Null if the first phase starts in the future."
+              allOf:
+                - $ref: "#/components/schemas/LabPhase"
+            nextDraw:
+              nullable: true
+              description: "Earliest pending draw, with its derived alert. Null if none is outstanding."
+              allOf:
+                - $ref: "#/components/schemas/LabDraw"
+
+    CreateLabProtocolInput:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+        intervalDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        effectiveFrom:
+          type: string
+          format: date
+        windowDays:
+          type: integer
+          minimum: 0
+          maximum: 14
+          default: 2
+          description: "Grace days either side of due_date before a draw reads as overdue"
+      required:
+        - label
+        - intervalDays
+        - effectiveFrom
+
+    LabProtocolCreated:
+      allOf:
+        - $ref: "#/components/schemas/LabProtocol"
+        - type: object
+          properties:
+            firstDraw:
+              nullable: true
+              description: "First pending draw, generated on create"
+              allOf:
+                - $ref: "#/components/schemas/LabDrawRow"
+
+    AddLabPhaseInput:
+      type: object
+      properties:
+        intervalDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        effectiveFrom:
+          type: string
+          format: date
+      required:
+        - intervalDays
+        - effectiveFrom
+
+    LabPhaseCreated:
+      allOf:
+        - $ref: "#/components/schemas/LabPhase"
+        - type: object
+          properties:
+            regeneratedDraw:
+              nullable: true
+              description: "Future pending draw re-anchored onto the new grid. A pending draw due before effectiveFrom is left untouched."
+              allOf:
+                - $ref: "#/components/schemas/LabDrawRow"
+
+    SkipLabDrawInput:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          description: "Required - a draw can never be skipped silently"
+      required:
+        - reason
+
+    RescheduleLabDrawInput:
+      type: object
+      properties:
+        dueDate:
+          type: string
+          format: date
+        reason:
+          type: string
+          minLength: 1
+      required:
+        - dueDate
+        - reason
