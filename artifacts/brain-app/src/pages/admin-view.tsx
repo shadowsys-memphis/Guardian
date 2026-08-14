@@ -1448,7 +1448,8 @@ function ScheduleTab() {
       <ScheduleTabDnD
         schedule={schedule}
         updateTask={(vars) => updateTask.mutate(vars)}
-        completeTask={(vars) => completeTask.mutate(vars)}
+        // A dashboard tap is an admin confirmation (completion source).
+        completeTask={(vars) => completeTask.mutate({ ...vars, data: { source: "admin" } })}
         uncompleteTask={(vars) => uncompleteTask.mutate(vars)}
         deleteTask={(vars) => deleteTask.mutate(vars)}
         onEdit={(task) => { setEditingTask(task); setIsModalOpen(true); }}

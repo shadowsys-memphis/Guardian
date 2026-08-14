@@ -1063,6 +1063,7 @@ async function tick(): Promise<void> {
 export function startCronScheduler(): void {
   void (async () => {
     await ensureCronLogTable();
+    await ensureRoutineFoundationSchema();
     await tick().catch((err) => logger.error({ err }, "Cron scheduler initial tick threw"));
     setInterval(() => {
       tick().catch((err) => logger.error({ err }, "Cron scheduler tick threw"));

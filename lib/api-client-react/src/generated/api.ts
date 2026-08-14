@@ -22,6 +22,7 @@ import type {
   AdminSummaryInput,
   AdminSummaryResult,
   AiModelStatus,
+  AnswerDayTypeRecommendationInput,
   AppState,
   AssessmentAnomalies,
   AssessmentSettings,
@@ -32,6 +33,7 @@ import type {
   CalendarEventResult,
   CallSession,
   CartWithMeals,
+  CompleteScheduleTaskInput,
   CookbookImportInput,
   CookbookImportResult,
   CreateCareLogInput,
@@ -45,6 +47,7 @@ import type {
   CreateScheduleTaskInput,
   CreateSymptomLogInput,
   CreateVoiceScriptInput,
+  DayType,
   DriveExportInput,
   DriveExportResult,
   GeminiConversation,
@@ -80,6 +83,7 @@ import type {
   MealRemixResult,
   MealWithIngredients,
   MonthlyReport,
+  RecordTaskOutcomeInput,
   RescheduleLabDrawInput,
   RotationTask,
   ScheduleTask,
@@ -693,11 +697,14 @@ export const getCompleteScheduleTaskUrl = (id: number) => {
 
 export const completeScheduleTask = async (
   id: number,
+  completeScheduleTaskInput?: CompleteScheduleTaskInput,
   options?: RequestInit,
 ): Promise<ScheduleTask> => {
   return customFetch<ScheduleTask>(getCompleteScheduleTaskUrl(id), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(completeScheduleTaskInput),
   });
 };
 
@@ -708,14 +715,14 @@ export const getCompleteScheduleTaskMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof completeScheduleTask>>,
     TError,
-    { id: number },
+    { id: number; data: BodyType<CompleteScheduleTaskInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof completeScheduleTask>>,
   TError,
-  { id: number },
+  { id: number; data: BodyType<CompleteScheduleTaskInput> },
   TContext
 > => {
   const mutationKey = ["completeScheduleTask"];
@@ -729,11 +736,11 @@ export const getCompleteScheduleTaskMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof completeScheduleTask>>,
-    { id: number }
+    { id: number; data: BodyType<CompleteScheduleTaskInput> }
   > = (props) => {
-    const { id } = props ?? {};
+    const { id, data } = props ?? {};
 
-    return completeScheduleTask(id, requestOptions);
+    return completeScheduleTask(id, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -742,7 +749,8 @@ export const getCompleteScheduleTaskMutationOptions = <
 export type CompleteScheduleTaskMutationResult = NonNullable<
   Awaited<ReturnType<typeof completeScheduleTask>>
 >;
-
+export type CompleteScheduleTaskMutationBody =
+  BodyType<CompleteScheduleTaskInput>;
 export type CompleteScheduleTaskMutationError = ErrorType<unknown>;
 
 /**
@@ -755,14 +763,14 @@ export const useCompleteScheduleTask = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof completeScheduleTask>>,
     TError,
-    { id: number },
+    { id: number; data: BodyType<CompleteScheduleTaskInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof completeScheduleTask>>,
   TError,
-  { id: number },
+  { id: number; data: BodyType<CompleteScheduleTaskInput> },
   TContext
 > => {
   return useMutation(getCompleteScheduleTaskMutationOptions(options));
@@ -850,6 +858,256 @@ export const useUncompleteScheduleTask = <
   TContext
 > => {
   return useMutation(getUncompleteScheduleTaskMutationOptions(options));
+};
+
+/**
+ * @summary Record a non-completion outcome (refused vs no-answer are distinct)
+ */
+export const getRecordScheduleTaskOutcomeUrl = (id: number) => {
+  return `/api/schedule/${id}/outcome`;
+};
+
+export const recordScheduleTaskOutcome = async (
+  id: number,
+  recordTaskOutcomeInput: RecordTaskOutcomeInput,
+  options?: RequestInit,
+): Promise<ScheduleTask> => {
+  return customFetch<ScheduleTask>(getRecordScheduleTaskOutcomeUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(recordTaskOutcomeInput),
+  });
+};
+
+export const getRecordScheduleTaskOutcomeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordScheduleTaskOutcome>>,
+    TError,
+    { id: number; data: BodyType<RecordTaskOutcomeInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordScheduleTaskOutcome>>,
+  TError,
+  { id: number; data: BodyType<RecordTaskOutcomeInput> },
+  TContext
+> => {
+  const mutationKey = ["recordScheduleTaskOutcome"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordScheduleTaskOutcome>>,
+    { id: number; data: BodyType<RecordTaskOutcomeInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return recordScheduleTaskOutcome(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordScheduleTaskOutcomeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordScheduleTaskOutcome>>
+>;
+export type RecordScheduleTaskOutcomeMutationBody =
+  BodyType<RecordTaskOutcomeInput>;
+export type RecordScheduleTaskOutcomeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record a non-completion outcome (refused vs no-answer are distinct)
+ */
+export const useRecordScheduleTaskOutcome = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordScheduleTaskOutcome>>,
+    TError,
+    { id: number; data: BodyType<RecordTaskOutcomeInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordScheduleTaskOutcome>>,
+  TError,
+  { id: number; data: BodyType<RecordTaskOutcomeInput> },
+  TContext
+> => {
+  return useMutation(getRecordScheduleTaskOutcomeMutationOptions(options));
+};
+
+/**
+ * @summary Today's resolved day type (resolves on demand if the morning job hasn't run)
+ */
+export const getGetTodayDayTypeUrl = () => {
+  return `/api/day-type/today`;
+};
+
+export const getTodayDayType = async (
+  options?: RequestInit,
+): Promise<DayType> => {
+  return customFetch<DayType>(getGetTodayDayTypeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTodayDayTypeQueryKey = () => {
+  return [`/api/day-type/today`] as const;
+};
+
+export const getGetTodayDayTypeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTodayDayType>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTodayDayType>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTodayDayTypeQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTodayDayType>>> = ({
+    signal,
+  }) => getTodayDayType({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTodayDayType>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTodayDayTypeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTodayDayType>>
+>;
+export type GetTodayDayTypeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Today's resolved day type (resolves on demand if the morning job hasn't run)
+ */
+
+export function useGetTodayDayType<
+  TData = Awaited<ReturnType<typeof getTodayDayType>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTodayDayType>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTodayDayTypeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Answer Jessica's pending Rest-day recommendation (accept or dismiss)
+ */
+export const getAnswerDayTypeRecommendationUrl = () => {
+  return `/api/day-type/today/recommendation`;
+};
+
+export const answerDayTypeRecommendation = async (
+  answerDayTypeRecommendationInput: AnswerDayTypeRecommendationInput,
+  options?: RequestInit,
+): Promise<DayType> => {
+  return customFetch<DayType>(getAnswerDayTypeRecommendationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(answerDayTypeRecommendationInput),
+  });
+};
+
+export const getAnswerDayTypeRecommendationMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof answerDayTypeRecommendation>>,
+    TError,
+    { data: BodyType<AnswerDayTypeRecommendationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof answerDayTypeRecommendation>>,
+  TError,
+  { data: BodyType<AnswerDayTypeRecommendationInput> },
+  TContext
+> => {
+  const mutationKey = ["answerDayTypeRecommendation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof answerDayTypeRecommendation>>,
+    { data: BodyType<AnswerDayTypeRecommendationInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return answerDayTypeRecommendation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AnswerDayTypeRecommendationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof answerDayTypeRecommendation>>
+>;
+export type AnswerDayTypeRecommendationMutationBody =
+  BodyType<AnswerDayTypeRecommendationInput>;
+export type AnswerDayTypeRecommendationMutationError = ErrorType<void>;
+
+/**
+ * @summary Answer Jessica's pending Rest-day recommendation (accept or dismiss)
+ */
+export const useAnswerDayTypeRecommendation = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof answerDayTypeRecommendation>>,
+    TError,
+    { data: BodyType<AnswerDayTypeRecommendationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof answerDayTypeRecommendation>>,
+  TError,
+  { data: BodyType<AnswerDayTypeRecommendationInput> },
+  TContext
+> => {
+  return useMutation(getAnswerDayTypeRecommendationMutationOptions(options));
 };
 
 /**

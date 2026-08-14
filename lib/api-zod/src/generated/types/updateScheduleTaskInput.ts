@@ -5,6 +5,7 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
+import type { TaskTier } from "./taskTier";
 import type { UpdateScheduleTaskInputQuarter } from "./updateScheduleTaskInputQuarter";
 
 export interface UpdateScheduleTaskInput {
@@ -15,4 +16,5 @@ export interface UpdateScheduleTaskInput {
   voiceScript?: string;
   order?: number;
   isActive?: boolean;
+  tier?: TaskTier;
 }

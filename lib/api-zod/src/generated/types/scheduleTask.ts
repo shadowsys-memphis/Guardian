@@ -5,7 +5,10 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
+import type { ScheduleTaskCompletionSource } from "./scheduleTaskCompletionSource";
 import type { ScheduleTaskQuarter } from "./scheduleTaskQuarter";
+import type { TaskOutcomeStatus } from "./taskOutcomeStatus";
+import type { TaskTier } from "./taskTier";
 
 export interface ScheduleTask {
   id: number;
@@ -20,4 +23,8 @@ export interface ScheduleTask {
   completedAt?: Date | null;
   order: number;
   isActive: boolean;
+  tier: TaskTier;
+  status: TaskOutcomeStatus;
+  /** How completion was confirmed. Null unless status is done. */
+  completionSource?: ScheduleTaskCompletionSource;
 }

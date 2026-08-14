@@ -59,6 +59,48 @@ export const ScheduleTaskQuarter = {
   Q4: "Q4",
 } as const;
 
+/**
+ * Priority tier — drives the escalation ladder (most to least critical).
+ */
+export type TaskTier = (typeof TaskTier)[keyof typeof TaskTier];
+
+export const TaskTier = {
+  safety: "safety",
+  medication: "medication",
+  meals_hydration: "meals_hydration",
+  sleep: "sleep",
+  hygiene_koda: "hygiene_koda",
+  routine: "routine",
+} as const;
+
+/**
+ * Task outcome. refused (he said no) and no_answer (never reached) are distinct signals.
+ */
+export type TaskOutcomeStatus =
+  (typeof TaskOutcomeStatus)[keyof typeof TaskOutcomeStatus];
+
+export const TaskOutcomeStatus = {
+  pending: "pending",
+  done: "done",
+  refused: "refused",
+  no_answer: "no_answer",
+  missed: "missed",
+} as const;
+
+/**
+ * How completion was confirmed. Null unless status is done.
+ */
+export type ScheduleTaskCompletionSource =
+  | (typeof ScheduleTaskCompletionSource)[keyof typeof ScheduleTaskCompletionSource]
+  | null;
+
+export const ScheduleTaskCompletionSource = {
+  spoken: "spoken",
+  family: "family",
+  sensor: "sensor",
+  admin: "admin",
+} as const;
+
 export interface ScheduleTask {
   id: number;
   quarter: ScheduleTaskQuarter;
@@ -72,6 +114,10 @@ export interface ScheduleTask {
   completedAt?: string | null;
   order: number;
   isActive: boolean;
+  tier: TaskTier;
+  status: TaskOutcomeStatus;
+  /** How completion was confirmed. Null unless status is done. */
+  completionSource?: ScheduleTaskCompletionSource;
 }
 
 export interface AppState {
@@ -137,6 +183,7 @@ export interface CreateScheduleTaskInput {
   description?: string;
   voiceScript?: string;
   order: number;
+  tier?: TaskTier;
 }
 
 export type UpdateScheduleTaskInputQuarter =
@@ -157,6 +204,70 @@ export interface UpdateScheduleTaskInput {
   voiceScript?: string;
   order?: number;
   isActive?: boolean;
+  tier?: TaskTier;
+}
+
+/**
+ * How the completion was confirmed. Defaults to admin (a dashboard tap).
+ */
+export type CompleteScheduleTaskInputSource =
+  (typeof CompleteScheduleTaskInputSource)[keyof typeof CompleteScheduleTaskInputSource];
+
+export const CompleteScheduleTaskInputSource = {
+  spoken: "spoken",
+  family: "family",
+  sensor: "sensor",
+  admin: "admin",
+} as const;
+
+export interface CompleteScheduleTaskInput {
+  /** How the completion was confirmed. Defaults to admin (a dashboard tap). */
+  source?: CompleteScheduleTaskInputSource;
+}
+
+/**
+ * Record a non-completion outcome, or reset to pending.
+ */
+export type RecordTaskOutcomeInputStatus =
+  (typeof RecordTaskOutcomeInputStatus)[keyof typeof RecordTaskOutcomeInputStatus];
+
+export const RecordTaskOutcomeInputStatus = {
+  refused: "refused",
+  no_answer: "no_answer",
+  pending: "pending",
+} as const;
+
+export interface RecordTaskOutcomeInput {
+  /** Record a non-completion outcome, or reset to pending. */
+  status: RecordTaskOutcomeInputStatus;
+}
+
+export type DayTypeDayType =
+  (typeof DayTypeDayType)[keyof typeof DayTypeDayType];
+
+export const DayTypeDayType = {
+  normal: "normal",
+  sunday: "sunday",
+  rest: "rest",
+  appointment: "appointment",
+  sick: "sick",
+} as const;
+
+export interface DayType {
+  /** Pacific calendar date (YYYY-MM-DD) */
+  dayDate: string;
+  dayType: DayTypeDayType;
+  /** Which input won the precedence contest (auto, calendar, ray_flag, ray_confirmed). */
+  resolvedBy: string;
+  reason?: string | null;
+  /** A Rest-day suggestion from Jessica awaiting Ray's yes/no, if any. */
+  pendingRecommendation?: string | null;
+  recommendationReason?: string | null;
+}
+
+export interface AnswerDayTypeRecommendationInput {
+  /** true converts the day to the recommended type; false dismisses the suggestion. */
+  accept: boolean;
 }
 
 export interface SymptomLog {

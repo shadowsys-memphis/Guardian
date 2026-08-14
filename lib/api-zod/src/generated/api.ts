@@ -63,6 +63,27 @@ export const GetAppStateResponse = zod.object({
       completedAt: zod.date().nullish(),
       order: zod.number(),
       isActive: zod.boolean(),
+      tier: zod
+        .enum([
+          "safety",
+          "medication",
+          "meals_hydration",
+          "sleep",
+          "hygiene_koda",
+          "routine",
+        ])
+        .describe(
+          "Priority tier — drives the escalation ladder (most to least critical).",
+        ),
+      status: zod
+        .enum(["pending", "done", "refused", "no_answer", "missed"])
+        .describe(
+          "Task outcome. refused (he said no) and no_answer (never reached) are distinct signals.",
+        ),
+      completionSource: zod
+        .enum(["spoken", "family", "sensor", "admin"])
+        .nullish()
+        .describe("How completion was confirmed. Null unless status is done."),
     })
     .nullish()
     .describe(
@@ -133,6 +154,27 @@ export const UpdateAppStateResponse = zod.object({
       completedAt: zod.date().nullish(),
       order: zod.number(),
       isActive: zod.boolean(),
+      tier: zod
+        .enum([
+          "safety",
+          "medication",
+          "meals_hydration",
+          "sleep",
+          "hygiene_koda",
+          "routine",
+        ])
+        .describe(
+          "Priority tier — drives the escalation ladder (most to least critical).",
+        ),
+      status: zod
+        .enum(["pending", "done", "refused", "no_answer", "missed"])
+        .describe(
+          "Task outcome. refused (he said no) and no_answer (never reached) are distinct signals.",
+        ),
+      completionSource: zod
+        .enum(["spoken", "family", "sensor", "admin"])
+        .nullish()
+        .describe("How completion was confirmed. Null unless status is done."),
     })
     .nullish()
     .describe(
@@ -157,6 +199,27 @@ export const GetScheduleResponseItem = zod.object({
   completedAt: zod.date().nullish(),
   order: zod.number(),
   isActive: zod.boolean(),
+  tier: zod
+    .enum([
+      "safety",
+      "medication",
+      "meals_hydration",
+      "sleep",
+      "hygiene_koda",
+      "routine",
+    ])
+    .describe(
+      "Priority tier — drives the escalation ladder (most to least critical).",
+    ),
+  status: zod
+    .enum(["pending", "done", "refused", "no_answer", "missed"])
+    .describe(
+      "Task outcome. refused (he said no) and no_answer (never reached) are distinct signals.",
+    ),
+  completionSource: zod
+    .enum(["spoken", "family", "sensor", "admin"])
+    .nullish()
+    .describe("How completion was confirmed. Null unless status is done."),
 });
 export const GetScheduleResponse = zod.array(GetScheduleResponseItem);
 
@@ -170,6 +233,19 @@ export const CreateScheduleTaskBody = zod.object({
   description: zod.string().optional(),
   voiceScript: zod.string().optional(),
   order: zod.number(),
+  tier: zod
+    .enum([
+      "safety",
+      "medication",
+      "meals_hydration",
+      "sleep",
+      "hygiene_koda",
+      "routine",
+    ])
+    .optional()
+    .describe(
+      "Priority tier — drives the escalation ladder (most to least critical).",
+    ),
 });
 
 /**
@@ -187,6 +263,19 @@ export const UpdateScheduleTaskBody = zod.object({
   voiceScript: zod.string().optional(),
   order: zod.number().optional(),
   isActive: zod.boolean().optional(),
+  tier: zod
+    .enum([
+      "safety",
+      "medication",
+      "meals_hydration",
+      "sleep",
+      "hygiene_koda",
+      "routine",
+    ])
+    .optional()
+    .describe(
+      "Priority tier — drives the escalation ladder (most to least critical).",
+    ),
 });
 
 export const UpdateScheduleTaskResponse = zod.object({
@@ -203,6 +292,27 @@ export const UpdateScheduleTaskResponse = zod.object({
   completedAt: zod.date().nullish(),
   order: zod.number(),
   isActive: zod.boolean(),
+  tier: zod
+    .enum([
+      "safety",
+      "medication",
+      "meals_hydration",
+      "sleep",
+      "hygiene_koda",
+      "routine",
+    ])
+    .describe(
+      "Priority tier — drives the escalation ladder (most to least critical).",
+    ),
+  status: zod
+    .enum(["pending", "done", "refused", "no_answer", "missed"])
+    .describe(
+      "Task outcome. refused (he said no) and no_answer (never reached) are distinct signals.",
+    ),
+  completionSource: zod
+    .enum(["spoken", "family", "sensor", "admin"])
+    .nullish()
+    .describe("How completion was confirmed. Null unless status is done."),
 });
 
 /**
@@ -219,6 +329,15 @@ export const CompleteScheduleTaskParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const CompleteScheduleTaskBody = zod.object({
+  source: zod
+    .enum(["spoken", "family", "sensor", "admin"])
+    .optional()
+    .describe(
+      "How the completion was confirmed. Defaults to admin (a dashboard tap).",
+    ),
+});
+
 export const CompleteScheduleTaskResponse = zod.object({
   id: zod.number(),
   quarter: zod.enum(["Q1", "Q2", "Q3", "Q4"]),
@@ -233,6 +352,27 @@ export const CompleteScheduleTaskResponse = zod.object({
   completedAt: zod.date().nullish(),
   order: zod.number(),
   isActive: zod.boolean(),
+  tier: zod
+    .enum([
+      "safety",
+      "medication",
+      "meals_hydration",
+      "sleep",
+      "hygiene_koda",
+      "routine",
+    ])
+    .describe(
+      "Priority tier — drives the escalation ladder (most to least critical).",
+    ),
+  status: zod
+    .enum(["pending", "done", "refused", "no_answer", "missed"])
+    .describe(
+      "Task outcome. refused (he said no) and no_answer (never reached) are distinct signals.",
+    ),
+  completionSource: zod
+    .enum(["spoken", "family", "sensor", "admin"])
+    .nullish()
+    .describe("How completion was confirmed. Null unless status is done."),
 });
 
 /**
@@ -256,6 +396,127 @@ export const UncompleteScheduleTaskResponse = zod.object({
   completedAt: zod.date().nullish(),
   order: zod.number(),
   isActive: zod.boolean(),
+  tier: zod
+    .enum([
+      "safety",
+      "medication",
+      "meals_hydration",
+      "sleep",
+      "hygiene_koda",
+      "routine",
+    ])
+    .describe(
+      "Priority tier — drives the escalation ladder (most to least critical).",
+    ),
+  status: zod
+    .enum(["pending", "done", "refused", "no_answer", "missed"])
+    .describe(
+      "Task outcome. refused (he said no) and no_answer (never reached) are distinct signals.",
+    ),
+  completionSource: zod
+    .enum(["spoken", "family", "sensor", "admin"])
+    .nullish()
+    .describe("How completion was confirmed. Null unless status is done."),
+});
+
+/**
+ * @summary Record a non-completion outcome (refused vs no-answer are distinct)
+ */
+export const RecordScheduleTaskOutcomeParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RecordScheduleTaskOutcomeBody = zod.object({
+  status: zod
+    .enum(["refused", "no_answer", "pending"])
+    .describe("Record a non-completion outcome, or reset to pending."),
+});
+
+export const RecordScheduleTaskOutcomeResponse = zod.object({
+  id: zod.number(),
+  quarter: zod.enum(["Q1", "Q2", "Q3", "Q4"]),
+  timeLabel: zod.string().describe("e.g. '0600', '0800-1200'"),
+  title: zod.string(),
+  description: zod.string().optional(),
+  voiceScript: zod
+    .string()
+    .optional()
+    .describe("What Jessica says when initiating this task"),
+  isCompleted: zod.boolean(),
+  completedAt: zod.date().nullish(),
+  order: zod.number(),
+  isActive: zod.boolean(),
+  tier: zod
+    .enum([
+      "safety",
+      "medication",
+      "meals_hydration",
+      "sleep",
+      "hygiene_koda",
+      "routine",
+    ])
+    .describe(
+      "Priority tier — drives the escalation ladder (most to least critical).",
+    ),
+  status: zod
+    .enum(["pending", "done", "refused", "no_answer", "missed"])
+    .describe(
+      "Task outcome. refused (he said no) and no_answer (never reached) are distinct signals.",
+    ),
+  completionSource: zod
+    .enum(["spoken", "family", "sensor", "admin"])
+    .nullish()
+    .describe("How completion was confirmed. Null unless status is done."),
+});
+
+/**
+ * @summary Today's resolved day type (resolves on demand if the morning job hasn't run)
+ */
+export const GetTodayDayTypeResponse = zod.object({
+  dayDate: zod.string().describe("Pacific calendar date (YYYY-MM-DD)"),
+  dayType: zod.enum(["normal", "sunday", "rest", "appointment", "sick"]),
+  resolvedBy: zod
+    .string()
+    .describe(
+      "Which input won the precedence contest (auto, calendar, ray_flag, ray_confirmed).",
+    ),
+  reason: zod.string().nullish(),
+  pendingRecommendation: zod
+    .string()
+    .nullish()
+    .describe(
+      "A Rest-day suggestion from Jessica awaiting Ray's yes\/no, if any.",
+    ),
+  recommendationReason: zod.string().nullish(),
+});
+
+/**
+ * @summary Answer Jessica's pending Rest-day recommendation (accept or dismiss)
+ */
+export const AnswerDayTypeRecommendationBody = zod.object({
+  accept: zod
+    .boolean()
+    .describe(
+      "true converts the day to the recommended type; false dismisses the suggestion.",
+    ),
+});
+
+export const AnswerDayTypeRecommendationResponse = zod.object({
+  dayDate: zod.string().describe("Pacific calendar date (YYYY-MM-DD)"),
+  dayType: zod.enum(["normal", "sunday", "rest", "appointment", "sick"]),
+  resolvedBy: zod
+    .string()
+    .describe(
+      "Which input won the precedence contest (auto, calendar, ray_flag, ray_confirmed).",
+    ),
+  reason: zod.string().nullish(),
+  pendingRecommendation: zod
+    .string()
+    .nullish()
+    .describe(
+      "A Rest-day suggestion from Jessica awaiting Ray's yes\/no, if any.",
+    ),
+  recommendationReason: zod.string().nullish(),
 });
 
 /**

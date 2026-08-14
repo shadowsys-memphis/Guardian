@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateScheduleTaskInputQuarter } from "./createScheduleTaskInputQuarter";
+import type { TaskTier } from "./taskTier";
 
 export interface CreateScheduleTaskInput {
   quarter: CreateScheduleTaskInputQuarter;
@@ -14,4 +15,5 @@ export interface CreateScheduleTaskInput {
   description?: string;
   voiceScript?: string;
   order: number;
+  tier?: TaskTier;
 }
