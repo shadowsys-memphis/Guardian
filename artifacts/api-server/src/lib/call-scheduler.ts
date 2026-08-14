@@ -237,6 +237,7 @@ async function ensureRoutineFoundationSchema(): Promise<void> {
           ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
           ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMP;
           ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP;
+          ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS jessica_calls BOOLEAN NOT NULL DEFAULT FALSE;
         END IF;
       END $$;
     `);

@@ -42,6 +42,11 @@ export const scheduleTasksTable = pgTable("schedule_tasks", {
   attemptCount: integer("attempt_count").notNull().default(0),
   lastAttemptAt: timestamp("last_attempt_at"),
   escalatedAt: timestamp("escalated_at"),
+  // True for tasks where Jessica actively places a phone call at the task's
+  // time (check-ins, med reminders, chore assignment, journal, etc.) —
+  // driven by the task-call engine in call-scheduler.ts. False = a silent
+  // schedule item (make bed, dinner) that only appears in her live context.
+  jessicaCalls: boolean("jessica_calls").notNull().default(false),
 });
 
 export const symptomLogsTable = pgTable("symptom_logs", {
