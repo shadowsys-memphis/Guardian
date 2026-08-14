@@ -1,0 +1,12 @@
+---
+name: Fleet governance and git divergence
+description: This Replit workspace is a downstream copy of a canonical GitHub repo worked by a multi-agent fleet (Claude/Codex/Cursor/Gemini CLI) under AGENTS.md rules; check git state before editing.
+---
+
+This repo has an `AGENTS.md` (repo root) that "outranks defaults" for all coding agents, plus a "Fleet ground rules" section in `replit.md` scoping what the Replit Agent specifically may do: no git push, no new remotes, no solo DB migrations, never print secret values, and — critically — this workspace is "a deployment copy, not the source of truth." When it disagrees with GitHub or Ray's local machines, report the disagreement; do not resolve it.
+
+Concretely (as of 2026-08-14): `origin` already points at the canonical repo (`github.com/shadowsys-memphis/Guardian.git`), `master` matched `origin/master` with zero commits behind, but had 17 commits that exist ONLY locally in this workspace (Replit's own platform auto-commit, never pushed) — including real feature work, not just trivial edits. This has evidently been accumulating across many prior sessions, not a one-time thing.
+
+**Why:** the canonical repo is actively developed by a separate fleet of coding agents under a stricter multi-tenant productization effort ("Brain Guardian OS"). This workspace still shows the legacy name/patterns (`br(AI)n App`, hardcoded "Ray"/"Pops", `tenantId: "local"` fallback) that AGENTS.md explicitly forbids in the canonical repo — real, expected drift, not a bug to silently fix.
+
+**How to apply:** at the start of any session that will edit code, run the read-only git proof block (`pwd`, `git rev-parse --show-toplevel`, `git branch --show-current`, `git remote -v`, `git status --short`, and `git fetch origin` + `git log origin/master..master --oneline` to see local-only commits) and report what you find before proceeding — don't assume a prior session's "how many commits ahead" still holds. As of 2026-08-14, Ray chose "hold off on further edits" pending his own sync of this workspace with canonical — check with Ray before resuming normal direct-edit behavior in this repo; do not silently revert to editing as usual.

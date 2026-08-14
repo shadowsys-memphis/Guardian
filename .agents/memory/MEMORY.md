@@ -19,3 +19,5 @@
 - [ElevenLabs live-state verification](elevenlabs-live-state-verification.md) — a 200/"exists" check isn't enough (a valid-but-wrong agent ID passes it too); cross-verify agent↔phone assignment live.
 - [ElevenLabs config validation](elevenlabs-config-validation.md) — daily job validates agent+phone IDs against live API; missed-call streak ≥ 2 triggers persistent alert + admin phone call.
 - [Deployment secrets need republish](deployment-secrets-republish.md) — a corrected Secret reaches dev on workflow restart but NOT a live deployment until republished; never call a secret fix "done" without saying so.
+- [Fleet governance & git divergence](fleet-governance-and-git-state.md) — this workspace is a copy behind AGENTS.md fleet rules with unpushed local commits; check git state before editing.
+- [Autoscale vs in-process cron scheduler](autoscale-cron-scheduler-risk.md) — safety-critical jobs need an always-on process; autoscale can silently skip them.
