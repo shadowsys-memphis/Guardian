@@ -105,7 +105,7 @@ function parseCravingTag(text: string): string | null {
 }
 
 export type OutboundCallResult =
-  | { ok: true; elevenLabsConversationId: string; sessionId: number; conversationId: number }
+  | { ok: true; elevenLabsConversationId: string; sessionId: number | null; conversationId: number | null }
   | { ok: false; status: number; error: string; message?: string };
 
 /**
@@ -113,8 +113,15 @@ export type OutboundCallResult =
  * daily call scheduler (lib/call-scheduler.ts). Never throws — always
  * resolves to a result object so the scheduler's tick loop can log and
  * move on instead of crashing the interval.
+ *
+ * `noSession` — when true, the ElevenLabs call is placed but no
+ * `conversations` or `call_sessions` row is written. Use this for
+ * administrative notification calls (e.g. the missed-streak admin alert)
+ * that must NOT appear as Pops outbound-call sessions — otherwise the
+ * missed-call detection job could see the admin call's `reached=true` as
+ * proof that Pops was reached and incorrectly reset the missed-call streak.
  */
-export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?: string }): Promise<OutboundCallResult> {
+export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?: string; noSession?: boolean }): Promise<OutboundCallResult> {
   try {
     const apiKey = getElevenLabsKey();
     const agentId = getAgentId();
@@ -225,7 +232,18 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
     }
 
     const elData = await elRes.json() as { conversation_id: string };
-    const conversationId = elData.conversation_id;
+    const elevenLabsConversationId = elData.conversation_id;
+
+    // Administrative/notification calls (noSession=true) must not create a
+    // call_sessions row. The missed-call detection job looks for sessions with
+    // elevenlabs_conversation_id IS NOT NULL AND reached=true to confirm Pops
+    // was reached. If an admin notification call wrote a session and Ray
+    // answered it, the webhook would flip reached=true on that admin session —
+    // which would satisfy the detection query and incorrectly reset the missed-
+    // call streak even though Pops was never called.
+    if (opts?.noSession) {
+      return { ok: true, elevenLabsConversationId, sessionId: null, conversationId: null };
+    }
 
     const today = todayPacific();
 
@@ -244,12 +262,12 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
 
     await pool.query(
       `UPDATE call_sessions SET elevenlabs_conversation_id = $1 WHERE id = $2`,
-      [conversationId, session.id]
+      [elevenLabsConversationId, session.id]
     );
 
     return {
       ok: true,
-      elevenLabsConversationId: conversationId,
+      elevenLabsConversationId,
       sessionId: session.id,
       conversationId: convo.id,
     };

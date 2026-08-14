@@ -31,6 +31,20 @@ const KEY = {
   missedCallToday: "missed_call_today",
   missedCallStreak: "missed_call_streak",
   missedCallClaim: "missed_call_last_checked_date",
+  // Persistent multi-day streak alert — stays set until the streak resets to 0,
+  // unlike missed_call_today which is per-day and dismissible.
+  missedCallStreakAlert: "missed_call_streak_alert",
+  // The Pacific call date on which the current streak began (first miss).
+  // Set when streak goes from 0→1 and cleared only when a successful call
+  // breaks the streak, so the escalation banner always shows the true start
+  // date, not the most-recent missed day.
+  missedCallFirstMissedDate: "missed_call_first_missed_date",
+  // Date Ray was last called on the admin phone to notify about a missed streak.
+  missedCallAdminNotifiedDate: "missed_call_admin_notified_date",
+  // ElevenLabs config validation result (agent + phone number reachability).
+  elevenlabsConfigAlert: "elevenlabs_config_alert",
+  // Once-per-day claim for the ElevenLabs config check job.
+  elevenlabsConfigCheckClaim: "elevenlabs_config_check_last_date",
 } as const;
 
 export type JobOutcome = "ok" | "skipped" | "warn" | "error";
@@ -198,6 +212,76 @@ async function quietWindowBlocks(now: PacificNow): Promise<boolean> {
 }
 
 /**
+ * Validates that ELEVENLABS_AGENT_ID and ELEVENLABS_PHONE_NUMBER_ID actually
+ * resolve against ElevenLabs' live API. Returns a result object rather than
+ * throwing — the caller stores the result in app_settings so the dashboard
+ * can surface it, regardless of whether this is the startup check or the
+ * daily scheduled run.
+ */
+async function validateElevenLabsConfig(): Promise<{
+  agentOk: boolean;
+  phoneOk: boolean;
+  issues: string[];
+}> {
+  const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
+  const apiKey = process.env["ELEVENLABS_API_KEY"];
+  const agentId = process.env["ELEVENLABS_AGENT_ID"];
+  const phoneId = process.env["ELEVENLABS_PHONE_NUMBER_ID"];
+
+  if (!apiKey) {
+    return { agentOk: false, phoneOk: false, issues: ["ELEVENLABS_API_KEY is not set"] };
+  }
+
+  const issues: string[] = [];
+  let agentOk = false;
+  let phoneOk = false;
+
+  if (!agentId) {
+    issues.push("ELEVENLABS_AGENT_ID is not set");
+  } else {
+    try {
+      const res = await fetch(`${ELEVENLABS_BASE}/convai/agents/${agentId}`, {
+        headers: { "xi-api-key": apiKey },
+      });
+      if (res.ok) {
+        agentOk = true;
+      } else if (res.status === 404) {
+        issues.push(`Agent ID "${agentId}" not found in ElevenLabs — it may have been deleted or renamed`);
+      } else {
+        issues.push(`Agent check failed (HTTP ${res.status})`);
+      }
+    } catch (err) {
+      issues.push(`Agent check request failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (!phoneId) {
+    issues.push("ELEVENLABS_PHONE_NUMBER_ID is not set");
+  } else {
+    try {
+      const res = await fetch(`${ELEVENLABS_BASE}/convai/phone-numbers`, {
+        headers: { "xi-api-key": apiKey },
+      });
+      if (res.ok) {
+        const list = await res.json() as Array<{ phone_number: string; phone_number_id: string }>;
+        const match = list.find((p) => p.phone_number === phoneId || p.phone_number_id === phoneId);
+        if (match) {
+          phoneOk = true;
+        } else {
+          issues.push(`Phone number ID "${phoneId}" not found in ElevenLabs account (${list.length} number(s) checked)`);
+        }
+      } else {
+        issues.push(`Phone number check failed (HTTP ${res.status})`);
+      }
+    } catch (err) {
+      issues.push(`Phone number check request failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return { agentOk, phoneOk, issues };
+}
+
+/**
  * Haldol context injected into scheduled calls once the injection is well past
  * due (cycle day 16+, i.e. 15+ days since the last logged injection).
  */
@@ -230,10 +314,14 @@ const dailyCallJob: CronJob = {
 
     const result = await triggerOutboundCall({ extraContext: await overdueHaldolContext() });
     if (!result.ok) {
-      const streak = parseInt((await getSetting(KEY.missedCallStreak)) ?? "0", 10) + 1;
-      await setSetting(KEY.missedCallStreak, String(streak));
+      // Record the failure reason for the per-day banner — but do NOT increment
+      // missed_call_streak here. Streak counting is owned exclusively by
+      // missedCallJob (the post-deadline detection job), which checks the DB for
+      // an actual confirmed-reached session. If we also incremented here,
+      // a single failed day would produce streak=2 (once in dailyCallJob, once
+      // in missedCallJob), which would falsely trigger the multi-day escalation.
       await setSetting(KEY.missedCallToday, JSON.stringify({ missed: true, reason: result.error, at: new Date().toISOString() }));
-      return { outcome: "error", detail: `Call failed to start: ${result.error}${result.message ? ` — ${result.message}` : ""} (missed streak: ${streak})` };
+      return { outcome: "error", detail: `Call failed to start: ${result.error}${result.message ? ` — ${result.message}` : ""}` };
     }
     return { outcome: "ok", detail: `Outbound call started (session ${result.sessionId})` };
   },
@@ -527,6 +615,10 @@ const missedCallJob: CronJob = {
 
     if (todaysSessions.length > 0) {
       await clearSetting(KEY.missedCallToday);
+      // Persistent streak alert and first-missed-date both clear on success —
+      // they reset together so the next run starts fresh.
+      await clearSetting(KEY.missedCallStreakAlert);
+      await clearSetting(KEY.missedCallFirstMissedDate);
       await setSetting(KEY.missedCallStreak, "0");
       return { outcome: "ok", detail: "A call reached Pops today — streak reset." };
     }
@@ -534,7 +626,99 @@ const missedCallJob: CronJob = {
     const streak = parseInt((await getSetting(KEY.missedCallStreak)) ?? "0", 10) + 1;
     await setSetting(KEY.missedCallStreak, String(streak));
     await setSetting(KEY.missedCallToday, JSON.stringify({ missed: true, reason: "no_session_today", at: new Date().toISOString() }));
+
+    // Record the first missed date the moment the streak begins (streak 0→1).
+    // This is the only write to missedCallFirstMissedDate during a streak —
+    // subsequent missed days just increment the counter and leave the date alone,
+    // so the escalation banner always shows the true start of the gap.
+    if (streak === 1) {
+      await setSetting(KEY.missedCallFirstMissedDate, callDate);
+    }
+
+    // ── Streak escalation ─────────────────────────────────────────────────────
+    //
+    // A single missed day is surfaced as a per-day dashboard banner and a log
+    // entry only. Two or more consecutive missed days triggers escalation:
+    //   1. A persistent dashboard alert that stays visible until the streak
+    //      actually breaks (a successful Pops call), so Ray can't dismiss-and-
+    //      forget a multi-day gap by acknowledging yesterday's per-day banner.
+    //   2. A best-effort outbound ElevenLabs call to Ray's admin phone, placed
+    //      once per Pacific day, so he gets a spoken heads-up even if he hasn't
+    //      opened the app.
+    //
+    // The admin call MUST pass noSession: true — see triggerOutboundCall() for
+    // the full reasoning, but in short: admin calls must not write call_sessions
+    // rows, otherwise an answered admin call's reached=true would satisfy the
+    // detection query below and incorrectly reset the streak even though Pops
+    // was never reached.
+    //
+    // The admin call is best-effort: if ElevenLabs is down (possibly why the
+    // daily call failed in the first place), the admin call will also fail —
+    // the streak alert on the dashboard remains as the fallback signal.
+    if (streak >= 2) {
+      // firstMissed was stored when the streak began (streak 0→1); read it back
+      // so the banner shows the true start date, not the most recent missed day.
+      const firstMissed = await getSetting(KEY.missedCallFirstMissedDate) ?? callDate;
+      await setSetting(
+        KEY.missedCallStreakAlert,
+        JSON.stringify({ streak, since: firstMissed, at: new Date().toISOString() })
+      );
+
+      // Only call the admin phone once per day — the claim key resets each
+      // Pacific calendar day and the quiet window is still respected, so a
+      // late-night detection doesn't ring Ray at 2am.
+      const lastAdminNotified = await getSetting(KEY.missedCallAdminNotifiedDate);
+      if (lastAdminNotified !== now.date && !(await quietWindowBlocks(now))) {
+        await setSetting(KEY.missedCallAdminNotifiedDate, now.date);
+        // Fire-and-forget — never throws because triggerOutboundCall itself
+        // never throws. The streak-alert dashboard banner remains the durable
+        // signal regardless of whether this call succeeds.
+        void triggerOutboundCall({
+          test: true,     // routes to ADMIN_PHONE_NUMBER, never Pops' number
+          noSession: true, // MUST be true — see above; admin sessions must not
+                          // appear as Pops sessions in the missed-call detection query
+          extraContext: `CALL PURPOSE — AUTOMATED SYSTEM ALERT: Do NOT treat this as a normal care check-in. This is an automated system message. Pops' daily Jessica check-in call has not successfully reached him for ${streak} consecutive days. The most recent missed day was ${now.date}. Please open the Brain app, check the System Jobs panel on the Dashboard, and investigate why the daily call is failing. This message was placed automatically by the scheduling system.`,
+        }).catch(() => {});
+      }
+    }
+
     return { outcome: "warn", detail: `No call reached Pops today (missed streak: ${streak})` };
+  },
+};
+
+// ─── Job 8.5: ElevenLabs config validation ───────────────────────────────────
+//
+// Runs once daily (8:00 AM PT) and at any forced "Run Now" from the Admin UI.
+// Validates that ELEVENLABS_AGENT_ID and ELEVENLABS_PHONE_NUMBER_ID both
+// resolve against ElevenLabs' live API. Stores the result in app_settings so
+// the dashboard can surface a persistent, Ray-visible warning instead of
+// burying the problem in a startup log line.
+//
+// This catches "deleted / renamed agent" drift before it silently kills the
+// next call, rather than discovering it the day the daily call fails.
+
+const elevenlabsConfigJob: CronJob = {
+  name: "elevenlabs_config_check",
+  title: "ElevenLabs Config Validation",
+  schedule: "Daily at 8:00 AM PT",
+  intervalMs: null,
+  placesCall: false,
+  async run(now, opts) {
+    if (!isTimeOfDayDue(now, "08:00") && !opts?.force) return { outcome: "skipped" };
+    if (!(await claimForToday(KEY.elevenlabsConfigCheckClaim, now.date, opts?.force))) return { outcome: "skipped" };
+
+    const result = await validateElevenLabsConfig();
+
+    if (result.agentOk && result.phoneOk) {
+      await clearSetting(KEY.elevenlabsConfigAlert);
+      return { outcome: "ok", detail: "ElevenLabs agent and phone number verified against live API." };
+    }
+
+    await setSetting(
+      KEY.elevenlabsConfigAlert,
+      JSON.stringify({ agentOk: result.agentOk, phoneOk: result.phoneOk, issues: result.issues, at: new Date().toISOString() })
+    );
+    return { outcome: "warn", detail: `ElevenLabs config issue(s): ${result.issues.join("; ")}` };
   },
 };
 
@@ -585,6 +769,7 @@ export const CRON_JOBS: CronJob[] = [
   wellbeingJob,
   rotationResetJob,
   missedCallJob,
+  elevenlabsConfigJob,
   quarterAdvanceJob,
 ];
 
@@ -663,6 +848,10 @@ export interface CronStatus {
     missedCall: unknown | null;
     haldol: unknown | null;
     missedCallStreak: number;
+    /** Set when the streak is >= 2 — persists until a successful call breaks it. */
+    missedCallStreakAlert: unknown | null;
+    /** Set when ELEVENLABS_AGENT_ID or ELEVENLABS_PHONE_NUMBER_ID fails live validation. */
+    elevenlabsConfig: unknown | null;
   };
 }
 
@@ -673,12 +862,14 @@ export async function getCronStatus(): Promise<CronStatus> {
   );
   const byName = new Map(rows.map((r) => [r.job_name, r]));
 
-  const [medRefusal, wellbeing, missedCall, haldol, streak] = await Promise.all([
+  const [medRefusal, wellbeing, missedCall, haldol, streak, streakAlert, elevenlabsConfig] = await Promise.all([
     getJsonSetting<unknown | null>(KEY.medRefusalAlert, null),
     getJsonSetting<unknown | null>(KEY.wellbeingAlert, null),
     getJsonSetting<unknown | null>(KEY.missedCallToday, null),
     getJsonSetting<unknown | null>(KEY.haldolAlert, null),
     getSetting(KEY.missedCallStreak),
+    getJsonSetting<unknown | null>(KEY.missedCallStreakAlert, null),
+    getJsonSetting<unknown | null>(KEY.elevenlabsConfigAlert, null),
   ]);
 
   return {
@@ -699,6 +890,8 @@ export async function getCronStatus(): Promise<CronStatus> {
       missedCall,
       haldol,
       missedCallStreak: parseInt(streak ?? "0", 10),
+      missedCallStreakAlert: streakAlert,
+      elevenlabsConfig,
     },
   };
 }
@@ -707,9 +900,19 @@ export async function getCronStatus(): Promise<CronStatus> {
  * Ray acknowledging an alert. Med-refusal and wellbeing alerts record the
  * acknowledged row ids so the polling jobs don't immediately re-raise them.
  */
-export async function acknowledgeAlert(kind: "med_refusal" | "wellbeing" | "missed_call"): Promise<void> {
+export async function acknowledgeAlert(kind: "med_refusal" | "wellbeing" | "missed_call" | "elevenlabs_config"): Promise<void> {
   if (kind === "missed_call") {
     await clearSetting(KEY.missedCallToday);
+    return;
+  }
+  // NOTE: missed_call_streak is intentionally NOT user-dismissible — it clears
+  // automatically only when missedCallJob confirms a successful call reached Pops.
+  // This prevents Ray from dismissing a multi-day gap and forgetting about it
+  // while calls continue to fail.
+  if (kind === "elevenlabs_config") {
+    // Ray has acknowledged the config issue. Clear the alert so it doesn't
+    // keep firing — it will reappear tomorrow if the problem persists.
+    await clearSetting(KEY.elevenlabsConfigAlert);
     return;
   }
   if (kind === "med_refusal") {

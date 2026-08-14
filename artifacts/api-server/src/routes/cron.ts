@@ -16,7 +16,7 @@ router.get("/cron/status", async (req, res) => {
 router.post("/cron/alerts/:kind/ack", async (req, res) => {
   try {
     const { kind } = z
-      .object({ kind: z.enum(["med_refusal", "wellbeing", "missed_call"]) })
+      .object({ kind: z.enum(["med_refusal", "wellbeing", "missed_call", "elevenlabs_config"]) })
       .parse(req.params);
     await acknowledgeAlert(kind);
     res.json({ ok: true });

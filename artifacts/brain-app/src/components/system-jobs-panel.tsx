@@ -8,6 +8,7 @@ import {
   PhoneOff,
   RefreshCw,
   ShieldAlert,
+  Settings,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,8 @@ type CronStatus = {
     missedCall: any | null;
     haldol: any | null;
     missedCallStreak: number;
+    missedCallStreakAlert: any | null;
+    elevenlabsConfig: any | null;
   };
 };
 
@@ -62,7 +65,7 @@ export function SystemJobsPanel() {
     return () => clearInterval(timer);
   }, []);
 
-  const acknowledge = async (kind: "med_refusal" | "wellbeing" | "missed_call") => {
+  const acknowledge = async (kind: "med_refusal" | "wellbeing" | "missed_call" | "elevenlabs_config") => {
     setBusy(kind);
     try {
       const res = await fetch(`${WORKSPACE_BASE}/api/cron/alerts/${kind}/ack`, { method: "POST" });
@@ -140,7 +143,31 @@ export function SystemJobsPanel() {
         </Card>
       )}
 
-      {alerts?.missedCall && (
+      {/* Multi-day streak alert — more prominent than the per-day banner; persists
+          until a successful call actually breaks the streak (non-dismissible by design).
+          Clears automatically when missedCallJob confirms Pops was reached. */}
+      {alerts?.missedCallStreakAlert && (
+        <Card className="border-destructive/70 bg-destructive/10">
+          <CardContent className="p-4 flex items-start gap-3">
+            <PhoneOff size={18} className="text-destructive shrink-0 mt-0.5 animate-pulse" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-destructive uppercase tracking-widest">
+                Pops Missed {alerts.missedCallStreakAlert.streak} Days in a Row
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                No Jessica call has successfully reached Pops since{" "}
+                <span className="font-semibold">{alerts.missedCallStreakAlert.since}</span>.{" "}
+                Check Jessica settings and ElevenLabs config. Ray has been notified by phone.
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">
+                Clears automatically when a call succeeds · last checked {formatPacificDateTime(alerts.missedCallStreakAlert.at)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {alerts?.missedCall && !alerts?.missedCallStreakAlert && (
         <Card className="border-amber-500/60 bg-amber-500/5">
           <CardContent className="p-4 flex items-start gap-3">
             <PhoneOff size={18} className="text-amber-500 shrink-0 mt-0.5" />
@@ -150,11 +177,33 @@ export function SystemJobsPanel() {
                 {alerts.missedCall.reason === "no_session_today"
                   ? "The daily call window passed with no completed call session."
                   : `The scheduled call failed to start (${alerts.missedCall.reason}).`}
-                {alerts.missedCallStreak > 1 ? ` Missed ${alerts.missedCallStreak} days running.` : ""}
               </p>
             </div>
             <Button size="sm" variant="outline" disabled={busy === "missed_call"} onClick={() => acknowledge("missed_call")}>
               Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ElevenLabs config alert — surfaced when ELEVENLABS_AGENT_ID or
+          ELEVENLABS_PHONE_NUMBER_ID fail live API validation. Clears automatically
+          the next day if the issue is fixed, or Ray can dismiss it manually. */}
+      {alerts?.elevenlabsConfig && !(alerts.elevenlabsConfig.agentOk && alerts.elevenlabsConfig.phoneOk) && (
+        <Card className="border-amber-500/60 bg-amber-500/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <Settings size={18} className="text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">ElevenLabs Config Issue</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {(alerts.elevenlabsConfig.issues as string[]).join(" · ")}
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">
+                Verified {formatPacificDateTime(alerts.elevenlabsConfig.at)} · Daily calls will fail until this is fixed
+              </p>
+            </div>
+            <Button size="sm" variant="outline" disabled={busy === "elevenlabs_config"} onClick={() => acknowledge("elevenlabs_config")}>
+              Seen
             </Button>
           </CardContent>
         </Card>

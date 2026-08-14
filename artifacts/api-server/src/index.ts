@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runTenantMigration } from "./lib/tenant-migration";
-import { startCronScheduler } from "./lib/call-scheduler";
+import { startCronScheduler, runJobByName } from "./lib/call-scheduler";
 import { syncJessicaToolsToElevenLabs } from "./lib/elevenlabs-tools-sync";
 
 const rawPort = process.env["PORT"] ?? process.env["API_PORT"] ?? "8080";
@@ -44,6 +44,20 @@ async function start() {
     .catch((err) => {
       logger.warn({ err }, "[JessicaTools] Unexpected error syncing voice tools at startup");
     });
+
+  // Best-effort: validate ElevenLabs agent + phone number config at startup so
+  // any drift (deleted/renamed agent, removed phone number) surfaces as a
+  // dashboard banner right away rather than being discovered when the next
+  // scheduled call fails. The daily cron job repeats this check each morning;
+  // the forced=true here bypasses the once-per-day claim so it always runs.
+  runJobByName("elevenlabs_config_check")
+    .then((result) => {
+      if (result?.outcome === "warn") {
+        logger.warn({ detail: result.detail }, "[ElevenLabs] Config validation issue at startup — check dashboard alerts");
+      }
+    })
+    .catch(() => {});
+  // not awaited — startup proceeds regardless
 }
 
 start();

@@ -17,3 +17,4 @@
 - [ElevenLabs caller identity verification](elevenlabs-caller-identity-verification.md) — a shared tool secret proves "ElevenLabs sent this," not who's on the call; use system__called_number/system__caller_id to check that too.
 - [orval react-query hook gotchas](orval-react-query-hooks.md) — `enabled` needs a paired `queryKey`; generated mutations never auto-invalidate, so lists silently go stale without a manual invalidate/refetch.
 - [ElevenLabs live-state verification](elevenlabs-live-state-verification.md) — a signed webhook 200 doesn't prove our outbound-call code placed it; agent/phone IDs anywhere (env, docs) go stale silently — verify live.
+- [ElevenLabs config validation](elevenlabs-config-validation.md) — daily job validates agent+phone IDs against live API; missed-call streak ≥ 2 triggers persistent alert + admin phone call.
