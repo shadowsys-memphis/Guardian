@@ -200,6 +200,12 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
           prompt: {
             prompt: systemPrompt,
           },
+          // Force the LLM to generate its own opening line from the system
+          // prompt above instead of whatever static first_message happens to
+          // be stored on the ElevenLabs agent object (that value isn't
+          // controlled by our code and has drifted to a generic default
+          // before — see ELEVENLABS_HANDOFF.md).
+          first_message: "",
         },
       },
     };
