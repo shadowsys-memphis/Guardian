@@ -83,6 +83,14 @@ router.get("/documents/care-context", async (req, res) => {
   }
 });
 
+// Ray's requirement is that anything scanned stays recallable forever — a
+// hard cap here silently makes older documents invisible in the UI even
+// though the row still exists in the DB. 500 is a generous ceiling (this is
+// a single household's paperwork, not a multi-tenant table) that still
+// protects against an unbounded query; pair with the frontend search box
+// rather than real pagination since document counts here are small.
+const MAX_DOCUMENTS_RETURNED = 500;
+
 router.get("/documents", async (req, res) => {
   try {
     await ensureMedicalDocsTable();
@@ -90,7 +98,7 @@ router.get("/documents", async (req, res) => {
       .select()
       .from(medicalDocumentsTable)
       .orderBy(desc(medicalDocumentsTable.createdAt))
-      .limit(20);
+      .limit(MAX_DOCUMENTS_RETURNED);
     res.json(rows);
   } catch (err) {
     req.log.error({ err }, "Failed to list medical documents");

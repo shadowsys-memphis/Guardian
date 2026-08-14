@@ -64,6 +64,7 @@ import {
   ToggleRight,
   CreditCard,
   Pencil,
+  Search,
 } from "lucide-react";
 
 import {
@@ -4415,6 +4416,39 @@ function AppointmentsTab() {
   );
 }
 
+// iPhones default to saving/exporting photos as HEIC/HEIF, which Gemini's
+// vision API does not reliably parse — a HEIC upload can come back with a
+// mostly-empty extraction that still looks like a normal "successful" scan.
+// Detect it by MIME type first; Safari sometimes reports an empty file.type
+// for HEIC, so the file extension is checked as a fallback.
+function isHeic(file: File): boolean {
+  const type = file.type.toLowerCase();
+  if (type === "image/heic" || type === "image/heif") return true;
+  return /\.heic$|\.heif$/i.test(file.name);
+}
+
+// True when Gemini's extraction came back essentially empty — no
+// appointments, meds, restrictions, notes, or wound care, and the title
+// fell back to the generic default. This still saves fine as a DB row (so
+// it's not a network/scan "failure"), but presenting it as an ordinary
+// success would hide a real problem (bad photo, unsupported format,
+// unreadable handwriting) from Ray.
+function isEmptyExtraction(extracted: any): boolean {
+  if (!extracted) return true;
+  const hasList = (arr: unknown) => Array.isArray(arr) && arr.length > 0;
+  const hasText = (s: unknown) => typeof s === "string" && s.trim().length > 0;
+  return (
+    !hasList(extracted.appointments) &&
+    !hasList(extracted.medications) &&
+    !hasList(extracted.dietary_restrictions) &&
+    !hasList(extracted.activity_restrictions) &&
+    !hasList(extracted.wound_care) &&
+    !hasText(extracted.clinical_notes) &&
+    !hasText(extracted.discharge_instructions) &&
+    !hasText(extracted.patient_name)
+  );
+}
+
 function DocumentsTab() {
   const { toast } = useToast();
   const [docs, setDocs] = useState<any[]>([]);
@@ -4429,6 +4463,7 @@ function DocumentsTab() {
   const [editingCardId, setEditingCardId] = useState<number | null>(null);
   const [cardDraft, setCardDraft] = useState("");
   const [cardFilter, setCardFilter] = useState<string | null>(null);
+  const [docSearch, setDocSearch] = useState("");
   const [include, setInclude] = useState<{
     appointments: boolean[];
     medications: boolean[];
@@ -4442,7 +4477,10 @@ function DocumentsTab() {
     setDocsLoading(true);
     try {
       const res = await fetch(`${WORKSPACE_BASE}/api/documents`);
-      if (res.ok) setDocs(await res.json());
+      if (!res.ok) throw new Error("Failed to load documents");
+      setDocs(await res.json());
+    } catch {
+      toast({ title: "Couldn't load scanned documents", description: "Check your connection and try refreshing.", variant: "destructive" });
     } finally {
       setDocsLoading(false);
     }
@@ -4450,19 +4488,56 @@ function DocumentsTab() {
 
   useEffect(() => { loadDocs(); }, []);
 
+  // Revoke the previous preview's object URL whenever it's replaced or the
+  // component unmounts — otherwise each scan leaks the last photo's memory.
+  useEffect(() => {
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+  }, [previewUrl]);
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
+    const rawFile = e.target.files?.[0];
+    if (!rawFile) return;
     setExtracted(null);
     setApplied(null);
     setDocId(null);
     setIsReapply(false);
+
+    let file = rawFile;
+    if (isHeic(rawFile)) {
+      setScanning(true);
+      try {
+        const heic2any = (await import("heic2any")).default;
+        const converted = await heic2any({ blob: rawFile, toType: "image/jpeg", quality: 0.9 });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        file = new File([blob], rawFile.name.replace(/\.hei[cf]$/i, ".jpg"), { type: "image/jpeg" });
+      } catch {
+        setScanning(false);
+        toast({
+          title: "Couldn't open that photo",
+          description: "This looks like an iPhone HEIC photo we couldn't convert. In your camera roll, share it as \"Actual Size\" JPEG, or take the photo directly from the Scan Document button instead of picking an existing one.",
+          variant: "destructive",
+        });
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+    }
+
+    setPreviewUrl(URL.createObjectURL(file));
+
     const reader = new FileReader();
+    reader.onerror = () => {
+      setScanning(false);
+      setPreviewUrl(null);
+      toast({ title: "Couldn't read that file", description: "The photo may be corrupted — try taking it again.", variant: "destructive" });
+    };
     reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
-      const base64 = dataUrl.split(",")[1];
+      const base64 = dataUrl?.split(",")[1];
+      if (!base64) {
+        setScanning(false);
+        toast({ title: "Couldn't read that file", description: "Try taking the photo again.", variant: "destructive" });
+        return;
+      }
       const mimeType = file.type || "image/jpeg";
       setScanning(true);
       try {
@@ -4471,7 +4546,10 @@ function DocumentsTab() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64: base64, mimeType }),
         });
-        if (!res.ok) throw new Error("Scan failed");
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? "Scan failed");
+        }
         const data = await res.json();
         setExtracted(data.extracted);
         setDocId(data.docId);
@@ -4482,9 +4560,17 @@ function DocumentsTab() {
           activity_restrictions: (data.extracted.activity_restrictions ?? []).map(() => true),
           clinical_notes: true,
         });
-        toast({ title: "Document scanned", description: data.extracted.source_label });
-      } catch {
-        toast({ title: "Scan failed", description: "Could not read the document. Try a clearer photo.", variant: "destructive" });
+        if (isEmptyExtraction(data.extracted)) {
+          toast({
+            title: "Saved, but couldn't read much from it",
+            description: "The photo was saved and can be re-applied later, but little or no care info came through. Try retaking it with better lighting, less glare, and the page flat and fully in frame.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Document scanned", description: data.extracted.source_label });
+        }
+      } catch (err) {
+        toast({ title: "Scan failed", description: "Could not read the document. Try a clearer, well-lit photo with the page flat.", variant: "destructive" });
         setPreviewUrl(null);
       } finally {
         setScanning(false);
@@ -4559,6 +4645,7 @@ function DocumentsTab() {
   };
 
   const reset = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setExtracted(null);
     setDocId(null);
     setPreviewUrl(null);
@@ -4594,11 +4681,28 @@ function DocumentsTab() {
   };
 
   const distinctCards = Array.from(new Set(docs.map((d: any) => d.cardLast4).filter(Boolean))) as string[];
-  const filteredDocs = cardFilter === null
+  const cardFilteredDocs = cardFilter === null
     ? docs
     : cardFilter === "__none__"
       ? docs.filter((d: any) => !d.cardLast4)
       : docs.filter((d: any) => d.cardLast4 === cardFilter);
+  // Client-side text search over everything already loaded — with the
+  // backend cap raised to 500 documents, this is how Ray finds an older
+  // scan again instead of scrolling a long list by hand.
+  const searchNeedle = docSearch.trim().toLowerCase();
+  const filteredDocs = searchNeedle === ""
+    ? cardFilteredDocs
+    : cardFilteredDocs.filter((d: any) => {
+        if ((d.sourceLabel ?? "").toLowerCase().includes(searchNeedle)) return true;
+        const dateStr = new Date(d.createdAt).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", year: "numeric" }).toLowerCase();
+        if (dateStr.includes(searchNeedle)) return true;
+        try {
+          const structured = JSON.parse(d.structuredJson);
+          return JSON.stringify(structured).toLowerCase().includes(searchNeedle);
+        } catch {
+          return false;
+        }
+      });
 
   return (
     <div className="space-y-6">
@@ -4776,6 +4880,17 @@ function DocumentsTab() {
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-lg font-display text-muted-foreground uppercase tracking-widest">Recent Scans</h3>
+            {docs.length > 0 && (
+              <div className="relative w-full sm:w-64">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
+                <Input
+                  value={docSearch}
+                  onChange={(e) => setDocSearch(e.target.value)}
+                  placeholder="Search all scanned documents…"
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+            )}
             {distinctCards.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mr-1">Card:</span>
