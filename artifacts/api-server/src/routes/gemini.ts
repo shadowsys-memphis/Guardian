@@ -136,13 +136,14 @@ async function* streamLmStudio(
 
 export async function loadLiveContext(): Promise<string> {
   try {
-    const [meals, schedule, symptoms, carts] = await Promise.all([
+    const [meals, schedule, symptoms, carts, showerStreakRow] = await Promise.all([
       db.select({ id: mealsTable.id, name: mealsTable.name, estimatedCostCents: mealsTable.estimatedCostCents })
         .from(mealsTable).where(eq(mealsTable.active, true)).limit(20),
-      db.select({ id: scheduleTasksTable.id, title: scheduleTasksTable.title, quarter: scheduleTasksTable.quarter, isCompleted: scheduleTasksTable.isCompleted })
+      db.select({ id: scheduleTasksTable.id, title: scheduleTasksTable.title, quarter: scheduleTasksTable.quarter, isCompleted: scheduleTasksTable.isCompleted, status: scheduleTasksTable.status })
         .from(scheduleTasksTable).where(eq(scheduleTasksTable.isActive, true)).limit(30),
       db.select().from(symptomLogsTable).orderBy(desc(symptomLogsTable.loggedAt)).limit(3),
       db.select().from(groceryCartsTable).orderBy(desc(groceryCartsTable.id)).limit(1),
+      db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "shower_skip_streak")).limit(1),
     ]);
 
     const mealList = meals.length > 0
@@ -153,7 +154,10 @@ export async function loadLiveContext(): Promise<string> {
     for (const t of schedule) {
       const q = t.quarter ?? "Q1";
       if (!scheduleByQ[q]) scheduleByQ[q] = [];
-      scheduleByQ[q].push(`${t.isCompleted ? "✓" : "○"} ${t.title}`);
+      // Refused and no-answer are shown distinctly — Jessica shouldn't re-ask
+      // a task Pops already declined this day as if nothing happened.
+      const mark = t.status === "refused" ? "✗(declined)" : t.status === "no_answer" ? "?(no answer)" : t.isCompleted ? "✓" : "○";
+      scheduleByQ[q].push(`${mark} ${t.title}`);
     }
     const scheduleStr = Object.entries(scheduleByQ).sort()
       .map(([q, items]) => `  ${q}: ${items.join(", ")}`).join("\n") || "  (no active schedule tasks)";
@@ -174,6 +178,14 @@ export async function loadLiveContext(): Promise<string> {
       ? `Week of ${carts[0].weekStartDate} | status: ${carts[0].status} | est. $${((carts[0].totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $${((carts[0].budgetCents ?? 15000) / 100).toFixed(2)} budget`
       : "No cart created for this week yet — say 'order groceries' to build one";
 
+    // Shower cadence: surfaces ONLY at 3+ consecutive skipped days, and only
+    // as a single gentle check-in cue — occasional skips are normal and are
+    // deliberately not mentioned to Jessica at all.
+    const showerStreak = parseInt(showerStreakRow[0]?.value ?? "0", 10);
+    const showerNote = showerStreak >= 3
+      ? `\n\nHYGIENE NOTE: It's been ${showerStreak} days since the last shower. Once this call, gently and without any shame, check in about it ("thinking a shower might feel good today?"). Do not lecture, do not repeat it, and drop it completely if he declines.`
+      : "";
+
     return `LIVE SYSTEM CONTEXT (refreshed each message):
 Meal Catalog — active meals available to add to cart:
 ${mealList}
@@ -184,7 +196,7 @@ Today's Schedule:
 ${scheduleStr}
 
 Recent Symptom Logs (latest 3):
-${symptomStr}`;
+${symptomStr}${showerNote}`;
   } catch {
     return "LIVE SYSTEM CONTEXT: (unavailable — DB query failed)";
   }
@@ -220,6 +232,8 @@ export function buildJessicaSystemPrompt(questions: { id: number; text: string; 
 - add_task(title, time, details?) — Pops or Ray asks to add something to the daily schedule (a task, reminder, or event). Always get a specific time in 24-hour HH:MM Pacific before calling it — if Pops/Ray only says something vague like "in the morning", ask what time it should be first.
 - remove_task(title) — Pops or Ray asks to take something off the schedule.
 - reschedule_task(title, time) — Pops or Ray asks to move an existing task to a new time (HH:MM Pacific).
+- complete_task(title, source?) — Pops (or a family member on the call) explicitly confirms a schedule task actually happened. Only on a live confirmation in THIS call — never because you asked, reminded, or assume it probably happened. source is "family" when a family member confirmed instead of Pops himself.
+- refuse_task(title) — Pops clearly declines a task ("no, I'm not doing that"). This is different from not answering or changing the subject. After recording it, acknowledge kindly and move on — no pressure.
 - update_daily_call_schedule(enabled?, time?) — Ray asks to turn the automated daily call on/off, or change what time it happens (must be between 6:00 AM and 8:00 PM).
 
 After any of these tool calls, speak the tool's returned confirmation message back naturally in your own words — that's how Pops/Ray know it actually worked. If a call fails (ambiguous task name, an invalid time, or a system hiccup), read back the tool's message as a spoken clarifying question instead of staying silent, guessing, or claiming it worked when it didn't.
@@ -229,6 +243,25 @@ After any of these tool calls, speak the tool's returned confirmation message ba
 {"type":"ADD_TASK","title":"task title","quarter":"Q1","details":"brief context"}
 ---END_ACTION---
 
+COMPLETE_TASK — Pops (or a family member) explicitly confirms a schedule task actually happened. Only on a live confirmation — never because you asked or assume it happened. source is "spoken" (default) or "family":
+---ACTION---
+{"type":"COMPLETE_TASK","title":"task title as it appears on the schedule","source":"spoken"}
+---END_ACTION---
+
+REFUSE_TASK — Pops clearly declines a task (different from not answering). Record it, then acknowledge kindly and move on — no pressure:
+---ACTION---
+{"type":"REFUSE_TASK","title":"task title as it appears on the schedule"}
+---END_ACTION---
+
+`;
+
+  const morningRoutineRules = `DAILY ROUTINE RULES:
+- Morning order (guide him through it gently, one thing at a time): wake → water → let Koda out → make the bed → tidy the room → shower/hygiene → breakfast. Never rattle off the whole list at once.
+- Out of bed: if you're checking whether he's up, one warm nudge only. Never nag, never repeat, never guilt.
+- Koda (the dog): the task is DONE once Koda is out, fed, and watered. A walk is a separate bonus — celebrate it if it happens, never mention it as missing. Bad weather or Pops feeling unwell NEVER makes the dog task a failure.
+- Shower: expected most days, but an occasional skip is fine and never worth a comment. Only bring it up if the system context includes a HYGIENE NOTE. Teeth, deodorant, and clean clothes are their own small daily item regardless of the shower.
+- Breakfast: ask what he ate and how much — all, some, or none. "All" or "some" counts as done (record it, and emit an appetite health_data tag). "None" is a decline — record it as a refusal, don't push, and let Ray's dashboard handle it.
+- Water check-ins (4x/day): only count the water as done when he confirms drinking it DURING this call — "I'll have some later" is not a completion. Encourage warmly, never lecture.
 `;
 
   return `You are Jessica, the AI companion and care coordinator for a veteran named Pops who lives with his caregiver Ray (Raymo). You have a warm, grounding, and calm voice. You speak clearly and gently — never rushed, never clinical.
@@ -252,6 +285,7 @@ ${liveContext ? liveContext + "\n" : ""}YOUR JOB:
 - Parse smart home commands and confirm them (e.g. "turn on the living room light")
 - Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.
 ${scriptSection}
+${morningRoutineRules}
 HEALTH CHECK-IN (weave these naturally — pick 3-5 per call based on flow):
 ${questionList}
 

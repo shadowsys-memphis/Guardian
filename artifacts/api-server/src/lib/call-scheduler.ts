@@ -299,6 +299,76 @@ async function ensureRoutineFoundationSchema(): Promise<void> {
   }
 }
 
+/**
+ * One-time seed of the morning sequence + hydration checkpoints (routine
+ * spec: wake → water → dog out → make bed → tidy room → hygiene → breakfast,
+ * plus four water check-ins across the day).
+ *
+ * Additive and marker-guarded: only inserts tasks that don't already exist
+ * (fuzzy title match), never edits or moves anything Ray already has, and
+ * never runs twice — so deleting one of these later is a decision that
+ * sticks, not a fight with the seeder. Times slot into the gaps of the
+ * existing 0600-wake schedule; Q1 order is then renumbered by time so the
+ * sequence reads correctly on the dashboard.
+ */
+async function ensureMorningSequenceSeed(): Promise<void> {
+  try {
+    const marker = await pool.query(
+      `SELECT 1 FROM app_settings WHERE key = 'morning_sequence_seed_done' LIMIT 1`
+    );
+    if ((marker.rowCount ?? 0) > 0) return;
+
+    const SEED: Array<{ match: string; quarter: string; timeLabel: string; title: string; description: string; tier: string }> = [
+      { match: "\\m(water|hydrat)\\M.*\\m(morning)\\M|\\mmorning water\\M", quarter: "Q1", timeLabel: "0615", title: "Morning Water", description: "First water of the day — counts only when he confirms drinking it on the call.", tier: "meals_hydration" },
+      { match: "\\m(koda|dog)\\M(?!.*walk)", quarter: "Q1", timeLabel: "0620", title: "Koda Out & Fed", description: "Done = Koda out, fed, and watered. Bad weather or a health issue never fails this.", tier: "hygiene_koda" },
+      { match: "\\mmake\\M.*\\mbed\\M", quarter: "Q1", timeLabel: "0640", title: "Make the Bed", description: "Quick tidy of the bed.", tier: "routine" },
+      { match: "\\mtidy\\M", quarter: "Q1", timeLabel: "0645", title: "Tidy the Room", description: "A few minutes of straightening up.", tier: "routine" },
+      { match: "\\m(teeth|deodorant)\\M", quarter: "Q1", timeLabel: "0815", title: "Teeth, Deodorant & Clean Clothes", description: "Daily basics — tracked separately from the shower.", tier: "hygiene_koda" },
+      { match: "\\m(koda|dog)\\M.*\\mwalk\\M|\\mwalk\\M.*\\m(koda|dog)\\M", quarter: "Q1", timeLabel: "0830", title: "Koda Walk (bonus)", description: "Bonus, not required — skipping never counts against the day.", tier: "routine" },
+      { match: "\\mwater check\\M.*\\m(midday|1130)\\M|\\mmidday water\\M", quarter: "Q2", timeLabel: "1130", title: "Water Check (midday)", description: "Counts only when he confirms drinking it on the call.", tier: "meals_hydration" },
+      { match: "\\mwater check\\M.*\\m(afternoon|1500)\\M|\\mafternoon water\\M", quarter: "Q2", timeLabel: "1500", title: "Water Check (afternoon)", description: "Counts only when he confirms drinking it on the call.", tier: "meals_hydration" },
+      { match: "\\mwater check\\M.*\\m(evening|1830)\\M|\\mevening water\\M", quarter: "Q3", timeLabel: "1830", title: "Water Check (evening)", description: "Counts only when he confirms drinking it on the call.", tier: "meals_hydration" },
+    ];
+
+    for (const s of SEED) {
+      const existing = await pool.query(
+        `SELECT 1 FROM schedule_tasks WHERE tenant_id = 'local' AND title ~* $1 LIMIT 1`,
+        [s.match]
+      );
+      if ((existing.rowCount ?? 0) > 0) continue;
+      await pool.query(
+        `INSERT INTO schedule_tasks (tenant_id, quarter, time_label, title, description, tier, "order", is_active, is_completed, status)
+         VALUES ('local', $1, $2, $3, $4, $5, 999, true, false, 'pending')`,
+        [s.quarter, s.timeLabel, s.title, s.description, s.tier]
+      );
+    }
+
+    // Renumber the whole local schedule by (quarter, time) so the morning
+    // reads in the spec's order. Non-HHMM labels sort after timed tasks.
+    await pool.query(`
+      WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (
+          ORDER BY quarter,
+                   (time_label !~ '^[0-2][0-9][0-5][0-9]$'),
+                   time_label,
+                   "order"
+        ) AS rn
+        FROM schedule_tasks WHERE tenant_id = 'local'
+      )
+      UPDATE schedule_tasks t SET "order" = ranked.rn FROM ranked WHERE t.id = ranked.id
+    `);
+
+    await pool.query(
+      `INSERT INTO app_settings (key, value) VALUES ('morning_sequence_seed_done', $1)
+       ON CONFLICT (key) DO NOTHING`,
+      [new Date().toISOString()]
+    );
+    logger.info("Morning sequence seed applied");
+  } catch (err) {
+    logger.error({ err }, "Failed to seed morning sequence — schedule unchanged");
+  }
+}
+
 /** Shared quiet-window guard for every job that can place a call. */
 async function quietWindowBlocks(now: PacificNow): Promise<boolean> {
   const settings = await getSettings();
@@ -1027,6 +1097,31 @@ const scheduleResetJob: CronJob = {
     if (!isTimeOfDayDue(now, "00:00") && !opts?.force) return { outcome: "skipped" };
     if (!(await claimForToday(KEY.scheduleResetClaim, now.date, opts?.force))) return { outcome: "skipped" };
 
+    // Shower cadence bookkeeping — MUST run before the reset below wipes
+    // yesterday's statuses. Skipping a shower now and then is fine and never
+    // penalized; the streak only exists so Jessica can do one gentle check-in
+    // after 3+ consecutive skipped days (surfaced via her live context).
+    // Teeth/deodorant/clothes are a separate daily item and don't affect this.
+    try {
+      const showerDone = await db
+        .select({ id: scheduleTasksTable.id })
+        .from(scheduleTasksTable)
+        .where(and(
+          eq(scheduleTasksTable.tenantId, "local"),
+          sql`${scheduleTasksTable.title} ~* '\\m(shower|hygiene)\\M'`,
+          eq(scheduleTasksTable.status, "done")
+        ))
+        .limit(1);
+      if (showerDone.length > 0) {
+        await setSetting(KEY.showerSkipStreak, "0");
+      } else {
+        const streak = parseInt((await getSetting(KEY.showerSkipStreak)) ?? "0", 10) + 1;
+        await setSetting(KEY.showerSkipStreak, String(streak));
+      }
+    } catch (err) {
+      logger.warn({ err }, "Shower streak bookkeeping failed — continuing with reset");
+    }
+
     const startOfToday = new Date(pacificWallTimeToEpochMs(now.date, "00:00"));
     const reset = await db
       .update(scheduleTasksTable)
@@ -1150,6 +1245,8 @@ export const CRON_JOBS: CronJob[] = [
   dayTypeResolveJob,
   scheduleResetJob,
   taskLadderSweepJob,
+  wakeRetryJob,
+  outOfBedJob,
 ];
 
 const lastPolledAt = new Map<string, number>();
@@ -1203,6 +1300,7 @@ export function startCronScheduler(): void {
   void (async () => {
     await ensureCronLogTable();
     await ensureRoutineFoundationSchema();
+    await ensureMorningSequenceSeed();
     await tick().catch((err) => logger.error({ err }, "Cron scheduler initial tick threw"));
     setInterval(() => {
       tick().catch((err) => logger.error({ err }, "Cron scheduler tick threw"));
