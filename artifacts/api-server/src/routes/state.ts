@@ -6,11 +6,15 @@ import { eq, and, asc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+// Ray's quarter boundaries (2026-08-14): Q1 morning 6-10, Q2 midday 10-2,
+// Q3 fun block 2-6, Q4 wind-down 6pm onward. Keep in sync with
+// quarterForHour (lib/jessica-tools.ts) and computeQuarterForHour
+// (lib/call-scheduler.ts).
 function computeCurrentQuarter(): "Q1" | "Q2" | "Q3" | "Q4" {
   const hour = new Date().getHours();
-  if (hour >= 6 && hour < 12) return "Q1";
-  if (hour >= 12 && hour < 18) return "Q2";
-  if (hour >= 18 && hour < 22) return "Q3";
+  if (hour >= 6 && hour < 10) return "Q1";
+  if (hour >= 10 && hour < 14) return "Q2";
+  if (hour >= 14 && hour < 18) return "Q3";
   return "Q4";
 }
 

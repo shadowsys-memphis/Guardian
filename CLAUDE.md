@@ -93,6 +93,9 @@ Routes under `AppContent` (inside `VaultProvider`) require vault unlock. `/guard
 
 ### Key Invariants
 
+- **Quarter boundaries are Ray's, not clock-even** (since 2026-08-14): Q1 6–10, Q2 10–14, Q3 14–18, Q4 18–6. Defined identically in `lib/jessica-tools.ts` (`quarterForHour`), `routes/state.ts` (`computeCurrentQuarter`), and `lib/call-scheduler.ts` (`computeQuarterForHour`) — change all three together.
+- **Task tiers & escalation ladder** live in `artifacts/api-server/src/lib/task-tiers.ts`; day-type resolution in `lib/day-type.ts`. `schedule_tasks` carries `tier`/`status`/`completion_source` — `isCompleted` is a legacy mirror of `status === "done"`, always write both.
+- **The automated daily call stays OFF** until Ray's admin-number dry-run passes and he explicitly enables it — never flip `dailyCallEnabled` on your own (see STATUS.md).
 - **`import { z } from "zod/v4"`** everywhere — not `"zod"`. `drizzle-zod` requires the `/v4` subpath.
 - **Haldol cycle day**: `(diffDays % intervalDays) + 1` — no `Math.min/max` clamping. The interval is prescriber-set in `haldol_cycle.interval_days` (monthly, 28, per Dr Uddin 2026-07-28); all cycle math goes through `lib/haldol-cycle.ts` (`computeHaldolCycle`) — never recompute locally or hardcode an interval.
 - **`/scripts/active` must be registered before `/:id`** in the Express router or "active" gets matched as an ID.

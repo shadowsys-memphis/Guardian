@@ -1,0 +1,57 @@
+# STATUS — what's done, what's next
+
+*The one file that answers "where was I?" Updated 2026-08-14 evening.*
+
+---
+
+## What works right now
+
+- **Pops' real daily schedule is in the system** — all four quarters as Ray defined them
+  (Q1 morning 6–10, Q2 midday 10–2, Q3 fun block 2–6, Q4 wind-down 6pm–bed).
+  Wake-up call at **7:00 AM**. Meds at **noon and 6 PM only**. 22 tasks total.
+- **Every task has a priority level** (safety > medication > meals/hydration > sleep >
+  hygiene/Koda > routine). Missing a pill and skipping a chore are no longer treated the same.
+  Refused / no-answer / missed are tracked as different things.
+- **Day types exist**: Normal, Sunday, Rest, Appointment, Sick — resolved once each morning.
+  Jessica can only *suggest* a Rest day; Ray confirms it.
+- **Jessica can see the schedule on phone calls** (fixed 8/14 — an ElevenLabs setting was
+  silently blocking it) and can now **mark tasks done or declined by voice**, but only when
+  Pops actually confirms on the call.
+- **Morning safety net**: wake-up call retries twice if unanswered, then flags "no answer"
+  (softly — not an emergency). One short out-of-bed follow-up call, never nagging.
+
+## The safety rule (permanent)
+
+**The automated daily call is OFF.** It stays off until Ray has run the full day against his
+own phone (909-732-4902) with zero issues and explicitly says "turn it on." Test calls go to
+Ray's phone only. Pops' number is saved and correct.
+
+## What's next (in order)
+
+1. **Transcript saving** — ElevenLabs has no post-call webhook configured, so call
+   transcripts don't save into the app yet. ~2 min in the ElevenLabs dashboard
+   (Settings → Webhooks → point at `/api/jessica/elevenlabs-webhook`), then make sure the
+   generated secret matches `ELEVENLABS_WEBHOOK_SECRET` in Replit Secrets.
+2. **Test day on Ray's phone** — run the day's calls against the admin number, listen, fix.
+3. **Publish** — next Replit publish ships the new voice tools to production. The scary
+   "delete care_events" migration warning was a dev/prod table mismatch, fixed 8/14 —
+   the publish screen should no longer threaten it. If any publish screen EVER offers to
+   delete a table: cancel, don't promote, ask Claude.
+4. **Remaining routine tasks** (Replit task pane 142–146): medication protocol, chores &
+   afternoon, evening sequence, day-type behaviors, dashboard scoring.
+
+## Parked (known, deliberately not started)
+
+- **Haldol cycle inaccuracy** — Ray reports it's still wrong after one fix; investigate only
+  when Ray says go.
+- **"Rest mode always active" question** — likely related to the Haldol cycle bug.
+- **Hermes rename** — the in-app `hermes.ts` is an internal dispatcher an AI named on July 3;
+  it is NOT Ray's real Hermes system and touches nothing outside this app. Rename to
+  `care-dispatch.ts` pending Ray's go-ahead.
+
+## Where things live
+
+- This file — current status. Start here.
+- `.local/tasks/routine-*.md` — the routine spec files (Replit task pane 140–146).
+- `CLAUDE.md` + `.claude/CLAUDE.md` — technical reference for AI assistants.
+- The schedule itself — in the database, editable from the Admin dashboard.

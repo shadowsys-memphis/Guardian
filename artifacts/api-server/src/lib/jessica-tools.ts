@@ -18,10 +18,14 @@ export type Quarter = "Q1" | "Q2" | "Q3" | "Q4";
  * exported, and call-scheduler.ts's quarter job is keyed off "now"; this one
  * buckets an arbitrary requested time) — see .agents/memory for context.
  */
+// Ray's quarter boundaries (2026-08-14): Q1 morning 6-10, Q2 midday 10-2,
+// Q3 fun block 2-6, Q4 wind-down 6pm onward (incl. overnight). Keep in sync
+// with computeCurrentQuarter (routes/state.ts) and computeQuarterForHour
+// (lib/call-scheduler.ts).
 export function quarterForHour(hour: number): Quarter {
-  if (hour >= 6 && hour < 12) return "Q1";
-  if (hour >= 12 && hour < 18) return "Q2";
-  if (hour >= 18 && hour < 22) return "Q3";
+  if (hour >= 6 && hour < 10) return "Q1";
+  if (hour >= 10 && hour < 14) return "Q2";
+  if (hour >= 14 && hour < 18) return "Q3";
   return "Q4";
 }
 

@@ -893,9 +893,10 @@ const elevenlabsConfigJob: CronJob = {
  * definition of quarter boundaries — evaluated against Pacific time here.
  */
 function computeQuarterForHour(hour: number): "Q1" | "Q2" | "Q3" | "Q4" {
-  if (hour >= 6 && hour < 12) return "Q1";
-  if (hour >= 12 && hour < 18) return "Q2";
-  if (hour >= 18 && hour < 22) return "Q3";
+  // Ray's quarter boundaries (2026-08-14): Q1 6-10, Q2 10-14, Q3 14-18, Q4 18+.
+  if (hour >= 6 && hour < 10) return "Q1";
+  if (hour >= 10 && hour < 14) return "Q2";
+  if (hour >= 14 && hour < 18) return "Q3";
   return "Q4";
 }
 
@@ -953,6 +954,27 @@ async function reachedSessionExists(date: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/**
+ * True if any outbound session STARTED within the last `minutes` — used to
+ * avoid placing a new call while a previous one may still be in progress
+ * (session rows are created at call start; `reached` only flips when the
+ * call ends and the webhook fires, so "no reached session yet" is NOT proof
+ * the line is free).
+ */
+async function sessionStartedWithinMinutes(date: string, minutes: number, nowMs: number): Promise<boolean> {
+  const since = new Date(nowMs - minutes * 60_000);
+  const rows = await db
+    .select({ id: callSessionsTable.id })
+    .from(callSessionsTable)
+    .where(and(
+      eq(callSessionsTable.sessionDate, date),
+      isNotNull(callSessionsTable.elevenlabsConversationId),
+      gte(callSessionsTable.startedAt, since)
+    ))
+    .limit(1);
+  return rows.length > 0;
+}
+
 const wakeRetryJob: CronJob = {
   name: "wake_call_retry",
   title: "Wake-Up Call Retries",
@@ -972,6 +994,9 @@ const wakeRetryJob: CronJob = {
 
     const state = await getJsonSetting<WakeRetryState>(KEY.wakeRetryState, { date: "", attempts: 0, lastAt: "" });
     const attempts = state.date === now.date ? state.attempts : 0;
+
+    // Sequence already concluded (gave up earlier today) — nothing else to do.
+    if (attempts >= 3) return { outcome: "skipped" };
 
     // Reached? Sequence over — clear state so tomorrow starts fresh.
     if (await reachedSessionExists(now.date)) {
@@ -1005,6 +1030,9 @@ const wakeRetryJob: CronJob = {
     if (now.epochMs < lastAttemptMs + 15 * 60_000) return { outcome: "skipped" };
     if (now.epochMs > callTargetMs + 90 * 60_000) return { outcome: "skipped" };
     if (isInQuietWindow(now.hhmm, settings.quietWindowStart, settings.quietWindowEnd)) return { outcome: "skipped" };
+    // A session that STARTED recently may still be a live call (reached only
+    // flips at call end) — never ring in on top of it; try again next tick.
+    if (await sessionStartedWithinMinutes(now.date, 20, now.epochMs)) return { outcome: "skipped" };
 
     await setSetting(KEY.wakeRetryState, JSON.stringify({ date: now.date, attempts: attempts + 1, lastAt: new Date(now.epochMs).toISOString() }));
     const result = await triggerOutboundCall({
@@ -1040,6 +1068,9 @@ const outOfBedJob: CronJob = {
       if (now.epochMs < callTargetMs + 45 * 60_000) return { outcome: "skipped" };
       if (now.epochMs > callTargetMs + 180 * 60_000) return { outcome: "skipped" };
       if (!(await reachedSessionExists(now.date))) return { outcome: "skipped" };
+      // Breathing room after the wake call (or a retry) — don't ring again
+      // within 30 minutes of any call starting, and never over a live call.
+      if (await sessionStartedWithinMinutes(now.date, 30, now.epochMs)) return { outcome: "skipped" };
     }
     if (isInQuietWindow(now.hhmm, settings.quietWindowStart, settings.quietWindowEnd)) {
       return { outcome: "warn", detail: "Quiet window is active — follow-up suppressed." };
