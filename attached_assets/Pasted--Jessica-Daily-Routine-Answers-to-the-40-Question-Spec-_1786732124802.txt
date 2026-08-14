@@ -1,0 +1,126 @@
+# Jessica Daily Routine — Answers to the 40-Question Spec Pass
+
+**Status:** proposed defaults, not decisions. **Environment:** Brain Guardian / Jessica scheduled calls.
+**Reader:** future RJ or an agent resuming with zero context.
+
+Each answer is tagged:
+
+- **[A]** — a design answer I'd defend. Adopt unless you disagree.
+- **[D]** — a default value that needs your ratification. The *rule shape* is right; the *number* is a guess.
+- **[YOU]** — I can't answer this without facts only you have. The schema it must fill is given instead.
+
+---
+
+## Read this first — three decisions that govern the other 37
+
+**1. Day types, not adjectives.** Kill "demanding day OR normalcy day." There is one canonical Normal Day and a small set of override modes, each expressed as a *diff* against Normal (see Q40). Day type is resolved once, deterministically, at 05:45.
+
+**2. Task tiers, not a flat list.** Every task carries a tier. Tier decides retry count, escalation speed, and whether it counts toward "was today a good day." Without tiers, an agent nags equally hard about a journal entry and a missed dose.
+
+| Tier | Contents | On refusal | On silence |
+|---|---|---|---|
+| 0 Safety | falls, wandering, distress, scam/financial exposure | n/a | notify immediately |
+| 1 Medication | scheduled doses | accept, re-offer once, notify you | notify at +45m |
+| 2 Meals + hydration | breakfast, lunch, dinner, 4 water checkpoints | accept, re-offer once | notify at +45m |
+| 3 Sleep | bedtime, wake | accept, log | notify at +45m |
+| 4 Hygiene + Koda | shower/teeth/dress, dog out + fed + watered | accept, log, notify on 3-day streak | notify at +45m |
+| 5 Routine | chores, mail, journal, activities | accept immediately, log, move on | log only |
+
+**3. Every task needs an objective completion condition and a completion source.** "Hydration check" is not a task. "Confirmed drinking 8oz during the call" is. Source is one of `self_report`, `family_confirm`, `sensor`. Jessica never marks a Tier 0–2 item complete by inference.
+
+---
+
+## The answers
+
+**1. Wake time — [D]** Target 06:00, soft window to 06:15, hard escalation at 07:00. Encode as `wake.target=06:00 / grace=15m / escalate=07:00`. A grace window matters: without it, a 06:07 wake logs as failure and the completion data becomes noise.
+
+**2. Bedtime — [D]** In bed 22:00. Screens and overhead lights off 21:45 — screens-off has to precede in-bed or it does nothing. If 22:00 is too aggressive against a 06:00 wake, move wake later rather than bedtime earlier; 8 hours in bed is the constraint to protect.
+
+**3. Jessica wake-up — [A]** Call at 06:00. Unanswered → retry at +5m and +10m. Three attempts total, then notify you with a `no_answer` flag (not an emergency alert — distinguish these or you'll stop reading them). An answered call marks *acknowledged*, never *complete*.
+
+**4. Getting out of bed — [A]** 15 minutes after the acknowledged call, one follow-up call to confirm he's physically up. Exactly one. Then the routine moves to the next prompt, which implicitly requires him upright. Repeated bed-check calls are where this system starts feeling like a warden instead of a helper.
+
+**5. Morning order — [A]** Reorder to: **wake → water → Koda out → make bed → pick up room → shower/hygiene → breakfast**. Three changes from yours. Water moves to first because it's the cheapest task in the day and starting on a completion sets the tone. Koda moves ahead of bed-making because the dog's need is genuinely time-sensitive and the walk gets him moving before his body settles back down. Shower stays immediately before breakfast because hygiene is the item most likely to get skipped once he's eaten and the TV is on.
+
+**6. Koda — [A]** Completion = **out (eliminated) + fed + fresh water**. The walk is a bonus, tracked separately, never a completion requirement. Weather or health → backyard only, still counts as complete. Rationale: Koda is a live dependent, and if walk duration gates the task, a rainy week reads as four days of failure and the metric stops meaning anything.
+
+**7. Shower — [D]** Prompt daily. Require 4 of 7 days. Three consecutive skips → notify you. Teeth (AM + PM), deodorant, and clean clothes are a *separate daily* hygiene block and are non-negotiable — they're cheap, they're the actual dignity floor, and bundling them with the shower means a skipped shower drags them along.
+
+**8. Breakfast — [D]** Target 08:00. Completion = meal presented **and** he reports eating something. Log three states — `ate` / `partial` / `declined` — and never enforce a minimum quantity. A minimum you can't verify turns Jessica into someone who argues with him about food, which costs more than the calories are worth.
+
+**9. Morning medications — [YOU]** I won't guess at timing or sequencing on this regimen; that's prescriber territory, and a confabulated med schedule is exactly the failure mode you've said this project can't have. Fill this schema per dose:
+
+```
+name | scheduled_time | absolute_or_window | who_loads (you / pillbox / pharmacy pack)
+confirm_method (verbal / pillbox sensor / family) | late_window | on_late | on_refuse
+```
+
+**10. Hydration — [A]** One 8oz/240ml glass per checkpoint, four checkpoints (wake, 10:00, 14:00, 18:00), 32oz baseline. Completion = **he confirms drinking it while on the call**, not "was asked." Ask him to drink it during the call and say when he's done — it's ten seconds and it converts an unverifiable prompt into a verified one.
+
+**11. 10:00 chores — [D]** Assigned days only, default 5 of 7 (skip Sunday and one rest day). Tier 5 — never escalates, never gates a good day.
+
+**12. Chore selection — [A]** Predetermined weekly rotation, but Jessica offers **two** options from the day's slot and he picks. That preserves real autonomy at near-zero decision cost. You can override any day's rotation manually.
+
+**13. Chore duration — [A]** Fixed cap, 20 minutes default, stop at the cutoff regardless of state. Open-ended "until complete" produces both perfectionist spirals and permanent incompletes; a timebox produces neither.
+
+**14. Normal vs demanding — [A]** Delete the phrase. Day type resolves at 05:45 via strict precedence: `sick_flag > appointment_on_calendar > recovery_phase_flag > sunday > normal`. First match wins, no stacking, no OR.
+
+**15. Rest Mode activation — [A]** Any of: your manual toggle, an appointment on the calendar, a med-cycle recovery flag, an illness flag, or two consecutive nights of poor sleep reported. **Jessica does not decide this herself.** She may *recommend* rest mode with her reasoning; you confirm. An LLM making an autonomous health-state judgment and then reshaping someone's day around it is the single most dangerous authority you could grant here.
+
+**16. Rest Mode behavior — [A]** Keep: meds, all meals, hydration, Koda basics, sleep, teeth. Drop: chores, mail, journal, structured afternoon activity. Shorten: the 17:00 check-in to mood + pain + hydration only. Wake window extends by one hour.
+
+**17. Noon medication — [A]** The prompt time is absolute; the confirmation window is ±30m. Jessica calls, names it generically ("your noon medication"), asks for a spoken confirmation. No confirmation → retry +15m, +30m. Nothing by 12:45 → notify you. Never mark a dose complete on inference or on "he didn't say no."
+
+**18. Lunch — [A]** 12:30. Meds stand alone at 12:00. Fold the 14:00 hydration checkpoint into whatever call is nearest rather than ringing him a third time in two hours — call frequency is a real cost, and three interruptions inside 150 minutes is where a helpful system starts feeling like surveillance.
+
+**19. Afternoon activity — [A]** Structured choice, not free choice. Jessica offers two or three options drawn from fixed categories: outing, house project, hobby, cognitive activity, social call, TV/rest. Aim for one "moving or out of the house" item per day when the day type allows. Free choice at 14:00 reliably collapses into six hours of television.
+
+**20. Naps — [A]** Explicitly allowed, 13:00–15:30 window, 90-minute cap. Encode `nap` as a valid *state*, not an absence of compliance — otherwise the agent scores a healthy nap as three failed tasks. A nap starting after 16:00 gets a gentle wake to protect the night.
+
+**21. 17:00 health check — [A]** Five fixed, answerable items, same wording every day: mood 1–5; pain yes/no + where; energy 1–5; did you eat and drink today; anything today that felt strange or confusing. Log verbatim, keyword-flag to you. Deliberately **not** a symptom interview — Jessica is not diagnosing, and open clinical probing invites both confabulation on her side and distress on his. The daily-identical wording is what makes the log longitudinally useful.
+
+**22. Dinner — [A]** 18:00 is dinner start. Evening meds move to 18:30, after food. Never schedule a meal and a dose at the same minute. If your prescriber requires them simultaneous, the med prompt fires first and dinner second.
+
+**23. Evening medication — [A]** Identical protocol to Q17: verbal confirmation, retries at +15m and +30m, notify you at +45m. Additional rule: two missed doses in a rolling 7 days escalates to you regardless of whether each was individually recovered.
+
+**24. Kitchen cleanup — [D]** Yes, his responsibility. Prompted for now, unprompted as the goal. Jessica checks at dinner +45m and only prompts if it hasn't already been reported done. Tier 5.
+
+**25. Mail — [A]** Retrieve, bring inside, place in one designated tray. **Sorting and opening are yours, not his** — financial mail and scam mail are a Tier 0 exposure and shouldn't be opened alone. Weekdays only. An empty box still completes the task; the completion condition is "checked," not "mail exists."
+
+**26. Journal — [A]** Jessica asks three fixed questions aloud and records his answers; he writes nothing. Five-minute cap. Questions: best part of today, anything hard today, one thing for tomorrow. Same three every night — the value is the longitudinal mood and language record, and that only works if the prompt is constant.
+
+**27. Sleep check-in — [A]** Assess, don't just remind. At 21:00 Jessica confirms screens off by 21:45, asks whether he's getting ready for bed, and **re-confirms the evening dose was taken** — this is your safety net for a 18:30 dose that got confirmed sloppily. Short goodnight call at 22:00.
+
+**28. Free time — [A]** Default: anything. Keep the interrupt list short and concrete, and make it flag-to-you rather than confront-him: unplanned departure from the house, driving, stove left unattended, and any phone or financial interaction with an unknown party. Jessica should not be policing content or leisure.
+
+**29. Appointments — [A]** Separate Appointment Day mode that restructures around the appointment as the anchor. Fixed rules: meds and meals preserved and shifted as a block; chores, journal, and afternoon activity dropped; wake pulled earlier if the appointment is before 10:00; extra hydration checkpoint on return.
+
+**30. Sunday — [A]** Its own lighter mode. Same meds, meals, hydration, sleep. No chores, no mail. Wake window +1 hour. Journal optional. A family or social slot in the afternoon if one exists.
+
+**31. Medication-cycle phases — [A, with a hard caveat]** Yes, phase should modulate expected workload — but the phase-to-expectation mapping should come from **his observed data plus his prescriber**, not from me. Concretely: log `cycle_phase` as a field on every day starting now, run the normal routine unmodified for 4–6 weeks, then correlate phase against completion rate, mood score, and energy score. Set the rule from what the data shows. Building the mapping first and collecting data second means you'd be encoding a guess about his physiology into the system that runs his day.
+
+**32. Refusal — [A]** Tiered, and refusal is logged as its own outcome — never as failure. Tier 1–2: accept without argument, re-offer once at +15m, notify you if still refused. Tier 4: accept, log, streak-track. Tier 5: accept immediately, move on. **Nothing gets asked more than twice, ever.** A system that pushes a third time on someone who said no is one he'll stop answering, and then you've lost the whole channel.
+
+**33. No response — [A]** Yes, categorically different. Refusal means he's present and choosing; silence means his state is unknown. Silence escalates faster: three unanswered contacts inside 45 minutes on any tier → notify you. Unanswered during a Tier 0–2 window → notify immediately. Track them as separate outcome codes so the logs stay honest.
+
+**34. Late tasks — [A]** By tier. Meds never shift silently — a late dose is a question for you, not a rescheduling decision for an agent. Meals shift forward and stay outstanding. Hygiene, chores, and journal remain outstanding until a per-task expiry (chores 14:00, mail 19:00, journal 21:30), then close as `missed`. **Nothing rolls into the next day** — a growing backlog of yesterday's misses is demoralizing and makes today's schedule wrong.
+
+**35. Priority hierarchy — [A]** Your instinct is right; I'd order it: **Tier 0 safety → Tier 1 meds → Tier 2 hydration and meals → Tier 3 sleep → Tier 4 hygiene and Koda → Tier 5 everything else.** Two notes: hydration ranks with meals rather than below them because dehydration degrades cognition faster than a missed meal, and Koda sits higher than a chore would because a dependent animal is both a welfare issue and, usually, the strongest motivator in the day.
+
+**36. Involvement split — [A]** Jessica owns prompting, confirming, logging, offering choices, and escalating. Pops owns doing. You own med loading and supply, day-type overrides, all medical and financial decisions, and every escalation endpoint. Jessica never administers, never diagnoses, never alters the schedule structure, and never contacts anyone but you.
+
+**37. Contact method — [A]** Phone call is primary and, per the Twilio path, the only one currently real. Fallback order: call → call retry → in-home speaker (once it exists) → **notify you**. SMS is an escalation channel to *you*, never a substitute prompt to him — an unread text is indistinguishable from a refusal and from an emergency.
+
+**38. Daily completion — [A]** Not 100%, and not a single number. Report two: **critical completion** (Tiers 0–3, target 100%) and **routine completion** (Tiers 4–5, tracked as a trend, no target). A day at 100% critical and 40% routine is a good day and should be labeled one. A single blended percentage will show 78% on a day he missed a dose and 78% on a day he skipped the journal, which makes the number useless for the only thing it's for.
+
+**39. Unexpected events — [A]** Jessica may shift Tier 4–5 items within the day by up to ±2 hours autonomously. She may not move meds, cancel meals, or change day type. Visitors: a declared visit window (set by you or by him on a call) pauses Tier 5 prompts entirely and defers Tier 4. Anything structural requires you.
+
+**40. Architecture — [A] Yes.** One canonical Normal Day plus explicit override modes, each stored as a diff against Normal rather than as a standalone schedule. Modes: **Normal, Sunday, Rest/Recovery, Appointment, Sick.** Precedence as in Q14, first match wins. This is the right call for a specific reason: a diff-based mode set means a change to the medication protocol is one edit, whereas five parallel full schedules means five edits and eventually a divergence you find out about through a missed dose.
+
+---
+
+## Left open
+
+- **Q9** — morning medications. Yours entirely; schema above.
+- **Q2, 7, 8, 11, 24** — defaults proposed, values need your ratification.
+- **Q31** — the phase-to-workload mapping is deliberately deferred until you have 4–6 weeks of logged data.
