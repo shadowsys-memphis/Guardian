@@ -26,6 +26,7 @@ import jessicaRouter from "./jessica";
 import documentsRouter from "./documents";
 import cronRouter from "./cron";
 import labsRouter from "./labs";
+import dayTypesRouter from "./day-types";
 
 const router: IRouter = Router();
 
@@ -48,6 +49,7 @@ coreRouter.use(scheduleRouter);
 coreRouter.use(symptomsRouter);
 coreRouter.use(inventoryRouter);
 coreRouter.use(labsRouter);             // blood-work tracker, tenant-scoped from day one
+coreRouter.use(dayTypesRouter);         // day_types table carries tenant_id, scoped from day one
 
 router.use(coreRouter);
 

@@ -164,6 +164,12 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteScheduleTaskInput"
       responses:
         "200":
           description: Task marked complete
@@ -188,6 +194,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScheduleTask"
+
+  /schedule/{id}/outcome:
+    post:
+      operationId: recordScheduleTaskOutcome
+      tags: [schedule]
+      summary: Record a non-completion outcome (refused vs no-answer are distinct)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordTaskOutcomeInput"
+      responses:
+        "200":
+          description: Outcome recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleTask"
+
+  /day-type/today:
+    get:
+      operationId: getTodayDayType
+      tags: [schedule]
+      summary: Today's resolved day type (resolves on demand if the morning job hasn't run)
+      responses:
+        "200":
+          description: Today's day type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DayType"
+
+  /day-type/today/recommendation:
+    post:
+      operationId: answerDayTypeRecommendation
+      tags: [schedule]
+      summary: Answer Jessica's pending Rest-day recommendation (accept or dismiss)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerDayTypeRecommendationInput"
+      responses:
+        "200":
+          description: Updated day type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DayType"
+        "404":
+          description: No pending recommendation to answer
 
   /symptoms:
     get:
@@ -1688,6 +1753,15 @@ components:
           type: integer
         isActive:
           type: boolean
+        tier:
+          $ref: "#/components/schemas/TaskTier"
+        status:
+          $ref: "#/components/schemas/TaskOutcomeStatus"
+        completionSource:
+          type: string
+          enum: [spoken, family, sensor, admin]
+          nullable: true
+          description: "How completion was confirmed. Null unless status is done."
       required:
         - id
         - quarter
@@ -1696,6 +1770,18 @@ components:
         - isCompleted
         - order
         - isActive
+        - tier
+        - status
+
+    TaskTier:
+      type: string
+      enum: [safety, medication, meals_hydration, sleep, hygiene_koda, routine]
+      description: "Priority tier — drives the escalation ladder (most to least critical)."
+
+    TaskOutcomeStatus:
+      type: string
+      enum: [pending, done, refused, no_answer, missed]
+      description: "Task outcome. refused (he said no) and no_answer (never reached) are distinct signals."
 
     CreateScheduleTaskInput:
       type: object
@@ -1713,6 +1799,8 @@ components:
           type: string
         order:
           type: integer
+        tier:
+          $ref: "#/components/schemas/TaskTier"
       required:
         - quarter
         - timeLabel
@@ -1737,6 +1825,62 @@ components:
           type: integer
         isActive:
           type: boolean
+        tier:
+          $ref: "#/components/schemas/TaskTier"
+
+    CompleteScheduleTaskInput:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [spoken, family, sensor, admin]
+          description: "How the completion was confirmed. Defaults to admin (a dashboard tap)."
+
+    RecordTaskOutcomeInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [refused, no_answer, pending]
+          description: "Record a non-completion outcome, or reset to pending."
+      required:
+        - status
+
+    DayType:
+      type: object
+      properties:
+        dayDate:
+          type: string
+          description: "Pacific calendar date (YYYY-MM-DD)"
+        dayType:
+          type: string
+          enum: [normal, sunday, rest, appointment, sick]
+        resolvedBy:
+          type: string
+          description: "Which input won the precedence contest (auto, calendar, ray_flag, ray_confirmed)."
+        reason:
+          type: string
+          nullable: true
+        pendingRecommendation:
+          type: string
+          nullable: true
+          description: "A Rest-day suggestion from Jessica awaiting Ray's yes/no, if any."
+        recommendationReason:
+          type: string
+          nullable: true
+      required:
+        - dayDate
+        - dayType
+        - resolvedBy
+
+    AnswerDayTypeRecommendationInput:
+      type: object
+      properties:
+        accept:
+          type: boolean
+          description: "true converts the day to the recommended type; false dismisses the suggestion."
+      required:
+        - accept
 
     SymptomLog:
       type: object

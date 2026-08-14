@@ -59,6 +59,7 @@ import {
   toStoredTimeLabel,
 } from "./jessica-tools";
 import { applySettingsPatch, dailyCallTimeSchema } from "../routes/health-assessment";
+import { inferTierFromTitle } from "./task-tiers";
 
 let careEventsReady = false;
 async function ensureCareEventsTable(): Promise<void> {
@@ -214,6 +215,10 @@ async function handleAddScheduleItem(action: HermesAction, ctx: LedgerContext): 
     isActive: true,
     isCompleted: false,
     order,
+    // Voice-created tasks carry no explicit tier — infer from the title so a
+    // spoken "add his evening pills" escalates like medication, not a chore.
+    // Ray can correct the tier from the dashboard afterward.
+    tier: inferTierFromTitle(title),
   });
   logger.info({ action, tenantId: ctx.tenantId }, `[Hermes] ${action.type} → schedule_tasks`);
   await writeLedger(action, ctx, "dispatched", { doctorRelevant: true, learningRelevant: true });

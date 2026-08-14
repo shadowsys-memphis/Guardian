@@ -7,9 +7,12 @@ import {
   healthDataPointsTable,
   medicalAppointmentsTable,
   rotationTasksTable,
+  scheduleTasksTable,
 } from "@workspace/db";
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { computeHaldolCycle } from "./haldol-cycle";
+import { resolveAndStoreDayType } from "./day-type";
+import { isTaskTier, nextLadderStep, DEFAULT_TIER, type TaskStatus } from "./task-tiers";
 import { getSettings, isInQuietWindow } from "../routes/health-assessment";
 import { triggerOutboundCall } from "../routes/jessica";
 import { logger } from "./logger";
@@ -45,6 +48,11 @@ const KEY = {
   elevenlabsConfigAlert: "elevenlabs_config_alert",
   // Once-per-day claim for the ElevenLabs config check job.
   elevenlabsConfigCheckClaim: "elevenlabs_config_check_last_date",
+  // Once-per-day claims for the daily-routine foundation jobs.
+  dayTypeResolveClaim: "day_type_resolve_last_date",
+  scheduleResetClaim: "schedule_reset_last_date",
+  // Tier-ladder escalation alerts awaiting Ray (JSON array of open items).
+  taskEscalationAlert: "task_escalation_alert",
 } as const;
 
 export type JobOutcome = "ok" | "skipped" | "warn" | "error";
@@ -202,6 +210,86 @@ async function ensureCronLogTable(): Promise<void> {
     `);
   } catch (err) {
     logger.error({ err }, "Failed to ensure cron_job_log table — job history/status may be unavailable");
+  }
+}
+
+/**
+ * Daily-routine foundation DDL — runs once at scheduler startup (raw SQL via
+ * pool per the repo's drizzle-kit-push-hangs gotcha). Idempotent: guarded
+ * ALTERs on schedule_tasks plus CREATE IF NOT EXISTS for day_types, with a
+ * one-time tier backfill for rows that predate the tier column.
+ */
+async function ensureRoutineFoundationSchema(): Promise<void> {
+  try {
+    // schedule_tasks may not exist yet on a fresh DB (DB Gotchas #2).
+    await pool.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'schedule_tasks') THEN
+          ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'routine';
+          ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+          ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS completion_source TEXT;
+          ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMP;
+          ALTER TABLE schedule_tasks ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP;
+        END IF;
+      END $$;
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS day_types (
+        id SERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL DEFAULT 'local',
+        day_date DATE NOT NULL,
+        day_type TEXT NOT NULL DEFAULT 'normal',
+        resolved_by TEXT NOT NULL DEFAULT 'auto',
+        reason TEXT,
+        pending_recommendation TEXT,
+        recommendation_reason TEXT,
+        confirmed_by TEXT,
+        confirmed_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    // One label per tenant per day — this constraint IS the "never two
+    // conflicting day types" rule; resolver re-runs update in place.
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS day_types_tenant_date_idx ON day_types (tenant_id, day_date)
+    `);
+
+    // One-time backfill for rows that predate the tier/status columns.
+    // Guarded by an app_settings marker so a restart can never re-run it and
+    // clobber tiers Ray has since corrected by hand. Tier inference mirrors
+    // inferTierFromTitle() in task-tiers.ts.
+    const marker = await pool.query(
+      `SELECT 1 FROM app_settings WHERE key = 'routine_foundation_backfill_done' LIMIT 1`
+    );
+    if (marker.rowCount === 0) {
+      await pool.query(`
+        UPDATE schedule_tasks SET tier = CASE
+          WHEN title ~* '\\m(fall|emergency|911|panic|unsafe|stove|smoke|wander)\\M' THEN 'safety'
+          WHEN title ~* '\\m(med|meds|medication|pill|pills|dose|haldol|injection|prescription|rx)\\M' THEN 'medication'
+          WHEN title ~* '\\m(breakfast|lunch|dinner|snack|meal|eat|water|hydrat|drink|fluid)\\M' THEN 'meals_hydration'
+          WHEN title ~* '\\m(sleep|bed|bedtime|nap|wake|goodnight)\\M' THEN 'sleep'
+          WHEN title ~* '\\m(shower|bathe|bath|teeth|brush|deodorant|hygiene|dress|clothes|koda|dog|walk|feed)\\M' THEN 'hygiene_koda'
+          ELSE 'routine'
+        END
+        WHERE tier = 'routine'
+      `);
+      // Bring status in line with the legacy isCompleted mirror for rows
+      // completed before the status column existed.
+      await pool.query(`
+        UPDATE schedule_tasks SET status = 'done', completion_source = COALESCE(completion_source, 'admin')
+        WHERE is_completed = true AND status = 'pending'
+      `);
+      await pool.query(
+        `INSERT INTO app_settings (key, value) VALUES ('routine_foundation_backfill_done', $1)
+         ON CONFLICT (key) DO NOTHING`,
+        [new Date().toISOString()]
+      );
+    }
+  } catch (err) {
+    logger.error({ err }, "Failed to ensure daily-routine foundation schema — tier/day-type features may be unavailable");
   }
 }
 
@@ -759,6 +847,155 @@ const quarterAdvanceJob: CronJob = {
   },
 };
 
+// ─── Job 9: Day-type resolution (daily-routine foundation) ───────────────────
+//
+// Resolves today's single day type (normal/sunday/rest/appointment/sick) once
+// each morning, before the wake-up call, so every downstream decision that day
+// reads one consistent label. Re-runs after a restart are safe: the resolver
+// updates today's row in place and preserves Ray's confirmations.
+
+const dayTypeResolveJob: CronJob = {
+  name: "day_type_resolve",
+  title: "Daily Day-Type Resolution",
+  schedule: "Daily at 5:30 AM PT",
+  intervalMs: null,
+  placesCall: false,
+  async run(now, opts) {
+    if (!isTimeOfDayDue(now, "05:30") && !opts?.force) return { outcome: "skipped" };
+    if (!(await claimForToday(KEY.dayTypeResolveClaim, now.date, opts?.force))) return { outcome: "skipped" };
+
+    const row = await resolveAndStoreDayType("local", now.date);
+    const rec = row.pendingRecommendation ? ` (pending recommendation: ${row.pendingRecommendation})` : "";
+    return { outcome: "ok", detail: `Resolved ${now.date} as "${row.dayType}" via ${row.resolvedBy}${rec}` };
+  },
+};
+
+// ─── Job 10: Daily schedule reset (nothing carries over) ─────────────────────
+//
+// schedule_tasks previously kept completions forever unless manually
+// uncompleted. Under the routine system every day starts fresh: completion
+// state, outcome status, and ladder bookkeeping all reset at midnight PT.
+// Mirrors rotation_reset's day-scoping so a late catch-up run after a restart
+// never wipes progress already made today.
+
+const scheduleResetJob: CronJob = {
+  name: "schedule_reset",
+  title: "Schedule Task Daily Reset",
+  schedule: "Daily at midnight PT",
+  intervalMs: null,
+  placesCall: false,
+  async run(now, opts) {
+    if (!isTimeOfDayDue(now, "00:00") && !opts?.force) return { outcome: "skipped" };
+    if (!(await claimForToday(KEY.scheduleResetClaim, now.date, opts?.force))) return { outcome: "skipped" };
+
+    const startOfToday = new Date(pacificWallTimeToEpochMs(now.date, "00:00"));
+    const reset = await db
+      .update(scheduleTasksTable)
+      .set({
+        status: "pending",
+        isCompleted: false,
+        completedAt: null,
+        completionSource: null,
+        attemptCount: 0,
+        lastAttemptAt: null,
+        escalatedAt: null,
+      })
+      .where(sql`(${scheduleTasksTable.status} <> 'pending'
+                   OR ${scheduleTasksTable.isCompleted} = true
+                   OR ${scheduleTasksTable.attemptCount} > 0)
+                 AND (${scheduleTasksTable.completedAt} IS NULL OR ${scheduleTasksTable.completedAt} < ${startOfToday})
+                 AND (${scheduleTasksTable.lastAttemptAt} IS NULL OR ${scheduleTasksTable.lastAttemptAt} < ${startOfToday})`)
+      .returning({ id: scheduleTasksTable.id });
+
+    // Yesterday's unanswered escalations die with yesterday — the alert key
+    // resets so the dashboard shows only today's open items.
+    await clearSetting(KEY.taskEscalationAlert);
+
+    return { outcome: "ok", detail: `Reset ${reset.length} schedule task(s) for the new day` };
+  },
+};
+
+// ─── Job 11: Tier-ladder sweep (late/missed handling by tier) ────────────────
+//
+// Every 15 minutes, walks today's timed schedule tasks through the shared
+// tier ladder (lib/task-tiers.ts): expires lower-tier tasks whose window has
+// closed as "missed", and surfaces Ray-notification steps as a persistent
+// dashboard alert. It records escalations; it does NOT place calls — retries
+// of call-based tasks (wake-up, medication) are driven by their own flows,
+// which read the same ladder.
+//
+// Tasks whose timeLabel isn't a real HHMM time ("Task", "Event") have no
+// scheduled instant, so the ladder can't apply — they simply close at the
+// nightly reset.
+
+const HHMM_LABEL = /^([01]\d|2[0-3])([0-5]\d)$/;
+
+const taskLadderSweepJob: CronJob = {
+  name: "task_ladder_sweep",
+  title: "Tier Ladder Sweep",
+  schedule: "Every 15 minutes",
+  intervalMs: 15 * 60_000,
+  placesCall: false,
+  async run(now) {
+    const tasks = await db
+      .select()
+      .from(scheduleTasksTable)
+      .where(and(eq(scheduleTasksTable.tenantId, "local"), eq(scheduleTasksTable.isActive, true)));
+
+    let closed = 0;
+    const escalations: Array<{ taskId: number; title: string; tier: string; reason: string }> = [];
+
+    for (const task of tasks) {
+      const m = HHMM_LABEL.exec(task.timeLabel);
+      if (!m) continue;
+      const status = (task.status as TaskStatus) ?? "pending";
+      if (status === "done" || status === "missed") continue;
+
+      const tier = isTaskTier(task.tier) ? task.tier : DEFAULT_TIER;
+      const step = nextLadderStep(
+        {
+          tier,
+          status,
+          attemptCount: task.attemptCount,
+          lastAttemptAtMs: task.lastAttemptAt?.getTime() ?? null,
+          escalatedAtMs: task.escalatedAt?.getTime() ?? null,
+          scheduledAtMs: pacificWallTimeToEpochMs(now.date, `${m[1]}:${m[2]}`),
+        },
+        now.epochMs
+      );
+
+      if (step.kind === "close_missed") {
+        await db
+          .update(scheduleTasksTable)
+          .set({ status: "missed" })
+          .where(eq(scheduleTasksTable.id, task.id));
+        closed++;
+      } else if (step.kind === "notify_ray") {
+        await db
+          .update(scheduleTasksTable)
+          .set({ escalatedAt: new Date(now.epochMs) })
+          .where(eq(scheduleTasksTable.id, task.id));
+        escalations.push({ taskId: task.id, title: task.title, tier, reason: step.reason });
+      }
+    }
+
+    if (escalations.length > 0) {
+      const existing = await getJsonSetting<Array<{ taskId: number }>>(KEY.taskEscalationAlert, []);
+      const merged = [
+        ...existing,
+        ...escalations.filter((e) => !existing.some((x) => x.taskId === e.taskId)),
+      ];
+      await setSetting(KEY.taskEscalationAlert, JSON.stringify(merged));
+    }
+
+    if (closed === 0 && escalations.length === 0) return { outcome: "skipped" };
+    return {
+      outcome: escalations.length > 0 ? "warn" : "ok",
+      detail: `Closed ${closed} expired task(s); ${escalations.length} new escalation(s) for Ray`,
+    };
+  },
+};
+
 // ─── Registry + master tick ──────────────────────────────────────────────────
 
 export const CRON_JOBS: CronJob[] = [
@@ -771,6 +1008,9 @@ export const CRON_JOBS: CronJob[] = [
   missedCallJob,
   elevenlabsConfigJob,
   quarterAdvanceJob,
+  dayTypeResolveJob,
+  scheduleResetJob,
+  taskLadderSweepJob,
 ];
 
 const lastPolledAt = new Map<string, number>();
