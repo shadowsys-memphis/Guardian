@@ -11,6 +11,10 @@ import { ai } from "@workspace/integrations-gemini-ai";
 import { dispatch } from "../lib/hermes";
 import { eq, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
+import {
+  normalizeExtracted,
+  normalizeAppointmentType,
+} from "../lib/document-extraction";
 
 const router: IRouter = Router();
 
@@ -69,11 +73,9 @@ router.get("/documents/care-context", async (req, res) => {
     // inArray, not a raw `= ANY(${keys})` — Drizzle binds a JS array as a
     // single scalar parameter, which Postgres rejects, so the raw form threw
     // a 500 on every request and silently hid the dashboard's care alerts.
-    const rows = await db
-      .select()
-      .from(medicalDocumentsTable)
-      .orderBy(desc(medicalDocumentsTable.createdAt))
-      .limit(MAX_DOCUMENTS_RETURNED);
+    const rows = await db.select().from(appSettingsTable).where(
+      inArray(appSettingsTable.key, ["dietary_profile", "activity_restrictions"])
+    );
     const result: Record<string, unknown> = {};
     for (const row of rows) {
       try { result[row.key] = JSON.parse(row.value); } catch { result[row.key] = row.value; }
@@ -107,82 +109,6 @@ router.get("/documents", async (req, res) => {
     res.status(500).json({ error: "Failed to list documents" });
   }
 });
-
-// Gemini's responseMimeType:"application/json" only guarantees valid JSON
-// syntax — it doesn't guarantee our schema. A field can come back as the
-// wrong type (e.g. appointments: "none found" instead of []) or be missing
-// entirely. This coerces whatever comes back into the shape the rest of the
-// app (and the frontend's .map() calls) expect, instead of crashing on it.
-const looseString = z.union([z.string(), z.number(), z.boolean()]).transform(String).nullable().catch(null);
-// Defensively reduces whatever Gemini returns (a bare "1234", "****1234",
-// "ending in 1234", or a full 16-digit number) down to exactly the last 4
-// digits. Never lets more than 4 digits through, and never a full card
-// number, regardless of what the model outputs.
-const cardLast4Schema = z.any().transform((v) => {
-  if (v === null || v === undefined) return null;
-  const digits = String(v).replace(/\D/g, "");
-  const last4 = digits.slice(-4);
-  return last4.length === 4 ? last4 : null;
-}).catch(null);
-const ExtractedAppointment = z.object({
-  date: looseString.catch(null),
-  time: looseString.catch(null),
-  provider: looseString.catch(null),
-  location: looseString.catch(null),
-  type: looseString.catch(null),
-}).catch({ date: null, time: null, provider: null, location: null, type: null });
-const ExtractedMedication = z.object({
-  name: looseString.catch(null),
-  dose: looseString.catch(null),
-  frequency: looseString.catch(null),
-  instructions: looseString.catch(null),
-  timeOfDay: looseString.catch(null),
-}).catch({ name: null, dose: null, frequency: null, instructions: null, timeOfDay: null });
-const ExtractedDocumentSchema = z.object({
-  source_label: looseString.catch("Medical Document"),
-  patient_name: looseString,
-  date: looseString,
-  physician: looseString,
-  facility: looseString,
-  appointments: z.array(ExtractedAppointment).catch([]),
-  medications: z.array(ExtractedMedication).catch([]),
-  dietary_restrictions: z.array(looseString).catch([]),
-  activity_restrictions: z.array(looseString).catch([]),
-  wound_care: z.array(looseString).catch([]),
-  clinical_notes: looseString.catch(""),
-  discharge_instructions: looseString,
-  card_last4: cardLast4Schema,
-});
-
-function normalizeExtracted(parsed: unknown, rawText: string): Record<string, unknown> {
-  if (typeof parsed !== "object" || parsed === null) {
-    return { source_label: "Medical Document", raw_text: rawText };
-  }
-  return ExtractedDocumentSchema.parse(parsed);
-}
-
-// Collapses whatever free-text type Gemini extracted (the prompt's
-// "follow-up|primary-care|specialist|bloodwork|lab|other") into the SAME
-// fixed vocabulary the Appointments tab's manual entry form already uses
-// (see TYPE_LABELS in admin-view.tsx: primary_care/psychiatry/cardiology/
-// neurology/va_appointment/lab_work/other) — so a scanned appointment gets a
-// real label in that tab instead of an unrecognized raw string, and reads
-// exactly like one Ray typed in by hand. "follow-up"/"specialist" have no
-// equivalent bucket there and fall back to "other" rather than inventing a
-// new category the UI has no label for.
-//
-// This matters beyond cosmetics: the night-before reminder job
-// (lib/call-scheduler.ts) does `type.includes("bloodwork") ||
-// type.includes("lab")` to decide whether to tell Pops to fast — "lab_work"
-// already satisfies that check (it contains "lab"), so "Lab work",
-// "Blood draw", "Labs", etc. still trigger the fasting warning.
-function normalizeAppointmentType(rawType: string | null | undefined): string {
-  const t = (rawType ?? "").toLowerCase().trim();
-  if (t.includes("blood") || t.includes("lab")) return "lab_work";
-  if (t.includes("primary")) return "primary_care";
-  if (!t) return "primary_care";
-  return "other";
-}
 
 router.delete("/documents/:id", async (req, res) => {
   try {
@@ -219,26 +145,7 @@ router.patch("/documents/:id", async (req, res) => {
       return;
     }
     const body = z.object({
-      docId: z.number().int(),
-      source_label: z.string().default("Medical Document"),
-      overwrite: z.boolean().default(false),
-      appointments: z.array(z.object({
-        date: z.string(),
-        time: z.string().optional(),
-        provider: z.string(),
-        location: z.string().optional(),
-        type: z.string().optional(),
-      })).default([]),
-      medications: z.array(z.object({
-        name: z.string(),
-        dose: z.string().optional().nullable(),
-        frequency: z.string().optional().nullable(),
-        instructions: z.string().optional().nullable(),
-        timeOfDay: z.string().optional(),
-      })).default([]),
-      dietary_restrictions: z.array(z.string()).default([]),
-      activity_restrictions: z.array(z.string()).default([]),
-      clinical_notes: z.string().default(""),
+      card_last4: z.string().nullable(),
     }).parse(req.body);
 
     let cardLast4: string | null = null;
@@ -276,26 +183,8 @@ router.post("/documents/scan", async (req, res) => {
     await ensureMedicalDocsTable();
 
     const body = z.object({
-      docId: z.number().int(),
-      source_label: z.string().default("Medical Document"),
-      overwrite: z.boolean().default(false),
-      appointments: z.array(z.object({
-        date: z.string(),
-        time: z.string().optional(),
-        provider: z.string(),
-        location: z.string().optional(),
-        type: z.string().optional(),
-      })).default([]),
-      medications: z.array(z.object({
-        name: z.string(),
-        dose: z.string().optional().nullable(),
-        frequency: z.string().optional().nullable(),
-        instructions: z.string().optional().nullable(),
-        timeOfDay: z.string().optional(),
-      })).default([]),
-      dietary_restrictions: z.array(z.string()).default([]),
-      activity_restrictions: z.array(z.string()).default([]),
-      clinical_notes: z.string().default(""),
+      imageBase64: z.string().min(100),
+      mimeType: z.string().default("image/jpeg"),
     }).parse(req.body);
 
     const response = await ai.models.generateContent({
@@ -320,14 +209,18 @@ router.post("/documents/scan", async (req, res) => {
     } catch {
       parsed = null;
     }
+    // normalizeExtracted() lives in lib/document-extraction.ts and is
+    // unit-tested there. It coerces whatever Gemini returned (truncated JSON,
+    // wrong field types, nested nulls, top-level array) into a valid
+    // ExtractedDocument without ever throwing.
     const extracted = normalizeExtracted(parsed, rawText);
 
     const [doc] = await db.insert(medicalDocumentsTable).values({
       tenantId: "local",
-      sourceLabel: (extracted.source_label as string) ?? "Medical Document",
+      sourceLabel: extracted.source_label ?? "Medical Document",
       rawText,
       structuredJson: JSON.stringify(extracted),
-      cardLast4: (extracted.card_last4 as string | null) ?? null,
+      cardLast4: extracted.card_last4 ?? null,
     }).returning();
 
     res.json({ docId: doc.id, extracted });
