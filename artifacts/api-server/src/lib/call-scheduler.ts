@@ -53,6 +53,12 @@ const KEY = {
   scheduleResetClaim: "schedule_reset_last_date",
   // Tier-ladder escalation alerts awaiting Ray (JSON array of open items).
   taskEscalationAlert: "task_escalation_alert",
+  // Morning wake-call retry state: { date, attempts, lastAt } (JSON).
+  wakeRetryState: "wake_call_retry_state",
+  // Once-per-day claim for the single out-of-bed follow-up call.
+  outOfBedClaim: "out_of_bed_followup_last_date",
+  // Consecutive days the shower was skipped (integer as string).
+  showerSkipStreak: "shower_skip_streak",
 } as const;
 
 export type JobOutcome = "ok" | "skipped" | "warn" | "error";
@@ -844,6 +850,139 @@ const quarterAdvanceJob: CronJob = {
       .set({ currentQuarter: computed, lastUpdated: new Date() })
       .where(eq(appStateTable.id, state.id));
     return { outcome: "ok", detail: `Advanced ${state.currentQuarter} → ${computed}` };
+  },
+};
+
+// ─── Job 8.7: Wake-call retry (morning routine) ──────────────────────────────
+//
+// The daily wake-up call gets two retries, 15 minutes apart, before the
+// morning is flagged as "no answer" — which is a soft flag, explicitly NOT an
+// emergency (the 2-hour missed-call detection and its streak escalation
+// remain the serious path). A reached session at any point cancels the
+// sequence. Retries never fire in the quiet window, and never more than
+// 90 minutes past the configured call time, so a long outage can't cause a
+// surprise mid-day ring.
+
+interface WakeRetryState {
+  date: string;
+  attempts: number;
+  lastAt: string;
+}
+
+/** True if any confirmed-reached ElevenLabs session exists for `date`. */
+async function reachedSessionExists(date: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: callSessionsTable.id })
+    .from(callSessionsTable)
+    .where(and(
+      eq(callSessionsTable.sessionDate, date),
+      isNotNull(callSessionsTable.elevenlabsConversationId),
+      eq(callSessionsTable.reached, true)
+    ))
+    .limit(1);
+  return rows.length > 0;
+}
+
+const wakeRetryJob: CronJob = {
+  name: "wake_call_retry",
+  title: "Wake-Up Call Retries",
+  schedule: "Up to 2 retries, 15 min apart, after the daily call",
+  intervalMs: null,
+  placesCall: true,
+  async run(now) {
+    const settings = await getSettings();
+    if (!settings.dailyCallEnabled) return { outcome: "skipped" };
+
+    // Only meaningful once today's wake call has actually been placed.
+    const claimed = await getSetting(KEY.dailyCallClaim);
+    if (claimed !== now.date) return { outcome: "skipped" };
+
+    const callTargetMs = pacificWallTimeToEpochMs(now.date, settings.dailyCallTime);
+    if (now.epochMs < callTargetMs) return { outcome: "skipped" };
+
+    const state = await getJsonSetting<WakeRetryState>(KEY.wakeRetryState, { date: "", attempts: 0, lastAt: "" });
+    const attempts = state.date === now.date ? state.attempts : 0;
+
+    // Reached? Sequence over — clear state so tomorrow starts fresh.
+    if (await reachedSessionExists(now.date)) {
+      if (state.date === now.date && state.attempts > 0) {
+        await clearSetting(KEY.wakeRetryState);
+        return { outcome: "ok", detail: "Pops was reached — wake retry sequence cleared." };
+      }
+      return { outcome: "skipped" };
+    }
+
+    // Give up: 2 retries spent → flag the morning as no-answer (soft, not emergency).
+    if (attempts >= 2) {
+      if (state.date === now.date && state.attempts === 2) {
+        await setSetting(KEY.wakeRetryState, JSON.stringify({ date: now.date, attempts: 3, lastAt: new Date(now.epochMs).toISOString() }));
+        await db
+          .update(scheduleTasksTable)
+          .set({ status: "no_answer", lastAttemptAt: new Date(now.epochMs) })
+          .where(and(
+            eq(scheduleTasksTable.tenantId, "local"),
+            sql`${scheduleTasksTable.title} ~* '\\mwake\\M'`,
+            eq(scheduleTasksTable.status, "pending")
+          ));
+        return { outcome: "warn", detail: "Wake call unanswered after 2 retries — morning flagged no-answer (not an emergency)." };
+      }
+      return { outcome: "skipped" };
+    }
+
+    // Next retry due 15 min after the last attempt (the initial call counts
+    // from the configured call time). Hard-stop 90 min past the call time.
+    const lastAttemptMs = attempts === 0 ? callTargetMs : Date.parse(state.lastAt);
+    if (now.epochMs < lastAttemptMs + 15 * 60_000) return { outcome: "skipped" };
+    if (now.epochMs > callTargetMs + 90 * 60_000) return { outcome: "skipped" };
+    if (isInQuietWindow(now.hhmm, settings.quietWindowStart, settings.quietWindowEnd)) return { outcome: "skipped" };
+
+    await setSetting(KEY.wakeRetryState, JSON.stringify({ date: now.date, attempts: attempts + 1, lastAt: new Date(now.epochMs).toISOString() }));
+    const result = await triggerOutboundCall({
+      extraContext: `CALL PURPOSE — WAKE-UP RETRY ${attempts + 1} of 2: The first wake-up call this morning didn't reach Pops. Keep this call short and gentle — just help him get his morning started. Do not mention missed calls in a way that could worry him.`,
+    });
+    if (!result.ok) {
+      return { outcome: "warn", detail: `Wake retry ${attempts + 1} failed to start: ${result.error}` };
+    }
+    return { outcome: "ok", detail: `Wake retry ${attempts + 1} of 2 placed (session ${result.sessionId})` };
+  },
+};
+
+// ─── Job 8.8: Out-of-bed follow-up (morning routine) ─────────────────────────
+//
+// One follow-up call ~45 minutes after a successful wake call, checking that
+// Pops is actually out of bed — then the system moves on. Exactly once per
+// day, no repeats, no nagging: if this call doesn't reach him, the normal
+// missed-call detection is still the safety net.
+
+const outOfBedJob: CronJob = {
+  name: "out_of_bed_followup",
+  title: "Out-of-Bed Follow-Up Call",
+  schedule: "Once, ~45 min after a successful wake call",
+  intervalMs: null,
+  placesCall: true,
+  async run(now, opts) {
+    const settings = await getSettings();
+    if (!settings.dailyCallEnabled && !opts?.force) return { outcome: "skipped" };
+
+    const callTargetMs = pacificWallTimeToEpochMs(now.date, settings.dailyCallTime);
+    // Window: 45 min to 3 h after the configured call time.
+    if (!opts?.force) {
+      if (now.epochMs < callTargetMs + 45 * 60_000) return { outcome: "skipped" };
+      if (now.epochMs > callTargetMs + 180 * 60_000) return { outcome: "skipped" };
+      if (!(await reachedSessionExists(now.date))) return { outcome: "skipped" };
+    }
+    if (isInQuietWindow(now.hhmm, settings.quietWindowStart, settings.quietWindowEnd)) {
+      return { outcome: "warn", detail: "Quiet window is active — follow-up suppressed." };
+    }
+    if (!(await claimForToday(KEY.outOfBedClaim, now.date, opts?.force))) return { outcome: "skipped" };
+
+    const result = await triggerOutboundCall({
+      extraContext: "CALL PURPOSE — OUT-OF-BED CHECK: This is a very short, warm follow-up to this morning's wake-up call. Ask one thing: is he up and out of bed? If yes, celebrate briefly and let him go. If he's still in bed, gently encourage him to get up now, but do not lecture or repeat yourself — one nudge, then wrap up kindly either way. Keep the whole call under two minutes.",
+    });
+    if (!result.ok) {
+      return { outcome: "warn", detail: `Out-of-bed follow-up failed to start: ${result.error}` };
+    }
+    return { outcome: "ok", detail: `Out-of-bed follow-up placed (session ${result.sessionId})` };
   },
 };
 

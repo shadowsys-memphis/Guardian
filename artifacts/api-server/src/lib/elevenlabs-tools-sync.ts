@@ -22,7 +22,13 @@ import { logger } from "./logger";
 const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
 const TOOL_IDS_SETTINGS_KEY = "jessica_tool_ids";
 
-type ToolKey = "add_task" | "remove_task" | "reschedule_task" | "update_daily_call_schedule";
+type ToolKey =
+  | "add_task"
+  | "remove_task"
+  | "reschedule_task"
+  | "update_daily_call_schedule"
+  | "complete_task"
+  | "refuse_task";
 
 export type SyncJessicaToolsResult =
   | { ok: true; message: string; tools: Record<string, string> }
@@ -103,6 +109,53 @@ function buildToolConfigs(baseUrl: string, secret: string): Array<{ key: ToolKey
             properties: {
               title: { type: "string", description: "The name (or a close description) of the task to reschedule, as it would appear on the schedule." },
               time: { type: "string", description: "The new time in 24-hour HH:MM Pacific time, e.g. '15:00' for 3:00 PM." },
+            },
+          },
+        },
+      },
+    },
+    {
+      key: "complete_task",
+      config: {
+        type: "webhook",
+        name: "complete_task",
+        description:
+          "Marks a task on Pops' daily schedule as done. Call this ONLY when Pops (or a family member on the call) explicitly confirms the thing actually happened — e.g. he says he drank the water, ate breakfast, or took care of Koda. Never call it just because you asked or reminded him. For water check-ins specifically: only after he confirms drinking it during this call. For breakfast: ask how much he ate (all, some, or none) — call this for 'all' or 'some'; if he ate nothing, use refuse_task instead. For Koda: done means out, fed, and watered — a walk is a separate bonus, and bad weather or a health issue never makes the dog task a failure.",
+        response_timeout_secs: 15,
+        tool_error_handling_mode: "auto",
+        api_schema: {
+          url: `${baseUrl}/jessica/tools/complete-task`,
+          method: "POST",
+          request_headers: requestHeaders,
+          request_body_schema: {
+            type: "object",
+            required: ["title"],
+            properties: {
+              title: { type: "string", description: "The name (or a close description) of the task that was completed, as it would appear on the schedule." },
+              source: { type: "string", description: "Who confirmed it: 'spoken' if Pops himself said so (the default), 'family' if a family member on the call confirmed it." },
+            },
+          },
+        },
+      },
+    },
+    {
+      key: "refuse_task",
+      config: {
+        type: "webhook",
+        name: "refuse_task",
+        description:
+          "Records that Pops explicitly declined a task on his schedule — he said no, he's not going to do it (including eating none of a meal). This is different from him simply not answering or changing the subject; only call it on a clear refusal. After recording it, do not pressure him — acknowledge kindly and move on.",
+        response_timeout_secs: 15,
+        tool_error_handling_mode: "auto",
+        api_schema: {
+          url: `${baseUrl}/jessica/tools/refuse-task`,
+          method: "POST",
+          request_headers: requestHeaders,
+          request_body_schema: {
+            type: "object",
+            required: ["title"],
+            properties: {
+              title: { type: "string", description: "The name (or a close description) of the task he declined, as it would appear on the schedule." },
             },
           },
         },

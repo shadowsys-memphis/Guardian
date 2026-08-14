@@ -1,0 +1,35 @@
+I can audit the actual Guardian codebase, determine exactly what hermes.ts is and when it        
+entered, then separate verified facts from the previous agent’s claims. Send me the repo path, or
+say “find it” and I’ll locate it.                                                                
+
+                                                                                                 
+I badly need to figure out if its new or what bc hermes hastn had a fuckin thing to do with thisx
+                                                                                                 
+
+Yes—Hermes is new relative to the Guardian app, and it is not your real Hermes system.           
+                                                                                                 
+Verified facts:                                                                                  
+                                                                                                 
+- Guardian existed in Git history from March 20, 2026.                                           
+- The app-specific file artifacts/api-server/src/lib/hermes.ts was introduced on July 3, 2026.   
+- That was roughly three months after the app began, in commit 1526ca3e1ed6.                     
+- The commit was recorded under your Git identity, LedgerGhost90, but explicitly says            
+  Co-Authored-By: Claude Sonnet 4.6.                                                             
+- It created a brand-new component called “Guardian Hermes Adapter.”                             
+- This component is merely an internal dispatcher/database event ledger. It is not connected to  
+  ~/.hermes, your Hermes gateway, Hermes memory, or your sovereign stack.                        
+- It is currently wired into Guardian through gemini.ts, jessica.ts, and documents.ts; therefore 
+  it isn’t an unused file.                                                                       
+                                                                                                 
+So the clean conclusion is:                                                                      
+                                                                                                 
+│ An AI-assisted July 3 change introduced the name “Hermes” into Guardian for an internal        
+│ event-dispatch layer. Hermes was not an original part of the caregiving app, and the name      
+│ incorrectly collides with your separate real Hermes system.                                    
+                                                                                                 
+The previous agent got the date and file right, but badly mishandled the important distinction.  
+Your Git identity being on the commit does not establish that you personally designed, requested,
+or knowingly approved this naming decision. The co-author evidence points directly to an         
+AI-assisted implementation.                                                                      
+                                                                                                 
+I made no changes. 

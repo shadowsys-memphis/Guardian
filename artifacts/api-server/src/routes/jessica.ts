@@ -614,6 +614,47 @@ router.post("/jessica/tools/reschedule-task", requireToolSecret, async (req: Req
   }
 });
 
+const completeTaskToolSchema = z.object({
+  title: z.string().min(1),
+  source: z.enum(["spoken", "family"]).optional(),
+});
+
+router.post("/jessica/tools/complete-task", requireToolSecret, async (req: Request, res: Response) => {
+  try {
+    const parsed = completeTaskToolSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.json({ success: false, message: "Which task should I mark as done?" });
+      return;
+    }
+    const action: HermesAction = { type: "COMPLETE_TASK", title: parsed.data.title, source: parsed.data.source };
+    const result = await dispatch(action, jessicaToolCtx);
+    res.json({ success: result.ok, message: result.message });
+  } catch (err) {
+    req.log.error({ err }, "Jessica complete-task tool call failed");
+    res.json({ success: false, message: "Something went wrong on my end — let's try that again in a moment." });
+  }
+});
+
+const refuseTaskToolSchema = z.object({
+  title: z.string().min(1),
+});
+
+router.post("/jessica/tools/refuse-task", requireToolSecret, async (req: Request, res: Response) => {
+  try {
+    const parsed = refuseTaskToolSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.json({ success: false, message: "Which task did he decline?" });
+      return;
+    }
+    const action: HermesAction = { type: "REFUSE_TASK", title: parsed.data.title };
+    const result = await dispatch(action, jessicaToolCtx);
+    res.json({ success: result.ok, message: result.message });
+  } catch (err) {
+    req.log.error({ err }, "Jessica refuse-task tool call failed");
+    res.json({ success: false, message: "Something went wrong on my end — let's try that again in a moment." });
+  }
+});
+
 const updateDailyCallToolSchema = z.object({
   enabled: z.boolean().optional(),
   time: z.string().optional(),
