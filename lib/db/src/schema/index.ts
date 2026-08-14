@@ -26,6 +26,22 @@ export const scheduleTasksTable = pgTable("schedule_tasks", {
   completedAt: timestamp("completed_at"),
   order: integer("order").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
+  // ── Priority tier & outcome tracking (daily-routine foundation) ────────────
+  // `tier` drives how hard Jessica pushes and how fast Ray gets pulled in —
+  // see lib/task-tiers.ts for the ladder. Defaults to the lowest tier so any
+  // pre-existing or voice-created row is safe (never escalates unexpectedly).
+  tier: text("tier").notNull().default("routine"),
+  // `status` is the real outcome. `isCompleted` above is kept as a mirror of
+  // (status === "done") purely for backwards compatibility with the existing
+  // openapi contract and frontend — write both, read `status`.
+  status: text("status").notNull().default("pending"),
+  // How a completion was confirmed: "spoken" | "family" | "sensor" | "admin".
+  // Null whenever status !== "done" — "done with no source" is not a valid state.
+  completionSource: text("completion_source"),
+  // Escalation-ladder bookkeeping, reset daily alongside status.
+  attemptCount: integer("attempt_count").notNull().default(0),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  escalatedAt: timestamp("escalated_at"),
 });
 
 export const symptomLogsTable = pgTable("symptom_logs", {
@@ -352,6 +368,37 @@ export const careEventsTable = pgTable("care_events", {
 });
 
 export type CareEvent = typeof careEventsTable.$inferSelect;
+
+/**
+ * One resolved day type per tenant per Pacific calendar date.
+ *
+ * Written once each morning by the `day_type_resolve` cron job. The unique
+ * (tenant_id, day_date) pair is what guarantees the "never two conflicting
+ * labels at once" rule from the routine spec — a day can only ever hold one
+ * label, and a re-run updates that row rather than inserting a second one.
+ *
+ * `pendingRecommendation` holds a Rest-day suggestion Jessica has raised but
+ * Ray has not answered yet. Jessica may only ever recommend: the resolver
+ * never writes "rest" into `dayType` off her recommendation alone — Ray's
+ * confirmation does that, which is what clears this column.
+ */
+export const dayTypesTable = pgTable("day_types", {
+  id: serial("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().default("local"),
+  dayDate: date("day_date").notNull(),
+  dayType: text("day_type").notNull().default("normal"),
+  // Which input won the precedence contest — for display and debugging.
+  resolvedBy: text("resolved_by").notNull().default("auto"),
+  reason: text("reason"),
+  pendingRecommendation: text("pending_recommendation"),
+  recommendationReason: text("recommendation_reason"),
+  confirmedBy: text("confirmed_by"),
+  confirmedAt: timestamp("confirmed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type DayTypeRow = typeof dayTypesTable.$inferSelect;
 
 export const medicalDocumentsTable = pgTable("medical_documents", {
   id: serial("id").primaryKey(),
