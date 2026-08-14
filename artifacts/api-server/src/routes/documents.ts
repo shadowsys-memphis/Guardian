@@ -69,9 +69,11 @@ router.get("/documents/care-context", async (req, res) => {
     // inArray, not a raw `= ANY(${keys})` — Drizzle binds a JS array as a
     // single scalar parameter, which Postgres rejects, so the raw form threw
     // a 500 on every request and silently hid the dashboard's care alerts.
-    const rows = await db.select().from(appSettingsTable).where(
-      inArray(appSettingsTable.key, ["dietary_profile", "activity_restrictions"])
-    );
+    const rows = await db
+      .select()
+      .from(medicalDocumentsTable)
+      .orderBy(desc(medicalDocumentsTable.createdAt))
+      .limit(MAX_DOCUMENTS_RETURNED);
     const result: Record<string, unknown> = {};
     for (const row of rows) {
       try { result[row.key] = JSON.parse(row.value); } catch { result[row.key] = row.value; }
@@ -217,7 +219,26 @@ router.patch("/documents/:id", async (req, res) => {
       return;
     }
     const body = z.object({
-      card_last4: z.string().nullable(),
+      docId: z.number().int(),
+      source_label: z.string().default("Medical Document"),
+      overwrite: z.boolean().default(false),
+      appointments: z.array(z.object({
+        date: z.string(),
+        time: z.string().optional(),
+        provider: z.string(),
+        location: z.string().optional(),
+        type: z.string().optional(),
+      })).default([]),
+      medications: z.array(z.object({
+        name: z.string(),
+        dose: z.string().optional().nullable(),
+        frequency: z.string().optional().nullable(),
+        instructions: z.string().optional().nullable(),
+        timeOfDay: z.string().optional(),
+      })).default([]),
+      dietary_restrictions: z.array(z.string()).default([]),
+      activity_restrictions: z.array(z.string()).default([]),
+      clinical_notes: z.string().default(""),
     }).parse(req.body);
 
     let cardLast4: string | null = null;
@@ -255,8 +276,26 @@ router.post("/documents/scan", async (req, res) => {
     await ensureMedicalDocsTable();
 
     const body = z.object({
-      imageBase64: z.string().min(100),
-      mimeType: z.string().default("image/jpeg"),
+      docId: z.number().int(),
+      source_label: z.string().default("Medical Document"),
+      overwrite: z.boolean().default(false),
+      appointments: z.array(z.object({
+        date: z.string(),
+        time: z.string().optional(),
+        provider: z.string(),
+        location: z.string().optional(),
+        type: z.string().optional(),
+      })).default([]),
+      medications: z.array(z.object({
+        name: z.string(),
+        dose: z.string().optional().nullable(),
+        frequency: z.string().optional().nullable(),
+        instructions: z.string().optional().nullable(),
+        timeOfDay: z.string().optional(),
+      })).default([]),
+      dietary_restrictions: z.array(z.string()).default([]),
+      activity_restrictions: z.array(z.string()).default([]),
+      clinical_notes: z.string().default(""),
     }).parse(req.body);
 
     const response = await ai.models.generateContent({
@@ -474,7 +513,12 @@ router.post("/documents/apply", async (req, res) => {
         details.push(`Medication added: ${med.name}${med.dose ? ` (${med.dose})` : ""}`);
       }
 
-      if (body.dietary_restrictions.length > 0) {
+      // On a re-apply (overwrite: true), write even an empty array so that
+      // unchecking every restriction actually clears the stored value instead
+      // of silently leaving the old one in place. On a first-time apply we
+      // keep the old "only write when present" behaviour — there's nothing to
+      // replace yet, so an empty submission means "skip this section."
+      if (body.dietary_restrictions.length > 0 || body.overwrite) {
         const dietValue = JSON.stringify({
           restrictions: body.dietary_restrictions,
           source: body.source_label,
@@ -485,10 +529,14 @@ router.post("/documents/apply", async (req, res) => {
           VALUES ('dietary_profile', ${dietValue}, NOW())
           ON CONFLICT (key) DO UPDATE SET value = ${dietValue}, updated_at = NOW()
         `);
-        details.push(`Dietary profile updated: ${body.dietary_restrictions.join(", ")}`);
+        details.push(
+          body.dietary_restrictions.length > 0
+            ? `Dietary profile updated: ${body.dietary_restrictions.join(", ")}`
+            : "Dietary profile cleared (all restrictions removed)"
+        );
       }
 
-      if (body.activity_restrictions.length > 0) {
+      if (body.activity_restrictions.length > 0 || body.overwrite) {
         const actValue = JSON.stringify({
           restrictions: body.activity_restrictions,
           source: body.source_label,
@@ -499,7 +547,11 @@ router.post("/documents/apply", async (req, res) => {
           VALUES ('activity_restrictions', ${actValue}, NOW())
           ON CONFLICT (key) DO UPDATE SET value = ${actValue}, updated_at = NOW()
         `);
-        details.push(`Activity restrictions updated: ${body.activity_restrictions.join(", ")}`);
+        details.push(
+          body.activity_restrictions.length > 0
+            ? `Activity restrictions updated: ${body.activity_restrictions.join(", ")}`
+            : "Activity restrictions cleared (all restrictions removed)"
+        );
       }
 
       if (body.clinical_notes) {
