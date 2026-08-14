@@ -1,0 +1,40 @@
+1. Wake time: What time should Dad wake up every normal day? Is 6:00 AM absolute, or is there an acceptable window?
+2. Bedtime: What exact time should Dad be in bed, and what exact time should TV/screens/lights be off?
+3. Jessica wake-up: At wake time, what exactly should Jessica do? Call once? Retry if unanswered? How many retries and at what interval?
+4. Getting out of bed: After Jessica wakes him, how many minutes does Dad have to physically get up before Jessica follows up?
+5. Morning order: Is this the mandatory sequence: wake → make bed → pick up room → Koda → shower → breakfast → hydration, or should anything move?
+6. Koda: What exactly counts as completing the Koda task—walk duration/distance, backyard only, feeding, water, etc.? What happens if weather/health prevents a walk?
+7. Shower: Daily? What days can it be skipped? Does brushing teeth/deodorant/getting dressed belong in this same hygiene block?
+8. Breakfast: Exact target time? Does he have to eat a minimum amount, or is “meal presented” enough to mark the task complete?
+9. Morning medications: Are there any morning meds? If yes: exact time, medication responsibility, and what Jessica should do if they are late/refused.
+10. Hydration: How much should he drink at each hydration checkpoint? I need an objective completion condition, not just “hydration check.”
+11. 10:00 AM chores: Should Dad have a chore every day, only certain days, or only when Jessica assigns one?
+12. Chore selection: Who decides the chore—Jessica automatically, you manually, a predetermined weekly rotation, or Dad chooses from approved options?
+13. Chore duration: Should chores run until complete, for a fixed duration, or stop at a hard cutoff?
+14. Normal vs demanding days: The current schedule says “demanding day OR normalcy day.” What determines which one it is? I want to replace that ambiguity with an exact rule.
+15. Rest mode: What precisely activates Rest Mode? Medication-cycle phase, poor sleep, illness, appointment day, manual toggle, Jessica assessment, or something else?
+16. Rest Mode behavior: When active, which tasks disappear, which remain mandatory, and which are shortened?
+17. Noon medication: Is 12:00 PM absolute? What should Jessica do at 12:00, and what happens if Dad does not confirm taking it?
+18. Lunch: What time should lunch actually start? Your current version overlaps the noon medication and hydration checks.
+19. Afternoon activity: Is 2:00–5:00 PM truly free-choice recreation, or should Jessica select from specific categories such as hobby, outing, house project, cognitive activity, TV, nap, etc.?
+20. Naps: Are naps allowed? If so, during what window and for how long? This matters because an agent otherwise may treat sleeping during Q2/Q3 as noncompliance.
+21. 5:00 PM health check: What should Jessica actually ask/check? Mood, pain, hallucination symptoms, energy, hydration, appetite, medication effects, orientation, something else?
+22. Dinner: Is 6:00 PM the start of dinner or the medication reminder? Which happens first if both are scheduled at 6:00?
+23. Evening medication: Same question as noon: what constitutes confirmation, how many reminders occur, and when does a missed dose get escalated to you?
+24. Kitchen cleanup: Is Dad always responsible for putting dishes in the dishwasher after dinner? Should Jessica remind him, or is this unprompted?
+25. Mail: Does “Mail” mean retrieve physical mail, sort it, open it, or something else? Does it happen daily even if there is no mail?
+26. Journal: What exactly should happen at 8:00 PM—Dad writes independently, Jessica asks questions verbally, or Jessica records his answers? How long?
+27. Sleep check-in: What should Jessica determine at 9:00 PM? Simply remind him, or assess whether he is actually preparing for bed?
+28. Free time: During any “free time,” can Dad do anything, or are there prohibited activities / things Jessica should interrupt?
+29. Appointments: On appointment days, should the routine automatically restructure around the appointment or switch to a separate Appointment Day routine?
+30. Sunday: Same routine as every other day, or should Sunday have its own lighter schedule?
+31. Medication-cycle phases: Should the Haldol-cycle phase automatically change workload/activity expectations, or do you want one routine regardless of phase?
+32. Refusal: If Dad says “no” to a normal task, what should Jessica do: accept it, ask once more, postpone, substitute, notify you, or escalate depending on the task?
+33. No response: If Dad simply doesn’t respond, should Jessica treat that differently from an explicit refusal?
+34. Late tasks: If a task misses its scheduled time, should it be skipped, shifted forward, or remain outstanding until completed?
+35. Priority hierarchy: Which items are truly non-negotiable? I suspect meds, meals, hydration, basic hygiene, sleep, and safety—but you define the actual hierarchy.
+36. Your involvement: Which steps require you/family, which are exclusively Dad, and which should Jessica own autonomously?
+37. Jessica contact method: For each intervention, is Jessica using a phone call, in-home PSA/speaker, or eventually presence-routed audio? If multiple methods exist, what is the fallback order?
+38. Daily completion: At the end of the day, what should Brain Guardian consider a successful day—100% completion, all critical tasks completed, or a percentage/score?
+39. Unexpected events: Should Jessica be permitted to move the schedule for visitors, fatigue, bad weather, family plans, etc., or can only you authorize schedule changes?
+40. One final architecture decision: Do you want the final system to have one canonical Normal Day routine + explicit override modes (Rest Day, Appointment Day, Medication-Recovery Day, Sunday), rather than trying to cram every possibility into one schedule?
