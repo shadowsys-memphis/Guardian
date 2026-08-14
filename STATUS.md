@@ -48,6 +48,9 @@ Ray's phone only. Pops' number is saved and correct.
 - **Hermes rename** — the in-app `hermes.ts` is an internal dispatcher an AI named on July 3;
   it is NOT Ray's real Hermes system and touches nothing outside this app. Rename to
   `care-dispatch.ts` pending Ray's go-ahead.
+- **Quarter Orbit logo** — the app's logo (`quarter-orbit-*.svg`, spec in
+  `docs/quarter-orbit-kit.md`). Unfinished; it's designed to be interactive with the time
+  of day (the light rides the ring through Ray's four quarters). Parked, not abandoned.
 
 ## Where things live
 
