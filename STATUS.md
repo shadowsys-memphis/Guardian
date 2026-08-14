@@ -28,10 +28,17 @@ Ray's phone only. Pops' number is saved and correct.
 
 ## What's next (in order)
 
-1. **Transcript saving** — ElevenLabs has no post-call webhook configured, so call
-   transcripts don't save into the app yet. ~2 min in the ElevenLabs dashboard
-   (Settings → Webhooks → point at `/api/jessica/elevenlabs-webhook`), then make sure the
-   generated secret matches `ELEVENLABS_WEBHOOK_SECRET` in Replit Secrets.
+1. ~~**Transcript saving**~~ — **DONE 2026-08-14.** The webhook already existed at the
+   workspace level and pointed at the right URL; it had simply never been attached to the
+   Jessica agent (`post_call_webhook_id` was `null`). Now linked
+   (`ea0faa50cbed4960ae8923d261087141`, events `["transcript"]`, format json).
+   Verified: bad signature → 401, correctly-signed probe → 200, phone number still assigned.
+   **One thing still unconfirmed** — whether the HMAC secret stored on ElevenLabs' side
+   matches `ELEVENLABS_WEBHOOK_SECRET` in Replit Secrets. ElevenLabs won't reveal it via API.
+   After the first real call, check it with:
+   `curl -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v1/workspace/webhooks`
+   — if `most_recent_failure_error_code` is 401, the two secrets differ; re-generate on the
+   ElevenLabs webhook page and paste the same value into Replit Secrets. Currently `null`.
 2. **Test day on Ray's phone** — run the day's calls against the admin number, listen, fix.
 3. **Publish** — next Replit publish ships the new voice tools to production. The scary
    "delete care_events" migration warning was a dev/prod table mismatch, fixed 8/14 —
