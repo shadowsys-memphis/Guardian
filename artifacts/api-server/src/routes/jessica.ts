@@ -104,6 +104,41 @@ function parseCravingTag(text: string): string | null {
   try { return JSON.parse(match[1])?.meal ?? null; } catch { return null; }
 }
 
+/**
+ * First-contact framing for Pops' very first call from Jessica. Injected as
+ * `extraContext`, which lands near the top of the system prompt (above "YOUR
+ * JOB"), so it overrides the standard check-in behavior below it.
+ *
+ * Pops lives with PTSD, schizophrenia, and auditory hallucinations. An
+ * unfamiliar voice that already knows his medication schedule is exactly the
+ * wrong first impression, so this call does no health check-in, recites
+ * nothing from his record, and mutates no schedule state.
+ */
+export const INTRO_CALL_CONTEXT = `FIRST CALL — JUST A HELLO. This overrides everything below.
+
+Pops has never spoken to you before. Keep this short and easy — a few minutes.
+
+Say three things, in your own words, near the start:
+1. You're Jessica.
+2. You're a computer program — an AI — that his son Ray set up.
+3. What he can expect: you'll call now and then just to say hi and see how he's doing.
+
+Then ask ONE question: how he's doing today. That is the only question you ask on this call.
+
+DO NOT INTERVIEW HIM. This is the thing that matters most:
+- One question, then listen. Do not follow a short answer with another question.
+- "Good." is a complete answer. Accept it. Don't dig, don't rephrase, don't ask a second way.
+- Never stack questions. Never ask a question just to fill a silence — quiet is fine.
+- If he asks you something, answer it and stop. Let him lead.
+
+Not on this call: no health questions, no medications, no appointments, no schedule, no tools, no logging. If he brings something up, just talk about it like a friend would.
+
+If he asks whether you're a real person, say plainly that you're not — you're a program Ray set up. Pops sometimes hears voices that aren't real, so never leave that question hanging. If he seems unsure, tell him again gently that Ray knows all about this call and he can hang up and ask Ray anytime.
+
+If he's confused or upset, don't argue or explain twice. Tell him Ray can fill him in, that it was good to meet him, and end the call warmly. If he asks you not to call again, say that's fine and you'll let Ray know.
+
+Close by saying it was good to meet him and you'll say hi again sometime. Don't ask him to commit to anything.`;
+
 export type OutboundCallResult =
   | { ok: true; elevenLabsConversationId: string; sessionId: number | null; conversationId: number | null }
   | { ok: false; status: number; error: string; message?: string };
@@ -121,7 +156,7 @@ export type OutboundCallResult =
  * missed-call detection job could see the admin call's `reached=true` as
  * proof that Pops was reached and incorrectly reset the missed-call streak.
  */
-export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?: string; noSession?: boolean }): Promise<OutboundCallResult> {
+export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?: string; noSession?: boolean; intro?: boolean }): Promise<OutboundCallResult> {
   try {
     const apiKey = getElevenLabsKey();
     const agentId = getAgentId();
@@ -193,27 +228,44 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
       : "";
     // Scheduled jobs (appointment reminders, overdue-Haldol nudges) inject a
     // purpose for the call here — see lib/call-scheduler.ts.
+    // The intro block goes first so it sits above every other instruction —
+    // including the care-context and schedule blocks it tells Jessica not to
+    // recite on a first call.
+    const introBlock = opts?.intro ? `${INTRO_CALL_CONTEXT}\n\n` : "";
     const extraBlock = opts?.extraContext ? `${opts.extraContext}\n\n` : "";
-    const liveContext = extraBlock + careContextBlock + scheduleContext;
+    const liveContext = introBlock + extraBlock + careContextBlock + scheduleContext;
 
     const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue, intervalDays, zombiePhaseDays }, { channel: "phone" });
+
+    // The override MUST be nested inside conversation_initiation_client_data.
+    // Sent at the top level, the Twilio outbound-call endpoint silently drops
+    // it — no error, HTTP 200, call connects — and the agent falls back to the
+    // short prompt + static first_message stored on the ElevenLabs agent. That
+    // is what happened on 2026-08-14: Pops' intro call ran the stored check-in
+    // prompt with none of the context built below. Verify after any change by
+    // GETting the conversation and confirming
+    // conversation_initiation_client_data.conversation_config_override
+    // .agent.prompt.prompt is non-null.
+    const conversationConfigOverride = {
+      agent: {
+        prompt: {
+          prompt: systemPrompt,
+        },
+        // Force the LLM to generate its own opening line from the system
+        // prompt above instead of whatever static first_message happens to
+        // be stored on the ElevenLabs agent object (that value isn't
+        // controlled by our code and has drifted to a generic default
+        // before — see ELEVENLABS_HANDOFF.md).
+        first_message: "",
+      },
+    };
 
     const elevenLabsBody = {
       agent_id: agentId,
       agent_phone_number_id: phoneNumberId,
       to_number: targetPhone,
-      conversation_config_override: {
-        agent: {
-          prompt: {
-            prompt: systemPrompt,
-          },
-          // Force the LLM to generate its own opening line from the system
-          // prompt above instead of whatever static first_message happens to
-          // be stored on the ElevenLabs agent object (that value isn't
-          // controlled by our code and has drifted to a generic default
-          // before — see ELEVENLABS_HANDOFF.md).
-          first_message: "",
-        },
+      conversation_initiation_client_data: {
+        conversation_config_override: conversationConfigOverride,
       },
     };
 
@@ -277,7 +329,10 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
 }
 
 router.post("/jessica/outbound-call", requireLocalSession, async (req: Request, res: Response) => {
-  const result = await triggerOutboundCall({ test: req.body?.test === true });
+  const result = await triggerOutboundCall({
+    test: req.body?.test === true,
+    intro: req.body?.intro === true,
+  });
   if (!result.ok) {
     if (result.status >= 500) req.log.error({ result }, "Failed to initiate outbound call");
     res.status(result.status).json({ error: result.error, message: result.message });
