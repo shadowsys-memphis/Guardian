@@ -32,10 +32,22 @@ dev DB queries, and vice versa:
 
 ## Verifying agent/phone IDs
 
-This project's ElevenLabs agent has been renamed/recreated at least twice (was "Huey",
-briefly a different agent entirely, now "Laura") without every config or handoff doc
-being updated each time — a hardcoded agent/phone-number ID anywhere (env var, .md
-handoff doc, code comment) silently goes stale the next time the agent changes.
-Always confirm the current value against a live `GET /v1/convai/agents` /
-`/v1/convai/phone-numbers` call before trusting or reusing an ID, including ones
-found in this project's own docs — they are not self-updating.
+This project's ElevenLabs agent ID has drifted repeatedly (account has leftover
+agents named "Huey" x2, "New agent", and a since-deleted "Laura") without every
+config or handoff doc being updated each time — a hardcoded agent/phone-number ID
+anywhere (env var, .md handoff doc, code comment) silently goes stale the next time
+the agent changes. Always confirm the current value against a live
+`GET /v1/convai/agents` / `/v1/convai/phone-numbers` call before trusting or reusing
+an ID, including ones found in this project's own docs — they are not self-updating.
+
+**Existence is not correctness.** `ELEVENLABS_AGENT_ID` once pointed at "Laura" — a
+real, valid, blank-default agent that returned HTTP 200 on every check — while the
+actual fully-configured "Jessica" agent (real system prompt, greeting, voice) sat
+unreferenced under a different ID the whole time, still correctly assigned to the
+real phone number. An "does this ID resolve?" check cannot catch a wrong-but-valid
+ID; it only started failing once "Laura" was later deleted (200 → 404). The reliable
+way to find "the" real agent is to cross-check via a resource you trust more than the
+env var — e.g. `GET /v1/convai/phone-numbers` returns each number's
+`assigned_agent.agent_id`, which is a better source of truth than a possibly-stale
+`ELEVENLABS_AGENT_ID`. When in doubt, list ALL agents (`GET /v1/convai/agents`) and
+compare their names/prompts/tools rather than trusting the one env var points to.

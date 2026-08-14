@@ -16,5 +16,5 @@
 - [schedule_tasks.timeLabel format](schedule-tasks-timelabel-format.md) — always raw 24-hour "HHMM", no colon/AM-PM; don't confuse with assessment_settings.dailyCallTime which IS "HH:MM".
 - [ElevenLabs caller identity verification](elevenlabs-caller-identity-verification.md) — a shared tool secret proves "ElevenLabs sent this," not who's on the call; use system__called_number/system__caller_id to check that too.
 - [orval react-query hook gotchas](orval-react-query-hooks.md) — `enabled` needs a paired `queryKey`; generated mutations never auto-invalidate, so lists silently go stale without a manual invalidate/refetch.
-- [ElevenLabs live-state verification](elevenlabs-live-state-verification.md) — a signed webhook 200 doesn't prove our outbound-call code placed it; agent/phone IDs anywhere (env, docs) go stale silently — verify live.
+- [ElevenLabs live-state verification](elevenlabs-live-state-verification.md) — a 200/"exists" check isn't enough (a valid-but-wrong agent ID passes it too); cross-verify agent↔phone assignment live.
 - [ElevenLabs config validation](elevenlabs-config-validation.md) — daily job validates agent+phone IDs against live API; missed-call streak ≥ 2 triggers persistent alert + admin phone call.
