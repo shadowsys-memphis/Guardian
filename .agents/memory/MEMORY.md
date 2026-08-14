@@ -18,3 +18,4 @@
 - [orval react-query hook gotchas](orval-react-query-hooks.md) — `enabled` needs a paired `queryKey`; generated mutations never auto-invalidate, so lists silently go stale without a manual invalidate/refetch.
 - [ElevenLabs live-state verification](elevenlabs-live-state-verification.md) — a 200/"exists" check isn't enough (a valid-but-wrong agent ID passes it too); cross-verify agent↔phone assignment live.
 - [ElevenLabs config validation](elevenlabs-config-validation.md) — daily job validates agent+phone IDs against live API; missed-call streak ≥ 2 triggers persistent alert + admin phone call.
+- [Deployment secrets need republish](deployment-secrets-republish.md) — a corrected Secret reaches dev on workflow restart but NOT a live deployment until republished; never call a secret fix "done" without saying so.
