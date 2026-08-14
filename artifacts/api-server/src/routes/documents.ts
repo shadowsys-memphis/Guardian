@@ -367,164 +367,180 @@ router.post("/documents/apply", async (req, res) => {
 
     const details: string[] = [];
 
-    for (const appt of body.appointments) {
-      const title = `Appt: ${appt.provider}${appt.location ? ` @ ${appt.location}` : ""}`;
-      const timeLabel = appt.time ?? "TBD";
-      const descriptionPrefix = `${appt.date}${appt.location ? ` — ${appt.location}` : ""}`;
+    // All writes are inside a single transaction so a mid-apply failure rolls
+    // back completely — Pops' care plan is never left half-updated.
+    await db.transaction(async (tx) => {
+      for (const appt of body.appointments) {
+        const title = `Appt: ${appt.provider}${appt.location ? ` @ ${appt.location}` : ""}`;
+        const timeLabel = appt.time ?? "TBD";
+        const descriptionPrefix = `${appt.date}${appt.location ? ` — ${appt.location}` : ""}`;
 
-      // scheduleTasksTable (Rotation/Dashboard display) and
-      // medicalAppointmentsTable (the reminder-call job's data source) are
-      // checked and inserted independently below — deliberately NOT one
-      // `continue` gating both — so each table's duplicate protection holds
-      // on its own. Without this, a document that already has its schedule
-      // task (e.g. applied before the medical_appointments dual-write below
-      // existed) would short-circuit here and never backfill the missing
-      // medical_appointments row even when Ray explicitly re-applies it.
-      //
-      // Decision point (intentionally not automated): appointments from
-      // documents applied before this fix — which exist ONLY in
-      // schedule_tasks — are not bulk-migrated into medical_appointments by
-      // this endpoint. Ray must click "Update Care Plan" on that specific
-      // document (which now backfills it via this same independent check)
-      // or re-enter the appointment by hand in the Appointments tab.
-      let scheduleTaskExists = false;
-      if (body.overwrite) {
-        const existing = await db
-          .select({ id: scheduleTasksTable.id })
-          .from(scheduleTasksTable)
-          .where(
-            sql`${scheduleTasksTable.title} = ${title} AND ${scheduleTasksTable.description} LIKE ${descriptionPrefix + "%"}`
-          )
-          .limit(1);
-        scheduleTaskExists = existing.length > 0;
-      }
-      if (!scheduleTaskExists) {
-        await db.insert(scheduleTasksTable).values({
-          tenantId: "local",
-          quarter: "Q1",
-          timeLabel,
-          title,
-          description: `${descriptionPrefix}. Source: ${body.source_label}`,
-          isActive: true,
-          isCompleted: false,
-          order: 99,
-        });
-      }
-
-      // Dual-write into medical_appointments (kept separate from
-      // scheduleTasksTable above, which only drives the Rotation/Dashboard
-      // display). The night-before reminder-call job in lib/call-scheduler.ts
-      // queries medical_appointments directly, so without this insert a
-      // scanned appointment would show up on the dashboard but Jessica would
-      // never call to remind Pops about it the evening before.
-      let medApptExists = false;
-      if (body.overwrite) {
-        const existingMedAppt = await db
-          .select({ id: medicalAppointmentsTable.id })
-          .from(medicalAppointmentsTable)
-          .where(
-            sql`${medicalAppointmentsTable.appointmentDate} = ${appt.date} AND ${medicalAppointmentsTable.provider} = ${appt.provider}`
-          )
-          .limit(1);
-        medApptExists = existingMedAppt.length > 0;
-      }
-      if (!medApptExists) {
-        await db.insert(medicalAppointmentsTable).values({
-          appointmentDate: appt.date,
-          appointmentTime: appt.time ?? "09:00",
-          provider: appt.provider,
-          location: appt.location ?? null,
-          type: normalizeAppointmentType(appt.type),
-          notes: `Source: ${body.source_label}`,
-        });
-      }
-
-      details.push(
-        scheduleTaskExists && medApptExists
-          ? `Appointment already scheduled (skipped): ${title} on ${appt.date}`
-          : `Appointment added: ${title} on ${appt.date}`
-      );
-    }
-
-    for (const med of body.medications) {
-      if (body.overwrite) {
-        const deactivated = await db
-          .update(medicationsTable)
-          .set({ active: false })
-          .where(
-            sql`LOWER(${medicationsTable.name}) = LOWER(${med.name}) AND ${medicationsTable.active} = true`
-          )
-          .returning();
-        if (deactivated.length > 0) {
-          details.push(`Deactivated old medication: ${med.name} (${deactivated.length} entry)`);
+        // scheduleTasksTable (Rotation/Dashboard display) and
+        // medicalAppointmentsTable (the reminder-call job's data source) are
+        // checked and inserted independently below — deliberately NOT one
+        // `continue` gating both — so each table's duplicate protection holds
+        // on its own. Without this, a document that already has its schedule
+        // task (e.g. applied before the medical_appointments dual-write below
+        // existed) would short-circuit here and never backfill the missing
+        // medical_appointments row even when Ray explicitly re-applies it.
+        //
+        // Decision point (intentionally not automated): appointments from
+        // documents applied before this fix — which exist ONLY in
+        // schedule_tasks — are not bulk-migrated into medical_appointments by
+        // this endpoint. Ray must click "Update Care Plan" on that specific
+        // document (which now backfills it via this same independent check)
+        // or re-enter the appointment by hand in the Appointments tab.
+        let scheduleTaskExists = false;
+        if (body.overwrite) {
+          const existing = await tx
+            .select({ id: scheduleTasksTable.id })
+            .from(scheduleTasksTable)
+            .where(
+              sql`${scheduleTasksTable.title} = ${title} AND ${scheduleTasksTable.description} LIKE ${descriptionPrefix + "%"}`
+            )
+            .limit(1);
+          scheduleTaskExists = existing.length > 0;
         }
+        if (!scheduleTaskExists) {
+          await tx.insert(scheduleTasksTable).values({
+            tenantId: "local",
+            quarter: "Q1",
+            timeLabel,
+            title,
+            description: `${descriptionPrefix}. Source: ${body.source_label}`,
+            isActive: true,
+            isCompleted: false,
+            order: 99,
+          });
+        }
+
+        // Dual-write into medical_appointments (kept separate from
+        // scheduleTasksTable above, which only drives the Rotation/Dashboard
+        // display). The night-before reminder-call job in lib/call-scheduler.ts
+        // queries medical_appointments directly, so without this insert a
+        // scanned appointment would show up on the dashboard but Jessica would
+        // never call to remind Pops about it the evening before.
+        let medApptExists = false;
+        if (body.overwrite) {
+          const existingMedAppt = await tx
+            .select({ id: medicalAppointmentsTable.id })
+            .from(medicalAppointmentsTable)
+            .where(
+              sql`${medicalAppointmentsTable.appointmentDate} = ${appt.date} AND ${medicalAppointmentsTable.provider} = ${appt.provider}`
+            )
+            .limit(1);
+          medApptExists = existingMedAppt.length > 0;
+        }
+        if (!medApptExists) {
+          await tx.insert(medicalAppointmentsTable).values({
+            appointmentDate: appt.date,
+            appointmentTime: appt.time ?? "09:00",
+            provider: appt.provider,
+            location: appt.location ?? null,
+            type: normalizeAppointmentType(appt.type),
+            notes: `Source: ${body.source_label}`,
+          });
+        }
+
+        details.push(
+          scheduleTaskExists && medApptExists
+            ? `Appointment already scheduled (skipped): ${title} on ${appt.date}`
+            : `Appointment added: ${title} on ${appt.date}`
+        );
       }
 
-      await db.insert(medicationsTable).values({
-        name: med.name,
-        dose: med.dose ?? "as prescribed",
-        frequency: med.frequency ?? "as directed",
-        timeOfDay: med.timeOfDay ?? "morning",
-        notes: med.instructions ?? null,
-        active: true,
-      });
-      details.push(`Medication added: ${med.name}${med.dose ? ` (${med.dose})` : ""}`);
-    }
+      for (const med of body.medications) {
+        if (body.overwrite) {
+          const deactivated = await tx
+            .update(medicationsTable)
+            .set({ active: false })
+            .where(
+              sql`LOWER(${medicationsTable.name}) = LOWER(${med.name}) AND ${medicationsTable.active} = true`
+            )
+            .returning();
+          if (deactivated.length > 0) {
+            details.push(`Deactivated old medication: ${med.name} (${deactivated.length} entry)`);
+          }
+        }
 
-    if (body.dietary_restrictions.length > 0) {
-      const dietValue = JSON.stringify({
-        restrictions: body.dietary_restrictions,
-        source: body.source_label,
-        updated_at: new Date().toISOString(),
-      });
-      await db.execute(sql`
-        INSERT INTO app_settings (key, value, updated_at)
-        VALUES ('dietary_profile', ${dietValue}, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = ${dietValue}, updated_at = NOW()
-      `);
-      details.push(`Dietary profile updated: ${body.dietary_restrictions.join(", ")}`);
-    }
-
-    if (body.activity_restrictions.length > 0) {
-      const actValue = JSON.stringify({
-        restrictions: body.activity_restrictions,
-        source: body.source_label,
-        updated_at: new Date().toISOString(),
-      });
-      await db.execute(sql`
-        INSERT INTO app_settings (key, value, updated_at)
-        VALUES ('activity_restrictions', ${actValue}, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = ${actValue}, updated_at = NOW()
-      `);
-      details.push(`Activity restrictions updated: ${body.activity_restrictions.join(", ")}`);
-    }
-
-    if (body.clinical_notes) {
-      await db.execute(sql`
-        INSERT INTO app_settings (key, value, updated_at)
-        VALUES ('clinical_notes_latest', ${body.clinical_notes}, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = ${body.clinical_notes}, updated_at = NOW()
-      `);
-    }
-
-    await db.update(medicalDocumentsTable)
-      .set({ appliedAt: new Date() })
-      .where(eq(medicalDocumentsTable.id, body.docId));
-
-    await dispatch(
-      {
-        type: "MEDICAL_DOC_APPLIED",
-        title: body.source_label,
-        details: details.join("; "),
-        docId: body.docId,
-      },
-      {
-        tenantId: "local",
-        source: "admin",
-        actor: "caregiver",
-        confidence: "high",
+        await tx.insert(medicationsTable).values({
+          name: med.name,
+          dose: med.dose ?? "as prescribed",
+          frequency: med.frequency ?? "as directed",
+          timeOfDay: med.timeOfDay ?? "morning",
+          notes: med.instructions ?? null,
+          active: true,
+        });
+        details.push(`Medication added: ${med.name}${med.dose ? ` (${med.dose})` : ""}`);
       }
-    );
+
+      if (body.dietary_restrictions.length > 0) {
+        const dietValue = JSON.stringify({
+          restrictions: body.dietary_restrictions,
+          source: body.source_label,
+          updated_at: new Date().toISOString(),
+        });
+        await tx.execute(sql`
+          INSERT INTO app_settings (key, value, updated_at)
+          VALUES ('dietary_profile', ${dietValue}, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = ${dietValue}, updated_at = NOW()
+        `);
+        details.push(`Dietary profile updated: ${body.dietary_restrictions.join(", ")}`);
+      }
+
+      if (body.activity_restrictions.length > 0) {
+        const actValue = JSON.stringify({
+          restrictions: body.activity_restrictions,
+          source: body.source_label,
+          updated_at: new Date().toISOString(),
+        });
+        await tx.execute(sql`
+          INSERT INTO app_settings (key, value, updated_at)
+          VALUES ('activity_restrictions', ${actValue}, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = ${actValue}, updated_at = NOW()
+        `);
+        details.push(`Activity restrictions updated: ${body.activity_restrictions.join(", ")}`);
+      }
+
+      if (body.clinical_notes) {
+        await tx.execute(sql`
+          INSERT INTO app_settings (key, value, updated_at)
+          VALUES ('clinical_notes_latest', ${body.clinical_notes}, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = ${body.clinical_notes}, updated_at = NOW()
+        `);
+      }
+
+      // Mark the document as applied only after all other writes succeed —
+      // this is the commit sentinel; if anything above throws, this never runs
+      // and the transaction rolls back, so appliedAt stays null and Ray can
+      // safely try again.
+      await tx.update(medicalDocumentsTable)
+        .set({ appliedAt: new Date() })
+        .where(eq(medicalDocumentsTable.id, body.docId));
+    });
+
+    // dispatch runs after the transaction commits and is a best-effort
+    // notification — a dispatch failure does NOT mean the care plan wasn't
+    // saved (the transaction already committed), so we log and continue
+    // rather than surfacing a misleading error to Ray.
+    try {
+      await dispatch(
+        {
+          type: "MEDICAL_DOC_APPLIED",
+          title: body.source_label,
+          details: details.join("; "),
+          docId: body.docId,
+        },
+        {
+          tenantId: "local",
+          source: "admin",
+          actor: "caregiver",
+          confidence: "high",
+        }
+      );
+    } catch (dispatchErr) {
+      req.log.warn({ err: dispatchErr }, "MEDICAL_DOC_APPLIED dispatch failed (care plan was saved successfully)");
+    }
 
     const summary = details.length > 0
       ? `Applied ${details.length} item(s) from ${body.source_label}.`
@@ -536,8 +552,11 @@ router.post("/documents/apply", async (req, res) => {
       res.status(400).json({ error: "Invalid apply payload" });
       return;
     }
-    req.log.error({ err }, "Document apply failed");
-    res.status(500).json({ error: "Apply failed" });
+    req.log.error({ err }, "Document apply failed — transaction rolled back");
+    res.status(500).json({
+      error: "Apply failed — nothing was saved",
+      message: "An error occurred while applying the document. The care plan was not changed — no items were partially applied. You can try again safely.",
+    });
   }
 });
 
