@@ -268,10 +268,10 @@ async function ensureRoutineFoundationSchema(): Promise<void> {
       await pool.query(`
         UPDATE schedule_tasks SET tier = CASE
           WHEN title ~* '\\m(fall|emergency|911|panic|unsafe|stove|smoke|wander)\\M' THEN 'safety'
-          WHEN title ~* '\\m(med|meds|medication|pill|pills|dose|haldol|injection|prescription|rx)\\M' THEN 'medication'
-          WHEN title ~* '\\m(breakfast|lunch|dinner|snack|meal|eat|water|hydrat|drink|fluid)\\M' THEN 'meals_hydration'
-          WHEN title ~* '\\m(sleep|bed|bedtime|nap|wake|goodnight)\\M' THEN 'sleep'
-          WHEN title ~* '\\m(shower|bathe|bath|teeth|brush|deodorant|hygiene|dress|clothes|koda|dog|walk|feed)\\M' THEN 'hygiene_koda'
+          WHEN title ~* '\\m(meds?|medications?|pills?|doses?|haldol|injections?|prescriptions?|rx)\\M' THEN 'medication'
+          WHEN title ~* '\\m(breakfast|lunch|dinner|snacks?|meals?|eat|water|hydration|hydrate|drinks?|fluids?)\\M' THEN 'meals_hydration'
+          WHEN title ~* '\\m(sleep|bed|bedtime|naps?|wake|goodnight)\\M' THEN 'sleep'
+          WHEN title ~* '\\m(showers?|bathe|bath|teeth|brush|deodorant|hygiene|dress|clothes|koda|dog|walks?|feed)\\M' THEN 'hygiene_koda'
           ELSE 'routine'
         END
         WHERE tier = 'routine'

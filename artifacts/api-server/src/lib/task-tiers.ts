@@ -283,9 +283,9 @@ export function nextLadderStep(state: LadderState, nowMs: number): LadderAction 
 export function inferTierFromTitle(title: string): TaskTier {
   const t = title.toLowerCase();
   if (/\b(fall|emergency|911|panic|unsafe|stove|smoke|wander)\b/.test(t)) return "safety";
-  if (/\b(med|meds|medication|pill|pills|dose|haldol|injection|prescription|rx)\b/.test(t)) return "medication";
-  if (/\b(breakfast|lunch|dinner|snack|meal|eat|water|hydrat|drink|fluid)\b/.test(t)) return "meals_hydration";
-  if (/\b(sleep|bed|bedtime|nap|wake|wake-up|goodnight|lights out)\b/.test(t)) return "sleep";
-  if (/\b(shower|bathe|bath|teeth|brush|deodorant|hygiene|dress|clothes|koda|dog|walk|feed)\b/.test(t)) return "hygiene_koda";
+  if (/\b(meds?|medications?|pills?|doses?|haldol|injections?|prescriptions?|rx)\b/.test(t)) return "medication";
+  if (/\b(breakfast|lunch|dinner|snacks?|meals?|eat|water|hydration|hydrate|drinks?|fluids?)\b/.test(t)) return "meals_hydration";
+  if (/\b(sleep|bed|bedtime|naps?|wake|wake-up|goodnight|lights out)\b/.test(t)) return "sleep";
+  if (/\b(showers?|bathe|bath|teeth|brush|deodorant|hygiene|dress|clothes|koda|dog|walks?|feed)\b/.test(t)) return "hygiene_koda";
   return DEFAULT_TIER;
 }

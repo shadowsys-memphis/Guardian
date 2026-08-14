@@ -108,7 +108,9 @@ export type HermesActionType =
   | "MEDICAL_DOC_APPLIED"
   | "REMOVE_TASK"
   | "RESCHEDULE_TASK"
-  | "UPDATE_CALL_SCHEDULE";
+  | "UPDATE_CALL_SCHEDULE"
+  | "COMPLETE_TASK"
+  | "REFUSE_TASK";
 
 export interface HermesAction {
   type: HermesActionType;
@@ -283,6 +285,77 @@ async function handleRescheduleTask(action: HermesAction, ctx: LedgerContext): P
   return { ok: true, message: `Moved "${task.title}" to ${formatTimeLabel(normalized)}.`, outcome: "dispatched" };
 }
 
+/**
+ * Marks a schedule task done from a live conversation. This is the ONLY path
+ * by which Jessica can complete a task, and it always records how the
+ * completion was confirmed: "spoken" (Pops himself said so on the call — the
+ * default) or "family" (a family member on the call confirmed it). Hydration,
+ * breakfast, and Koda completions all flow through here, which is what
+ * enforces the "only complete on a live confirmation" rule — there is no
+ * assume-it-happened path.
+ */
+async function handleCompleteTask(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
+  const title = (action.title as string)?.trim();
+  if (!title) {
+    await writeLedger(action, ctx, "skipped");
+    return { ok: false, message: "Which task should I mark as done?", outcome: "skipped" };
+  }
+
+  const matches = await findTaskMatches(ctx.tenantId, title);
+  if (matches.length === 0) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `I couldn't find a task called "${title}" on the schedule.`, outcome: "failed" };
+  }
+  if (matches.length > 1) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `I found more than one task matching "${title}": ${describeTasks(matches)}. Which one is done?`, outcome: "failed" };
+  }
+
+  const task = matches[0];
+  const source = action.source === "family" ? "family" : "spoken";
+  await db
+    .update(scheduleTasksTable)
+    // isCompleted mirrors (status === "done") for the legacy contract — always written together.
+    .set({ status: "done", isCompleted: true, completedAt: new Date(), completionSource: source })
+    .where(eq(scheduleTasksTable.id, task.id));
+  logger.info({ action, taskId: task.id, source, tenantId: ctx.tenantId }, "[Hermes] COMPLETE_TASK → schedule_tasks");
+  await writeLedger(action, ctx, "completed", { doctorRelevant: true, learningRelevant: true });
+  return { ok: true, message: `Marked "${task.title}" as done.`, outcome: "completed" };
+}
+
+/**
+ * Records an explicit refusal — "he told me no." Deliberately distinct from
+ * no-answer (which only the scheduler can conclude, after retries go
+ * unanswered): refusal is a clinical signal and escalates on its own ladder
+ * (see task-tiers.ts — medication-tier refusals notify Ray immediately).
+ */
+async function handleRefuseTask(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
+  const title = (action.title as string)?.trim();
+  if (!title) {
+    await writeLedger(action, ctx, "skipped");
+    return { ok: false, message: "Which task did he decline?", outcome: "skipped" };
+  }
+
+  const matches = await findTaskMatches(ctx.tenantId, title);
+  if (matches.length === 0) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `I couldn't find a task called "${title}" on the schedule.`, outcome: "failed" };
+  }
+  if (matches.length > 1) {
+    await writeLedger(action, ctx, "failed");
+    return { ok: false, message: `I found more than one task matching "${title}": ${describeTasks(matches)}. Which one did he decline?`, outcome: "failed" };
+  }
+
+  const task = matches[0];
+  await db
+    .update(scheduleTasksTable)
+    .set({ status: "refused", isCompleted: false, completedAt: null, completionSource: null, lastAttemptAt: new Date() })
+    .where(eq(scheduleTasksTable.id, task.id));
+  logger.info({ action, taskId: task.id, tenantId: ctx.tenantId }, "[Hermes] REFUSE_TASK → schedule_tasks");
+  await writeLedger(action, ctx, "dispatched", { doctorRelevant: true, learningRelevant: true });
+  return { ok: true, message: `Noted — "${task.title}" declined. I won't push further right now.`, outcome: "dispatched" };
+}
+
 async function handleUpdateCallSchedule(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
   const hasEnabled = typeof action.enabled === "boolean";
   const hasTime = typeof action.time === "string" && action.time.trim().length > 0;
@@ -416,6 +489,10 @@ export async function dispatch(action: HermesAction, ctx: LedgerContext): Promis
         return await handleRemoveTask(action, ctx);
       case "RESCHEDULE_TASK":
         return await handleRescheduleTask(action, ctx);
+      case "COMPLETE_TASK":
+        return await handleCompleteTask(action, ctx);
+      case "REFUSE_TASK":
+        return await handleRefuseTask(action, ctx);
       case "UPDATE_CALL_SCHEDULE":
         return await handleUpdateCallSchedule(action, ctx);
       case "TOGGLE_SMART_DEVICE":
