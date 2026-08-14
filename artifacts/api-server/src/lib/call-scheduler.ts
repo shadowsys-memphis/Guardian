@@ -408,9 +408,24 @@ async function validateElevenLabsConfig(): Promise<{
         headers: { "xi-api-key": apiKey },
       });
       if (res.ok) {
-        agentOk = true;
+        // IDENTITY CHECK — existence is not correctness. This config has
+        // repeatedly drifted to a *valid but wrong* agent ("Laura", a blank
+        // default in an old second ElevenLabs account), and an ID that merely
+        // resolves passes silently while calls run with a stranger's prompt.
+        // The reliable identity signal is the agent's NAME: it must be Jessica.
+        const agent = await res.json() as { name?: string };
+        const agentName = agent.name ?? "(unnamed)";
+        if (agentName.trim().toLowerCase() === "jessica") {
+          agentOk = true;
+        } else {
+          issues.push(
+            `WRONG AGENT: ELEVENLABS_AGENT_ID resolves to "${agentName}", not Jessica. ` +
+            `The API key and agent ID are likely from the wrong ElevenLabs account — ` +
+            `see ELEVENLABS_HANDOFF.md for the verified configuration.`
+          );
+        }
       } else if (res.status === 404) {
-        issues.push(`Agent ID "${agentId}" not found in ElevenLabs — it may have been deleted or renamed`);
+        issues.push(`Agent ID "${agentId}" not found in ElevenLabs — wrong account's API key, or the agent was deleted. See ELEVENLABS_HANDOFF.md.`);
       } else {
         issues.push(`Agent check failed (HTTP ${res.status})`);
       }
@@ -427,12 +442,21 @@ async function validateElevenLabsConfig(): Promise<{
         headers: { "xi-api-key": apiKey },
       });
       if (res.ok) {
-        const list = await res.json() as Array<{ phone_number: string; phone_number_id: string }>;
+        const list = await res.json() as Array<{ phone_number: string; phone_number_id: string; assigned_agent?: { agent_id?: string; agent_name?: string } }>;
         const match = list.find((p) => p.phone_number === phoneId || p.phone_number_id === phoneId);
         if (match) {
-          phoneOk = true;
+          // The number must also be assigned to OUR agent — a number that
+          // exists but rings a different agent is the same wrong-account trap.
+          if (!agentId || !match.assigned_agent?.agent_id || match.assigned_agent.agent_id === agentId) {
+            phoneOk = true;
+          } else {
+            issues.push(
+              `Phone number is assigned to agent "${match.assigned_agent.agent_name ?? match.assigned_agent.agent_id}", ` +
+              `not the configured ELEVENLABS_AGENT_ID — see ELEVENLABS_HANDOFF.md.`
+            );
+          }
         } else {
-          issues.push(`Phone number ID "${phoneId}" not found in ElevenLabs account (${list.length} number(s) checked)`);
+          issues.push(`Phone number ID "${phoneId}" not found in this ElevenLabs account (${list.length} number(s) visible) — likely the wrong account's API key. See ELEVENLABS_HANDOFF.md.`);
         }
       } else {
         issues.push(`Phone number check failed (HTTP ${res.status})`);
