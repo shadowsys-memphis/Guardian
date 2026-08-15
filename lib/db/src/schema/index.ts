@@ -213,6 +213,14 @@ export const cartItemsTable = pgTable("cart_items", {
   source: text("source").notNull().default("meal"),
 });
 
+export const stapleItemsTable = pgTable("staple_items", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  quantity: text("quantity").notNull().default("1"),
+  unit: text("unit").notNull().default("each"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const mealCravingsTable = pgTable("meal_cravings", {
   id: serial("id").primaryKey(),
   mealName: text("meal_name").notNull(),

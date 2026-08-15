@@ -39,6 +39,11 @@ import {
   useSwapCartMeal,
   useApproveCart,
   useDismissCart,
+  useListStaples,
+  useCreateStaple,
+  useDeleteStaple,
+  useAddStaplesToCart,
+  type StapleItem,
   useListCravings,
   useUpdateCraving,
   useRemixMealPlan,
@@ -87,6 +92,10 @@ export function ShopperPage() {
   const { data: meals, refetch: refetchMeals } = useListMeals();
   const { data: cart, refetch: refetchCart } = useGetCart();
   const { data: cravings, refetch: refetchCravings } = useListCravings();
+  const { data: staples, refetch: refetchStaples } = useListStaples();
+  const [newStapleName, setNewStapleName] = useState("");
+  const [newStapleQty, setNewStapleQty] = useState("");
+  const [newStapleUnit, setNewStapleUnit] = useState("");
   const [mealDriveExporting, setMealDriveExporting] = useState(false);
   const [remixInput, setRemixInput] = useState("");
   const [remixedPlan, setRemixedPlan] = useState("");
@@ -208,6 +217,25 @@ export function ShopperPage() {
     onError: () => toast({ title: "Couldn't add item", variant: "destructive" }),
   } });
   const removeCartItem = useRemoveCartItem({ mutation: { onSuccess: () => refetchCart() } });
+  const createStaple = useCreateStaple({ mutation: {
+    onSuccess: () => { refetchStaples(); setNewStapleName(""); setNewStapleQty(""); setNewStapleUnit(""); },
+    onError: (err: any) => toast({
+      title: "Couldn't save staple",
+      description: err?.response?.data?.error ?? "It may already be on the list.",
+      variant: "destructive",
+    }),
+  } });
+  const deleteStaple = useDeleteStaple({ mutation: { onSuccess: () => refetchStaples() } });
+  const addStaplesToCart = useAddStaplesToCart({ mutation: {
+    onSuccess: (data: any) => {
+      refetchCart();
+      toast({
+        title: data.added > 0 ? `Added ${data.added} staple${data.added === 1 ? "" : "s"} to the cart.` : "Nothing to add",
+        description: data.alreadyInCart > 0 ? `${data.alreadyInCart} already in this week's cart.` : undefined,
+      });
+    },
+    onError: () => toast({ title: "Couldn't add staples", description: "The cart may be approved or dismissed.", variant: "destructive" }),
+  } });
   const approveCart = useApproveCart({ mutation: { onSuccess: () => { refetchCart(); toast({ title: "Cart approved!", description: "Order is ready." }); } } });
   const dismissCart = useDismissCart({ mutation: { onSuccess: () => { refetchCart(); toast({ title: "Cart dismissed." }); } } });
   const syncFromSheets = useSyncFromSheets({ mutation: {
@@ -570,9 +598,10 @@ export function ShopperPage() {
                       <span className={`${isUrgent ? "text-accent font-bold" : "text-foreground/80"}`}>
                         {isUrgent && "⚡ "}{item.ingredientName} <span className="text-muted-foreground font-normal">×{item.totalQuantity} {item.unit}</span>
                         {item.source === "manual" && <span className="ml-1.5 text-[10px] uppercase font-bold text-primary/70">added</span>}
+                        {item.source === "staple" && <span className="ml-1.5 text-[10px] uppercase font-bold text-primary/70">staple</span>}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-muted-foreground">{item.source === "manual" ? "—" : fmtDollars(item.estimatedCostCents)}</span>
+                        <span className="text-muted-foreground">{item.source !== "meal" ? "—" : fmtDollars(item.estimatedCostCents)}</span>
                         <button
                           onClick={() => handleMarkUrgent(item)}
                           disabled={isPushing}
@@ -586,7 +615,7 @@ export function ShopperPage() {
                           {isPushing ? <RefreshCw size={8} className="animate-spin" /> : <CalendarPlus size={8} />}
                           {isPushing ? "…" : isUrgent ? "Urgent" : "Urgent"}
                         </button>
-                        {item.source === "manual" && !cartIsLocked && (
+                        {item.source !== "meal" && !cartIsLocked && (
                           <button
                             onClick={() => removeCartItem.mutate({ cartItemId: item.id })}
                             disabled={removeCartItem.isPending}
@@ -601,6 +630,101 @@ export function ShopperPage() {
                   );
                 })}
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recurring Staples */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+              <Repeat size={16} className="text-primary" /> Recurring Staples
+            </CardTitle>
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => addStaplesToCart.mutate({ data: {} })}
+              disabled={addStaplesToCart.isPending || (staples ?? []).length === 0 || cartIsLocked}
+            >
+              {addStaplesToCart.isPending
+                ? <RefreshCw size={12} className="mr-1 animate-spin" />
+                : <ShoppingCart size={12} className="mr-1" />}
+              Add All to Cart
+            </Button>
+          </div>
+          <CardDescription className="text-xs">
+            The household's usuals — coffee, toilet paper, dish soap. One tap drops them into this week's cart.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="flex items-center gap-1.5 mb-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const name = newStapleName.trim();
+              if (!name || createStaple.isPending) return;
+              createStaple.mutate({ data: {
+                name,
+                ...(newStapleQty.trim() ? { quantity: newStapleQty.trim() } : {}),
+                ...(newStapleUnit.trim() ? { unit: newStapleUnit.trim() } : {}),
+              } });
+            }}
+          >
+            <Input
+              value={newStapleName}
+              onChange={(e) => setNewStapleName(e.target.value)}
+              placeholder="Add a staple (e.g. coffee)"
+              className="h-8 text-xs flex-1"
+            />
+            <Input value={newStapleQty} onChange={(e) => setNewStapleQty(e.target.value)} placeholder="Qty" className="h-8 text-xs w-14" />
+            <Input value={newStapleUnit} onChange={(e) => setNewStapleUnit(e.target.value)} placeholder="Unit" className="h-8 text-xs w-20" />
+            <Button type="submit" size="sm" className="h-8 text-xs shrink-0" disabled={!newStapleName.trim() || createStaple.isPending}>
+              <Plus size={12} className="mr-1" /> Save
+            </Button>
+          </form>
+
+          {(staples ?? []).length === 0 ? (
+            <p className="text-muted-foreground italic text-sm text-center py-3">
+              No staples saved yet. Add the items you buy every week above.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {(staples ?? []).map((staple: StapleItem) => {
+                const inCart = (cart?.items ?? []).some(
+                  (it: any) => it.ingredientName.trim().toLowerCase() === staple.name.trim().toLowerCase()
+                );
+                return (
+                  <div key={staple.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-sm text-xs hover:bg-secondary/30">
+                    <span className="text-foreground/80">
+                      {staple.name} <span className="text-muted-foreground font-normal">×{staple.quantity} {staple.unit}</span>
+                      {inCart && <span className="ml-1.5 text-[10px] uppercase font-bold text-primary/70">✓ in cart</span>}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!cartIsLocked && !inCart && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] px-2"
+                          onClick={() => addStaplesToCart.mutate({ data: { stapleIds: [staple.id] } })}
+                          disabled={addStaplesToCart.isPending}
+                        >
+                          <Plus size={10} className="mr-0.5" /> Add
+                        </Button>
+                      )}
+                      <button
+                        onClick={() => deleteStaple.mutate({ id: staple.id })}
+                        disabled={deleteStaple.isPending}
+                        title="Remove from staples list"
+                        className="p-1 rounded-sm text-muted-foreground/60 hover:text-destructive transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

@@ -8,6 +8,7 @@ import {
   cartMealsTable,
   cartItemsTable,
   mealCravingsTable,
+  stapleItemsTable,
   cartFulfillmentsTable,
   appSettingsTable,
 } from "@workspace/db";
@@ -164,6 +165,15 @@ export async function ensureMealsSeeded() {
   `);
   await db.execute(sql`
     ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'meal'
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS staple_items (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      quantity TEXT NOT NULL DEFAULT '1',
+      unit TEXT NOT NULL DEFAULT 'each',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS meal_cravings (
@@ -620,7 +630,7 @@ router.delete("/shopper/cart/items/:cartItemId", async (req, res) => {
       res.status(409).json({ error: "Cart is already approved or dismissed and can't be changed." });
       return;
     }
-    if (existing.source !== "manual") {
+    if (existing.source === "meal") {
       res.status(409).json({ error: "Meal-derived items are removed by removing their meal." });
       return;
     }
@@ -794,6 +804,110 @@ router.post("/shopper/cart/dismiss", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to dismiss cart");
     res.status(500).json({ error: "Failed to dismiss cart" });
+  }
+});
+
+// GET /shopper/staples — the household's saved recurring-staples list
+router.get("/shopper/staples", async (req, res) => {
+  try {
+    await ensureMealsSeeded();
+    const staples = await db.select().from(stapleItemsTable).orderBy(stapleItemsTable.name);
+    res.json(staples);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list staples");
+    res.status(500).json({ error: "Failed to list staples" });
+  }
+});
+
+// POST /shopper/staples — add an item to the staples list
+router.post("/shopper/staples", async (req, res) => {
+  try {
+    const body = z.object({
+      name: z.string().trim().min(1).max(200),
+      quantity: z.string().trim().min(1).max(50).optional(),
+      unit: z.string().trim().min(1).max(50).optional(),
+    }).parse(req.body);
+    await ensureMealsSeeded();
+    const nameKey = body.name.toLowerCase();
+    const [existing] = await db.select().from(stapleItemsTable)
+      .where(sql`lower(${stapleItemsTable.name}) = ${nameKey}`).limit(1);
+    if (existing) {
+      res.status(409).json({ error: `"${existing.name}" is already on the staples list.` });
+      return;
+    }
+    const [staple] = await db.insert(stapleItemsTable).values({
+      name: body.name,
+      quantity: body.quantity ?? "1",
+      unit: body.unit ?? "each",
+    }).returning();
+    res.status(201).json(staple);
+  } catch (err) {
+    req.log.error({ err }, "Failed to add staple");
+    res.status(400).json({ error: "Failed to add staple" });
+  }
+});
+
+// DELETE /shopper/staples/:id — remove an item from the staples list
+router.delete("/shopper/staples/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await db.delete(stapleItemsTable).where(eq(stapleItemsTable.id, id));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to remove staple");
+    res.status(500).json({ error: "Failed to remove staple" });
+  }
+});
+
+// POST /shopper/staples/add-to-cart — one-tap: add some or all staples to the current cart.
+// Skips staples whose name is already in the cart (case-insensitive) so a
+// double-tap doesn't double the shopping list.
+router.post("/shopper/staples/add-to-cart", async (req, res) => {
+  try {
+    const { stapleIds } = z.object({
+      stapleIds: z.array(z.number().int()).optional(),
+    }).parse(req.body ?? {});
+
+    await ensureMealsSeeded();
+    const cart = await getOrCreateCart();
+    if (cart.status !== "pending") {
+      res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
+      return;
+    }
+
+    const allStaples = await db.select().from(stapleItemsTable);
+    const chosen = stapleIds && stapleIds.length > 0
+      ? allStaples.filter((s) => stapleIds.includes(s.id))
+      : allStaples;
+    if (chosen.length === 0) {
+      res.status(422).json({ error: "No staples to add — save some items to the staples list first." });
+      return;
+    }
+
+    const existingItems = await db.select().from(cartItemsTable).where(eq(cartItemsTable.cartId, cart.id));
+    const inCart = new Set(existingItems.map((i) => i.ingredientName.trim().toLowerCase()));
+
+    const toAdd = chosen.filter((s) => !inCart.has(s.name.trim().toLowerCase()));
+    const skipped = chosen.length - toAdd.length;
+
+    if (toAdd.length > 0) {
+      await db.insert(cartItemsTable).values(
+        toAdd.map((s) => ({
+          cartId: cart.id,
+          ingredientName: s.name,
+          totalQuantity: s.quantity,
+          unit: s.unit,
+          estimatedCostCents: 0, // staples are unestimated, like manual items
+          source: "staple",
+        }))
+      );
+      await updateCartTotal(cart.id);
+    }
+
+    res.json({ ok: true, added: toAdd.length, alreadyInCart: skipped });
+  } catch (err) {
+    req.log.error({ err }, "Failed to add staples to cart");
+    res.status(400).json({ error: "Failed to add staples to cart" });
   }
 });
 

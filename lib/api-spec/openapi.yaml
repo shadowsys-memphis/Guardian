@@ -1129,6 +1129,72 @@ paths:
         "200":
           description: Dismissed
 
+  /shopper/staples:
+    get:
+      operationId: listStaples
+      tags: [shopper]
+      summary: List the household's saved recurring staples
+      responses:
+        "200":
+          description: Array of staples
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StapleItem"
+    post:
+      operationId: createStaple
+      tags: [shopper]
+      summary: Add an item to the staples list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStapleInput"
+      responses:
+        "201":
+          description: Created staple
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StapleItem"
+
+  /shopper/staples/{id}:
+    delete:
+      operationId: deleteStaple
+      tags: [shopper]
+      summary: Remove an item from the staples list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  /shopper/staples/add-to-cart:
+    post:
+      operationId: addStaplesToCart
+      tags: [shopper]
+      summary: Add some or all saved staples to the current cart in one tap
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddStaplesToCartInput"
+      responses:
+        "200":
+          description: Result of adding staples
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddStaplesToCartResult"
+
   /shopper/cravings:
     get:
       operationId: listCravings
@@ -2728,7 +2794,7 @@ components:
           type: integer
         source:
           type: string
-          enum: [meal, manual]
+          enum: [meal, manual, staple]
       required:
         - id
         - cartId
@@ -2749,6 +2815,62 @@ components:
           type: string
       required:
         - name
+
+    StapleItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        quantity:
+          type: string
+        unit:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - quantity
+        - unit
+        - createdAt
+
+    CreateStapleInput:
+      type: object
+      properties:
+        name:
+          type: string
+        quantity:
+          type: string
+        unit:
+          type: string
+      required:
+        - name
+
+    AddStaplesToCartInput:
+      type: object
+      properties:
+        stapleIds:
+          type: array
+          description: Staples to add; omit to add the whole list
+          items:
+            type: integer
+
+    AddStaplesToCartResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        added:
+          type: integer
+        alreadyInCart:
+          type: integer
+      required:
+        - ok
+        - added
+        - alreadyInCart
 
     CartWithMeals:
       allOf:

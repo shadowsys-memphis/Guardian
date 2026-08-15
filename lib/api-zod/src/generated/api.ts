@@ -1481,7 +1481,7 @@ export const GetCartResponse = zod
             totalQuantity: zod.string(),
             unit: zod.string(),
             estimatedCostCents: zod.number(),
-            source: zod.enum(["meal", "manual"]),
+            source: zod.enum(["meal", "manual", "staple"]),
           }),
         )
         .optional(),
@@ -1557,6 +1557,50 @@ export const SwapCartMealResponse = zod.object({
   ok: zod.boolean(),
   mealId: zod.number(),
   name: zod.string(),
+});
+
+/**
+ * @summary List the household's saved recurring staples
+ */
+export const ListStaplesResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  quantity: zod.string(),
+  unit: zod.string(),
+  createdAt: zod.date(),
+});
+export const ListStaplesResponse = zod.array(ListStaplesResponseItem);
+
+/**
+ * @summary Add an item to the staples list
+ */
+export const CreateStapleBody = zod.object({
+  name: zod.string(),
+  quantity: zod.string().optional(),
+  unit: zod.string().optional(),
+});
+
+/**
+ * @summary Remove an item from the staples list
+ */
+export const DeleteStapleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Add some or all saved staples to the current cart in one tap
+ */
+export const AddStaplesToCartBody = zod.object({
+  stapleIds: zod
+    .array(zod.number())
+    .optional()
+    .describe("Staples to add; omit to add the whole list"),
+});
+
+export const AddStaplesToCartResponse = zod.object({
+  ok: zod.boolean(),
+  added: zod.number(),
+  alreadyInCart: zod.number(),
 });
 
 /**

@@ -12,4 +12,5 @@ export type CartItemSource =
 export const CartItemSource = {
   meal: "meal",
   manual: "manual",
+  staple: "staple",
 } as const;

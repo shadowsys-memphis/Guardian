@@ -9,4 +9,4 @@ Every endpoint that mutates grocery cart contents (items, meals) must:
 
 **Why:** completion code review rejected a delete endpoint that skipped these guards — a known item ID could silently mutate a locked or historical cart.
 
-**How to apply:** whenever adding cart-mutation routes (voice add, staples, barcode scan follow-ons), copy both guards from the existing `/shopper/cart/items` routes. Also note: `rebuildCartItems` deletes only `source='meal'` rows so manual items survive meal add/remove.
+**How to apply:** whenever adding cart-mutation routes (voice add, staples, barcode scan follow-ons), copy both guards from the existing `/shopper/cart/items` routes. Also note: `rebuildCartItems` deletes only `source='meal'` rows so manual/staple items survive meal add/remove, and the item-delete route rejects only `source='meal'` (any non-meal source is user-removable).

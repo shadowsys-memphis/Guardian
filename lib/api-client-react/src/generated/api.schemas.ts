@@ -708,6 +708,7 @@ export type CartItemSource =
 export const CartItemSource = {
   meal: "meal",
   manual: "manual",
+  staple: "staple",
 } as const;
 
 export interface CartItem {
@@ -724,6 +725,31 @@ export interface AddCartItemInput {
   name: string;
   quantity?: string;
   unit?: string;
+}
+
+export interface StapleItem {
+  id: number;
+  name: string;
+  quantity: string;
+  unit: string;
+  createdAt: string;
+}
+
+export interface CreateStapleInput {
+  name: string;
+  quantity?: string;
+  unit?: string;
+}
+
+export interface AddStaplesToCartInput {
+  /** Staples to add; omit to add the whole list */
+  stapleIds?: number[];
+}
+
+export interface AddStaplesToCartResult {
+  ok: boolean;
+  added: number;
+  alreadyInCart: number;
 }
 
 export type CartWithMeals = GroceryCart & {

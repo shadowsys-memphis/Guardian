@@ -20,6 +20,8 @@ import type {
   AddCartItemInput,
   AddLabPhaseInput,
   AddMealToCartInput,
+  AddStaplesToCartInput,
+  AddStaplesToCartResult,
   AdminSummaryInput,
   AdminSummaryResult,
   AiModelStatus,
@@ -47,6 +49,7 @@ import type {
   CreateMealInput,
   CreateRotationTaskInput,
   CreateScheduleTaskInput,
+  CreateStapleInput,
   CreateSymptomLogInput,
   CreateVoiceScriptInput,
   DayType,
@@ -97,6 +100,7 @@ import type {
   ShuffleCartResult,
   SkipLabDrawInput,
   SmartHomeDevice,
+  StapleItem,
   StartCallSessionInput,
   SwapCartMealInput,
   SwapCartMealResult,
@@ -5374,6 +5378,337 @@ export const useDismissCart = <
   TContext
 > => {
   return useMutation(getDismissCartMutationOptions(options));
+};
+
+/**
+ * @summary List the household's saved recurring staples
+ */
+export const getListStaplesUrl = () => {
+  return `/api/shopper/staples`;
+};
+
+export const listStaples = async (
+  options?: RequestInit,
+): Promise<StapleItem[]> => {
+  return customFetch<StapleItem[]>(getListStaplesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListStaplesQueryKey = () => {
+  return [`/api/shopper/staples`] as const;
+};
+
+export const getListStaplesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listStaples>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listStaples>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListStaplesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listStaples>>> = ({
+    signal,
+  }) => listStaples({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listStaples>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListStaplesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listStaples>>
+>;
+export type ListStaplesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List the household's saved recurring staples
+ */
+
+export function useListStaples<
+  TData = Awaited<ReturnType<typeof listStaples>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listStaples>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListStaplesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add an item to the staples list
+ */
+export const getCreateStapleUrl = () => {
+  return `/api/shopper/staples`;
+};
+
+export const createStaple = async (
+  createStapleInput: CreateStapleInput,
+  options?: RequestInit,
+): Promise<StapleItem> => {
+  return customFetch<StapleItem>(getCreateStapleUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createStapleInput),
+  });
+};
+
+export const getCreateStapleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createStaple>>,
+    TError,
+    { data: BodyType<CreateStapleInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createStaple>>,
+  TError,
+  { data: BodyType<CreateStapleInput> },
+  TContext
+> => {
+  const mutationKey = ["createStaple"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createStaple>>,
+    { data: BodyType<CreateStapleInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createStaple(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateStapleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createStaple>>
+>;
+export type CreateStapleMutationBody = BodyType<CreateStapleInput>;
+export type CreateStapleMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add an item to the staples list
+ */
+export const useCreateStaple = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createStaple>>,
+    TError,
+    { data: BodyType<CreateStapleInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createStaple>>,
+  TError,
+  { data: BodyType<CreateStapleInput> },
+  TContext
+> => {
+  return useMutation(getCreateStapleMutationOptions(options));
+};
+
+/**
+ * @summary Remove an item from the staples list
+ */
+export const getDeleteStapleUrl = (id: number) => {
+  return `/api/shopper/staples/${id}`;
+};
+
+export const deleteStaple = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteStapleUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteStapleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteStaple>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteStaple>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteStaple"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteStaple>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteStaple(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteStapleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteStaple>>
+>;
+
+export type DeleteStapleMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove an item from the staples list
+ */
+export const useDeleteStaple = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteStaple>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteStaple>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteStapleMutationOptions(options));
+};
+
+/**
+ * @summary Add some or all saved staples to the current cart in one tap
+ */
+export const getAddStaplesToCartUrl = () => {
+  return `/api/shopper/staples/add-to-cart`;
+};
+
+export const addStaplesToCart = async (
+  addStaplesToCartInput?: AddStaplesToCartInput,
+  options?: RequestInit,
+): Promise<AddStaplesToCartResult> => {
+  return customFetch<AddStaplesToCartResult>(getAddStaplesToCartUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addStaplesToCartInput),
+  });
+};
+
+export const getAddStaplesToCartMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addStaplesToCart>>,
+    TError,
+    { data: BodyType<AddStaplesToCartInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addStaplesToCart>>,
+  TError,
+  { data: BodyType<AddStaplesToCartInput> },
+  TContext
+> => {
+  const mutationKey = ["addStaplesToCart"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addStaplesToCart>>,
+    { data: BodyType<AddStaplesToCartInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return addStaplesToCart(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddStaplesToCartMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addStaplesToCart>>
+>;
+export type AddStaplesToCartMutationBody = BodyType<AddStaplesToCartInput>;
+export type AddStaplesToCartMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add some or all saved staples to the current cart in one tap
+ */
+export const useAddStaplesToCart = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addStaplesToCart>>,
+    TError,
+    { data: BodyType<AddStaplesToCartInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addStaplesToCart>>,
+  TError,
+  { data: BodyType<AddStaplesToCartInput> },
+  TContext
+> => {
+  return useMutation(getAddStaplesToCartMutationOptions(options));
 };
 
 /**
