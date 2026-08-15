@@ -137,7 +137,7 @@ export async function ensureMealsSeeded() {
     CREATE TABLE IF NOT EXISTS grocery_carts (
       id SERIAL PRIMARY KEY,
       week_start_date DATE NOT NULL,
-      budget_cents INTEGER NOT NULL DEFAULT 15000,
+      budget_cents INTEGER NOT NULL DEFAULT 20000,
       total_estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'pending',
       approved_at TIMESTAMP,
@@ -229,7 +229,7 @@ async function getOrCreateCart(): Promise<typeof groceryCartsTable.$inferSelect>
   if (existing[0]) return existing[0];
   const [created] = await db.insert(groceryCartsTable).values({
     weekStartDate: weekStart,
-    budgetCents: 15000,
+    budgetCents: 20000,
     totalEstimatedCostCents: 0,
     status: "pending",
   }).returning();
@@ -1086,7 +1086,7 @@ router.post("/shopper/fulfill", async (req, res) => {
     ]);
     const store = storeRow[0]?.value ?? "walmart";
     const zip = zipRow[0]?.value ?? "";
-    const budgetCents = cart.budgetCents ?? 15000;
+    const budgetCents = cart.budgetCents ?? 20000;
 
     const initiatedBy = (req.body?.initiatedBy === "pops") ? "pops" : "ray";
 
@@ -1121,7 +1121,7 @@ router.get("/shopper/fulfill/current", async (req, res) => {
     let items: FulfillmentItem[] = [];
     try { items = JSON.parse(row.itemsJson ?? "[]"); } catch {}
     const [storeRow] = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "preferred_store")).limit(1);
-    const budgetCents = cart.budgetCents ?? 15000;
+    const budgetCents = cart.budgetCents ?? 20000;
     res.json({ ...row, items, budgetCents, preferredStore: storeRow?.value ?? "walmart" });
   } catch (err) {
     req.log.error({ err }, "Failed to get fulfillment");
@@ -1129,13 +1129,25 @@ router.get("/shopper/fulfill/current", async (req, res) => {
   }
 });
 
-// POST /shopper/remix — AI-powered meal plan remix using Gemini
+// POST /shopper/remix — AI-powered meal plan remix using Gemini.
+// Remixes from the FULL recipe catalog: every active meal's ingredients are
+// pooled and Gemini composes fresh meal ideas by recombining them — not just
+// rewording the current plan or re-picking whole existing recipes.
 router.post("/shopper/remix", async (req, res) => {
   try {
     const { currentPlan, remixPrompt } = z.object({
       currentPlan: z.string().min(1),
       remixPrompt: z.string().min(1),
     }).parse(req.body);
+
+    // Pool the whole catalog: recipe names plus a deduped ingredient list.
+    const catalog = await db
+      .select({ mealId: mealsTable.id, mealName: mealsTable.name, ingredient: mealIngredientsTable.name })
+      .from(mealsTable)
+      .leftJoin(mealIngredientsTable, eq(mealIngredientsTable.mealId, mealsTable.id))
+      .where(eq(mealsTable.active, true));
+    const recipeNames = [...new Set(catalog.map((r) => r.mealName))];
+    const ingredientPool = [...new Set(catalog.map((r) => r.ingredient).filter((i): i is string => !!i))];
 
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -1144,12 +1156,18 @@ router.post("/shopper/remix", async (req, res) => {
         parts: [{
           text: `You are a practical meal planning assistant for a veteran caregiver household with a $200/week budget.
 
+The household's full recipe catalog (${recipeNames.length} recipes):
+${recipeNames.join(", ")}
+
+Every ingredient already used across those recipes (the pantry vocabulary):
+${ingredientPool.join(", ")}
+
 Current meal plan:
 ${currentPlan}
 
 Remix instruction: "${remixPrompt}"
 
-Respond with ONLY the updated meal plan text in the same format as the original. Be budget-conscious and practical. Keep Pepsi (4×2L bottles/week) in mind as a weekly staple for Pops.`,
+Create FRESH meal ideas by recombining ingredients from the pool above — cross recipes, don't just re-pick existing ones (e.g. the fajita seasoning + the shrimp, the porcini sauce + the chicken). Stay close to the pool so the shopping list barely changes; only introduce an ingredient outside it when the remix instruction demands it. Respond with ONLY the updated meal plan text in the same format as the original. Be budget-conscious and practical. Keep Pepsi (exactly 4×2L bottles/week) in mind as a weekly staple for Pops.`,
         }],
       }],
     });

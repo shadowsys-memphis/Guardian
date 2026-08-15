@@ -4,7 +4,7 @@ This document establishes the baseline inventory and replenishment cycles for th
 
 ## 1. Replenishment Cycles
 
-### Weekly (The $150/week Budget)
+### Weekly (The $200/week Budget)
 *   **Focus:** Perishables, snacks, and strict routine items.
 *   **Routine Critical:** Exactly 4x Pepsi (2L) bottles.
 *   **Breakfast Staples:** Bacon, Eggs, Hash browns, Cinnamon Toast Crunch.
@@ -34,10 +34,10 @@ This document establishes the baseline inventory and replenishment cycles for th
 
 To support this in Guardian.OS, the **Shopper Agent** will use a dual-mode approach:
 
-1.  **Weekly Mode:** Focuses strictly on the $150/week grocery budget for meals and routine snacks.
+1.  **Weekly Mode:** Focuses strictly on the $200/week grocery budget for meals and routine snacks.
 2.  **Audit Mode (Monthly/Quarterly):** Prompts the Admin (Raymo) for a visual inventory check of the bulk categories. 
     *   *Example prompt from Jessica:* "Hey Ray, it's the start of the quarter. Do we need to add a bulk pack of toilet paper or paper towels to the Walmart order?"
-    *   Bulk items will be separated from the strict $150/week food budget to prevent skewing the weekly meal planning.
+    *   Bulk items will be separated from the strict $200/week food budget to prevent skewing the weekly meal planning.
 
 ## 3. Database Schema Concept (For `inventory_items`)
 When we build this into the PostgreSQL database, it will look like this:

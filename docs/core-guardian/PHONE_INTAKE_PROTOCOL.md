@@ -8,7 +8,7 @@ To allow Raymo (Admin) to manage household inventory, grocery lists, and budget 
 ### A. MMS / Image Processing (Visual Inventory)
 Instead of manually typing out what is missing, the system will use Gemini's vision capabilities via the phone number:
 *   **Pantry/Fridge Audits:** Raymo snaps a photo of the open fridge or pantry and texts it to the agent. The agent replies: *"I see we are low on milk and eggs. Adding them to the weekly Walmart cart."*
-*   **Receipt Parsing:** Raymo snaps a photo of a receipt. The agent extracts item names, quantities, and exact prices to update the `$150/week` budget tracker and establish baseline pricing.
+*   **Receipt Parsing:** Raymo snaps a photo of a receipt. The agent extracts item names, quantities, and exact prices to update the `$200/week` budget tracker and establish baseline pricing.
 
 ### B. Voice Dictation (On-the-go Updates)
 *   **Quick Adds:** Raymo calls or sends an audio message: *"Jessica, add bulk toilet paper to the quarterly list, and we need taco seasoning for tonight."*

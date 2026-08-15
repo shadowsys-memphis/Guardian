@@ -190,7 +190,7 @@ export const mealIngredientsTable = pgTable("meal_ingredients", {
 export const groceryCartsTable = pgTable("grocery_carts", {
   id: serial("id").primaryKey(),
   weekStartDate: date("week_start_date").notNull(),
-  budgetCents: integer("budget_cents").notNull().default(15000),
+  budgetCents: integer("budget_cents").notNull().default(20000),
   totalEstimatedCostCents: integer("total_estimated_cost_cents").notNull().default(0),
   status: text("status").notNull().default("pending"),
   approvedAt: timestamp("approved_at"),
