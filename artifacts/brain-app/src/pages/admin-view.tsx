@@ -80,7 +80,7 @@ import {
   useGetLmStudioUrl, useSetLmStudioUrl, testLmStudioConnection,
   type LmStudioConnectionResult,
   useListMeals, useCreateMeal, useDeleteMeal, useSyncFromSheets,
-  useGetCart, useAddMealToCart, useRemoveMealFromCart, useApproveCart, useDismissCart, getGetCartQueryKey,
+  useGetCart, useAddMealToCart, useRemoveMealFromCart, useApproveCart, useDismissCart, useAddCartItem, getGetCartQueryKey,
   useListCravings, useCreateCraving, useUpdateCraving,
   useListRotationTasks, useCreateRotationTask, useUpdateRotationTask, useDeleteRotationTask, getListRotationTasksQueryKey,
   useListCareLogs, useCreateCareLog, getListCareLogsQueryKey,
@@ -2736,6 +2736,19 @@ function InventoryTab() {
     }
   });
 
+  const { data: cart, refetch: refetchCart } = useGetCart({ query: { queryKey: getGetCartQueryKey() } });
+  const addCartItem = useAddCartItem({
+    mutation: {
+      onSuccess: (item) => { refetchCart(); toast({ title: "Added to cart", description: item.ingredientName }); },
+      onError: () => toast({ title: "Failed to add to cart", variant: "destructive" }),
+    }
+  });
+  const cartLocked = !!cart && cart.status !== "pending";
+  const cartItemNames = new Set(
+    ((cart?.items ?? []) as { ingredientName: string }[]).map((i) => i.ingredientName.trim().toLowerCase())
+  );
+  const isInCart = (item: InventoryItem) => cartItemNames.has(item.itemName.trim().toLowerCase());
+
   const today = new Date().toISOString().split("T")[0];
 
   const grouped: Record<"weekly" | "monthly" | "quarterly" | "yearly", InventoryItem[]> = {
@@ -2747,6 +2760,13 @@ function InventoryTab() {
 
   const isOverdue = (item: InventoryItem) =>
     !!(item.estimatedRunOutDate && item.estimatedRunOutDate < today);
+
+  // "Low" = expected to run out within the next 3 days (but not yet overdue)
+  const lowCutoff = new Date();
+  lowCutoff.setDate(lowCutoff.getDate() + 3);
+  const lowCutoffStr = lowCutoff.toISOString().split("T")[0];
+  const isLow = (item: InventoryItem) =>
+    !!(item.estimatedRunOutDate && !isOverdue(item) && item.estimatedRunOutDate <= lowCutoffStr);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2867,6 +2887,22 @@ function InventoryTab() {
                     </div>
                     {isPepsi && <p className="text-xs text-primary/70 mt-0.5 italic">{item.notes}</p>}
                   </div>
+                  {(overdue || isLow(item)) && (
+                    isInCart(item) ? (
+                      <span className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-sm border border-border/40 text-muted-foreground text-xs">
+                        <Check size={10} /> In cart
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => addCartItem.mutate({ data: { name: item.itemName } })}
+                        disabled={addCartItem.isPending || cartLocked}
+                        title={cartLocked ? "Current cart is locked" : "Add to this week's cart"}
+                        className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-sm border border-primary/40 text-primary text-xs hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ShoppingCart size={10} /> Add to cart
+                      </button>
+                    )
+                  )}
                   <button
                     onClick={() => restockItem.mutate({ id: item.id })}
                     className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-sm border border-green-500/40 text-green-400 text-xs hover:bg-green-500/10 transition-colors"
