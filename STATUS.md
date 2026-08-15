@@ -1,6 +1,49 @@
 # STATUS — what's done, what's next
 
-*The one file that answers "where was I?" Updated 2026-08-14 evening.*
+*The one file that answers "where was I?" Updated 2026-08-14 late night.*
+
+---
+
+## 8/14 night — first call to Pops, and what it uncovered
+
+**The call:** Jessica called Pops for the first time. The custom intro prompt written for
+it never reached the call — she ran the short prompt stored on the ElevenLabs agent
+instead, asked about meds/sleep/energy back-to-back, and Pops hung up at 60 seconds.
+
+**Root cause (confirmed against ElevenLabs' API docs):** our code sent
+`conversation_config_override` at the top level of the outbound-call request. ElevenLabs
+requires it nested inside `conversation_initiation_client_data` — sent top-level it is
+silently dropped, the call still connects, and the agent falls back to its stored prompt.
+**This means every phone call to date ran on the ElevenLabs stored prompt, never on
+`buildJessicaSystemPrompt()`** — no schedule context, no health questions, no zombie-phase
+tone has ever reached a real call.
+
+**Fixed tonight:**
+- The nesting bug — fixed in `routes/jessica.ts` (in the working tree, NOT yet
+  committed/published). Also added an `intro: true` flag for first-call framing.
+- The stored ElevenLabs prompt — replaced with a safe floor: short calls, one question
+  at a time, never discuss meds/medical, always admit she's an AI, never play along
+  with things that aren't real. This is live now and is what runs if an override is
+  ever dropped again.
+
+**Found, not yet fixed:**
+- **No transcript has ever saved.** The dev DB shows 0 transcripts / 0 summaries /
+  0 health data points across all 20 call sessions. The webhook is attached and prod
+  answers 401 to unsigned posts (server side works), but nothing has ever landed —
+  prime suspect is the HMAC secret mismatch already flagged below. ElevenLabs webhook
+  `retry_enabled` is false, so failed deliveries vanish. All transcripts are still
+  retrievable from ElevenLabs' API — nothing is lost, it can be backfilled.
+- **Jessica's tools are registered in triplicate** on the agent with two different
+  secrets (repeated sync runs). Needs dedup.
+- **ElevenLabs' built-in guardrails are all switched off** (including
+  medical_and_legal_information). Worth turning on.
+- **Before publishing the nesting fix:** trim the health question list in Admin first.
+  The full prompt asks 3–5 questions per call plus routine walkthroughs — more
+  question-pressure than tonight, not less. Ray's rule: she can't interrogate him.
+- Hard call cap confirmed real: 10 min, enforced by ElevenLabs (`max_duration_seconds`).
+
+**Research brief** (guardrails for AI calls to vulnerable people + the config-drift
+problem, with sources): https://claude.ai/code/artifact/b9038702-1773-42d7-a025-6a0f7392fe36
 
 ---
 
