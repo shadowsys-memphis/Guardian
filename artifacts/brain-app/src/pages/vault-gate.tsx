@@ -50,7 +50,7 @@ export function VaultGate({ children: _children }: VaultGateProps) {
           <div className="h-20 w-20 mx-auto rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center shadow-[0_0_40px_rgba(70,159,104,0.12)]">
             <Lock className="h-9 w-9 text-primary" />
           </div>
-          <h1 className="text-4xl font-display font-bold text-primary tracking-widest uppercase">br(AI)n</h1>
+          <h1 className="text-4xl font-display font-bold text-primary tracking-widest uppercase">Brain Guardian</h1>
           <p className="text-xs text-muted-foreground uppercase tracking-widest font-display">Vault Locked · Enter Passphrase</p>
         </div>
 
@@ -109,7 +109,7 @@ export function VaultGate({ children: _children }: VaultGateProps) {
         )}
 
         <p className="text-xs text-center text-muted-foreground/40 mt-8 font-display uppercase tracking-widest">
-          br(AI)n · Unconditional Software
+          Brain Guardian · Unconditional Software
         </p>
       </div>
     </div>

@@ -7,7 +7,7 @@ export function GuardianPage() {
     <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center px-6">
       <div className="max-w-md text-center space-y-6">
         <div className="text-5xl">🛡️</div>
-        <h1 className="text-3xl font-black text-white">br(AI)n</h1>
+        <h1 className="text-3xl font-black text-white">Brain Guardian</h1>
         <p className="text-zinc-400">
           This is a private, locally-hosted care workspace. Sign in to access
           your workspace.
