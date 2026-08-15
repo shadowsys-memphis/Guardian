@@ -702,6 +702,14 @@ export interface GroceryCart {
   createdAt: string;
 }
 
+export type CartItemSource =
+  (typeof CartItemSource)[keyof typeof CartItemSource];
+
+export const CartItemSource = {
+  meal: "meal",
+  manual: "manual",
+} as const;
+
 export interface CartItem {
   id: number;
   cartId: number;
@@ -709,6 +717,13 @@ export interface CartItem {
   totalQuantity: string;
   unit: string;
   estimatedCostCents: number;
+  source: CartItemSource;
+}
+
+export interface AddCartItemInput {
+  name: string;
+  quantity?: string;
+  unit?: string;
 }
 
 export type CartWithMeals = GroceryCart & {

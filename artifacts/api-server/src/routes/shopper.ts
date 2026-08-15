@@ -158,8 +158,12 @@ export async function ensureMealsSeeded() {
       ingredient_name TEXT NOT NULL,
       total_quantity TEXT NOT NULL DEFAULT '1',
       unit TEXT NOT NULL DEFAULT 'each',
-      estimated_cost_cents INTEGER NOT NULL DEFAULT 0
+      estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'meal'
     )
+  `);
+  await db.execute(sql`
+    ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'meal'
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS meal_cravings (
@@ -236,11 +240,21 @@ async function getOrCreateCart(): Promise<typeof groceryCartsTable.$inferSelect>
   return created;
 }
 
+/** Recompute the cart's total from all items currently in it (manual items count too, though they're unestimated for now). */
+async function updateCartTotal(cartId: number): Promise<void> {
+  const items = await db.select().from(cartItemsTable).where(eq(cartItemsTable.cartId, cartId));
+  const total = items.reduce((s, i) => s + i.estimatedCostCents, 0);
+  await db.update(groceryCartsTable).set({ totalEstimatedCostCents: total }).where(eq(groceryCartsTable.id, cartId));
+}
+
 async function rebuildCartItems(cartId: number): Promise<void> {
-  await db.delete(cartItemsTable).where(eq(cartItemsTable.cartId, cartId));
+  // Only meal-derived items are rebuilt; manually added items must survive meal add/remove.
+  await db.delete(cartItemsTable).where(
+    and(eq(cartItemsTable.cartId, cartId), eq(cartItemsTable.source, "meal"))
+  );
   const cartMealRows = await db.select().from(cartMealsTable).where(eq(cartMealsTable.cartId, cartId));
   if (cartMealRows.length === 0) {
-    await db.update(groceryCartsTable).set({ totalEstimatedCostCents: 0 }).where(eq(groceryCartsTable.id, cartId));
+    await updateCartTotal(cartId);
     return;
   }
   const mealIds = cartMealRows.map((r) => r.mealId);
@@ -266,11 +280,11 @@ async function rebuildCartItems(cartId: number): Promise<void> {
         totalQuantity: v.qty % 1 === 0 ? String(v.qty) : v.qty.toFixed(1),
         unit: v.unit,
         estimatedCostCents: v.cost,
+        source: "meal",
       }))
     );
   }
-  const total = Array.from(agg.values()).reduce((s, v) => s + v.cost, 0);
-  await db.update(groceryCartsTable).set({ totalEstimatedCostCents: total }).where(eq(groceryCartsTable.id, cartId));
+  await updateCartTotal(cartId);
 }
 
 // GET /shopper/meals
@@ -555,6 +569,67 @@ router.post("/shopper/cart/meals", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to add meal to cart");
     res.status(400).json({ error: "Failed to add meal" });
+  }
+});
+
+// POST /shopper/cart/items — add a one-off manual item to the current cart
+router.post("/shopper/cart/items", async (req, res) => {
+  try {
+    const { name, quantity, unit } = z.object({
+      name: z.string().trim().min(1).max(200),
+      quantity: z.string().trim().min(1).max(50).optional(),
+      unit: z.string().trim().min(1).max(50).optional(),
+    }).parse(req.body);
+    const cart = await getOrCreateCart();
+    if (cart.status !== "pending") {
+      res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
+      return;
+    }
+    const [item] = await db.insert(cartItemsTable).values({
+      cartId: cart.id,
+      ingredientName: name,
+      totalQuantity: quantity ?? "1",
+      unit: unit ?? "each",
+      estimatedCostCents: 0, // manual items are unestimated for now
+      source: "manual",
+    }).returning();
+    res.status(201).json(item);
+  } catch (err) {
+    req.log.error({ err }, "Failed to add item to cart");
+    res.status(400).json({ error: "Failed to add item" });
+  }
+});
+
+// DELETE /shopper/cart/items/:cartItemId — remove a manually added item
+router.delete("/shopper/cart/items/:cartItemId", async (req, res) => {
+  try {
+    const cartItemId = parseInt(req.params.cartItemId, 10);
+    const [existing] = await db.select().from(cartItemsTable).where(eq(cartItemsTable.id, cartItemId)).limit(1);
+    if (!existing) {
+      res.status(204).send();
+      return;
+    }
+    // Only items in the current, still-pending cart may be removed — approved,
+    // dismissed, and historical carts are locked.
+    const cart = await getOrCreateCart();
+    if (existing.cartId !== cart.id) {
+      res.status(404).json({ error: "Item is not in the current cart." });
+      return;
+    }
+    if (cart.status !== "pending") {
+      res.status(409).json({ error: "Cart is already approved or dismissed and can't be changed." });
+      return;
+    }
+    if (existing.source !== "manual") {
+      res.status(409).json({ error: "Meal-derived items are removed by removing their meal." });
+      return;
+    }
+    await db.delete(cartItemsTable).where(eq(cartItemsTable.id, cartItemId));
+    await updateCartTotal(existing.cartId);
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to remove item from cart");
+    res.status(500).json({ error: "Failed to remove item" });
   }
 });
 

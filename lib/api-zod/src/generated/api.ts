@@ -1481,6 +1481,7 @@ export const GetCartResponse = zod
             totalQuantity: zod.string(),
             unit: zod.string(),
             estimatedCostCents: zod.number(),
+            source: zod.enum(["meal", "manual"]),
           }),
         )
         .optional(),
@@ -1498,6 +1499,22 @@ export const GetCartResponse = zod
  */
 export const AddMealToCartBody = zod.object({
   mealId: zod.number(),
+});
+
+/**
+ * @summary Add a one-off manual item to the current cart
+ */
+export const AddCartItemBody = zod.object({
+  name: zod.string(),
+  quantity: zod.string().optional(),
+  unit: zod.string().optional(),
+});
+
+/**
+ * @summary Remove a manually added item from the current cart
+ */
+export const RemoveCartItemParams = zod.object({
+  cartItemId: zod.coerce.number(),
 });
 
 /**

@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AddCartItemInput,
   AddLabPhaseInput,
   AddMealToCartInput,
   AdminSummaryInput,
@@ -32,6 +33,7 @@ import type {
   CalendarEventInput,
   CalendarEventResult,
   CallSession,
+  CartItem,
   CartWithMeals,
   CompleteScheduleTaskInput,
   CookbookImportInput,
@@ -4787,6 +4789,176 @@ export const useAddMealToCart = <
   TContext
 > => {
   return useMutation(getAddMealToCartMutationOptions(options));
+};
+
+/**
+ * @summary Add a one-off manual item to the current cart
+ */
+export const getAddCartItemUrl = () => {
+  return `/api/shopper/cart/items`;
+};
+
+export const addCartItem = async (
+  addCartItemInput: AddCartItemInput,
+  options?: RequestInit,
+): Promise<CartItem> => {
+  return customFetch<CartItem>(getAddCartItemUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addCartItemInput),
+  });
+};
+
+export const getAddCartItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addCartItem>>,
+    TError,
+    { data: BodyType<AddCartItemInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addCartItem>>,
+  TError,
+  { data: BodyType<AddCartItemInput> },
+  TContext
+> => {
+  const mutationKey = ["addCartItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addCartItem>>,
+    { data: BodyType<AddCartItemInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return addCartItem(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddCartItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addCartItem>>
+>;
+export type AddCartItemMutationBody = BodyType<AddCartItemInput>;
+export type AddCartItemMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a one-off manual item to the current cart
+ */
+export const useAddCartItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addCartItem>>,
+    TError,
+    { data: BodyType<AddCartItemInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addCartItem>>,
+  TError,
+  { data: BodyType<AddCartItemInput> },
+  TContext
+> => {
+  return useMutation(getAddCartItemMutationOptions(options));
+};
+
+/**
+ * @summary Remove a manually added item from the current cart
+ */
+export const getRemoveCartItemUrl = (cartItemId: number) => {
+  return `/api/shopper/cart/items/${cartItemId}`;
+};
+
+export const removeCartItem = async (
+  cartItemId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRemoveCartItemUrl(cartItemId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRemoveCartItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeCartItem>>,
+    TError,
+    { cartItemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeCartItem>>,
+  TError,
+  { cartItemId: number },
+  TContext
+> => {
+  const mutationKey = ["removeCartItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeCartItem>>,
+    { cartItemId: number }
+  > = (props) => {
+    const { cartItemId } = props ?? {};
+
+    return removeCartItem(cartItemId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveCartItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeCartItem>>
+>;
+
+export type RemoveCartItemMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove a manually added item from the current cart
+ */
+export const useRemoveCartItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeCartItem>>,
+    TError,
+    { cartItemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeCartItem>>,
+  TError,
+  { cartItemId: number },
+  TContext
+> => {
+  return useMutation(getRemoveCartItemMutationOptions(options));
 };
 
 /**

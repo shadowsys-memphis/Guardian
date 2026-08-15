@@ -1,0 +1,12 @@
+---
+name: Grocery cart lock invariant
+description: Any cart mutation endpoint must verify current-cart ownership AND pending status
+---
+
+Every endpoint that mutates grocery cart contents (items, meals) must:
+1. Load the current cart via `getOrCreateCart()` and require the target row's `cartId` matches it (404 otherwise — historical carts are immutable).
+2. Require `cart.status === "pending"` (409 otherwise — approved/dismissed carts are locked).
+
+**Why:** completion code review rejected a delete endpoint that skipped these guards — a known item ID could silently mutate a locked or historical cart.
+
+**How to apply:** whenever adding cart-mutation routes (voice add, staples, barcode scan follow-ons), copy both guards from the existing `/shopper/cart/items` routes. Also note: `rebuildCartItems` deletes only `source='meal'` rows so manual items survive meal add/remove.

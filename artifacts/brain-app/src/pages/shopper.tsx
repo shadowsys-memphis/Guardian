@@ -33,6 +33,8 @@ import {
   useGetCart,
   useAddMealToCart,
   useRemoveMealFromCart,
+  useAddCartItem,
+  useRemoveCartItem,
   useShuffleCart,
   useSwapCartMeal,
   useApproveCart,
@@ -78,6 +80,9 @@ export function ShopperPage() {
   const [newMealName, setNewMealName] = useState("");
   const [importResult, setImportResult] = useState<CookbookImportResult | null>(null);
   const [swappingCartMealId, setSwappingCartMealId] = useState<number | null>(null);
+  const [quickAddName, setQuickAddName] = useState("");
+  const [quickAddQty, setQuickAddQty] = useState("");
+  const [quickAddUnit, setQuickAddUnit] = useState("");
 
   const { data: meals, refetch: refetchMeals } = useListMeals();
   const { data: cart, refetch: refetchCart } = useGetCart();
@@ -198,6 +203,11 @@ export function ShopperPage() {
 
   const addMealToCart = useAddMealToCart({ mutation: { onSuccess: () => refetchCart() } });
   const removeMealFromCart = useRemoveMealFromCart({ mutation: { onSuccess: () => refetchCart() } });
+  const addCartItem = useAddCartItem({ mutation: {
+    onSuccess: () => { refetchCart(); setQuickAddName(""); setQuickAddQty(""); setQuickAddUnit(""); },
+    onError: () => toast({ title: "Couldn't add item", variant: "destructive" }),
+  } });
+  const removeCartItem = useRemoveCartItem({ mutation: { onSuccess: () => refetchCart() } });
   const approveCart = useApproveCart({ mutation: { onSuccess: () => { refetchCart(); toast({ title: "Cart approved!", description: "Order is ready." }); } } });
   const dismissCart = useDismissCart({ mutation: { onSuccess: () => { refetchCart(); toast({ title: "Cart dismissed." }); } } });
   const syncFromSheets = useSyncFromSheets({ mutation: {
@@ -511,9 +521,46 @@ export function ShopperPage() {
             </p>
           )}
 
-          {(cart?.items ?? []).length > 0 && (
+          {((cart?.items ?? []).length > 0 || !cartIsLocked) && (
             <div className="mt-4 pt-4 border-t border-border/30">
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Shopping List</p>
+              {!cartIsLocked && (
+                <form
+                  className="flex items-center gap-1.5 mb-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const name = quickAddName.trim();
+                    if (!name || addCartItem.isPending) return;
+                    addCartItem.mutate({ data: {
+                      name,
+                      ...(quickAddQty.trim() ? { quantity: quickAddQty.trim() } : {}),
+                      ...(quickAddUnit.trim() ? { unit: quickAddUnit.trim() } : {}),
+                    } });
+                  }}
+                >
+                  <Input
+                    value={quickAddName}
+                    onChange={(e) => setQuickAddName(e.target.value)}
+                    placeholder="Add an item (e.g. paper towels)"
+                    className="h-8 text-xs flex-1"
+                  />
+                  <Input
+                    value={quickAddQty}
+                    onChange={(e) => setQuickAddQty(e.target.value)}
+                    placeholder="Qty"
+                    className="h-8 text-xs w-14"
+                  />
+                  <Input
+                    value={quickAddUnit}
+                    onChange={(e) => setQuickAddUnit(e.target.value)}
+                    placeholder="Unit"
+                    className="h-8 text-xs w-20"
+                  />
+                  <Button type="submit" size="sm" className="h-8 text-xs shrink-0" disabled={!quickAddName.trim() || addCartItem.isPending}>
+                    <Plus size={12} className="mr-1" /> Add
+                  </Button>
+                </form>
+              )}
               <div className="space-y-1.5">
                 {(cart?.items ?? []).map((item: any) => {
                   const isUrgent = urgentItems.has(item.ingredientName);
@@ -522,9 +569,10 @@ export function ShopperPage() {
                     <div key={item.id} className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-sm text-xs transition-colors ${isUrgent ? "bg-accent/10 border border-accent/30" : "hover:bg-secondary/30"}`}>
                       <span className={`${isUrgent ? "text-accent font-bold" : "text-foreground/80"}`}>
                         {isUrgent && "⚡ "}{item.ingredientName} <span className="text-muted-foreground font-normal">×{item.totalQuantity} {item.unit}</span>
+                        {item.source === "manual" && <span className="ml-1.5 text-[10px] uppercase font-bold text-primary/70">added</span>}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-muted-foreground">{fmtDollars(item.estimatedCostCents)}</span>
+                        <span className="text-muted-foreground">{item.source === "manual" ? "—" : fmtDollars(item.estimatedCostCents)}</span>
                         <button
                           onClick={() => handleMarkUrgent(item)}
                           disabled={isPushing}
@@ -538,6 +586,16 @@ export function ShopperPage() {
                           {isPushing ? <RefreshCw size={8} className="animate-spin" /> : <CalendarPlus size={8} />}
                           {isPushing ? "…" : isUrgent ? "Urgent" : "Urgent"}
                         </button>
+                        {item.source === "manual" && !cartIsLocked && (
+                          <button
+                            onClick={() => removeCartItem.mutate({ cartItemId: item.id })}
+                            disabled={removeCartItem.isPending}
+                            title="Remove this item"
+                            className="p-1 rounded-sm text-muted-foreground/60 hover:text-destructive transition-colors disabled:opacity-50"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

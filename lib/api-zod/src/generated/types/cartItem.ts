@@ -5,6 +5,7 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
+import type { CartItemSource } from "./cartItemSource";
 
 export interface CartItem {
   id: number;
@@ -13,4 +14,5 @@ export interface CartItem {
   totalQuantity: string;
   unit: string;
   estimatedCostCents: number;
+  source: CartItemSource;
 }

@@ -210,6 +210,7 @@ export const cartItemsTable = pgTable("cart_items", {
   totalQuantity: text("total_quantity").notNull().default("1"),
   unit: text("unit").notNull().default("each"),
   estimatedCostCents: integer("estimated_cost_cents").notNull().default(0),
+  source: text("source").notNull().default("meal"),
 });
 
 export const mealCravingsTable = pgTable("meal_cravings", {

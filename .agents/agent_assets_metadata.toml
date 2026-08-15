@@ -1,26 +1,3 @@
 uploads = []
 generated = []
-
-[[outputs]]
-id = "0683OXnhKD7fzkJe-7aIr"
-uri = "file://brain-source.zip"
-type = "unspecified"
-title = "br(AI)n — source only (no node_modules, no generated, no lock files)"
-
-[[outputs]]
-id = "NhfM_Z0AZnndBjhUmQBkk"
-uri = "file://.local/HANDOFF.md"
-type = "text"
-title = "br(AI)n Task Handoff Package"
-
-[[outputs]]
-id = "MJ3NL0AIF8p4jAp8l-qZq"
-uri = "file://HANDOFF.md"
-type = "text"
-title = "br(AI)n Task Handoff Package"
-
-[[outputs]]
-id = "ECt-H1thMSyRvpBtTvBeJ"
-uri = "file://Guardian-07.03.26.zip"
-type = "unspecified"
-title = "Guardian-07.03.26"
+outputs = []

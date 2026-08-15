@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./addCartItemInput";
 export * from "./addLabPhaseInput";
 export * from "./addMealToCartInput";
 export * from "./adminSummaryInput";
@@ -28,6 +29,7 @@ export * from "./calendarEventInput";
 export * from "./calendarEventResult";
 export * from "./callSession";
 export * from "./cartItem";
+export * from "./cartItemSource";
 export * from "./cartWithMeals";
 export * from "./categoryBreakdown";
 export * from "./completeScheduleTaskInput";

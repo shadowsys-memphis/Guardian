@@ -1018,6 +1018,40 @@ paths:
         "201":
           description: Added
 
+  /shopper/cart/items:
+    post:
+      operationId: addCartItem
+      tags: [shopper]
+      summary: Add a one-off manual item to the current cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCartItemInput"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartItem"
+
+  /shopper/cart/items/{cartItemId}:
+    delete:
+      operationId: removeCartItem
+      tags: [shopper]
+      summary: Remove a manually added item from the current cart
+      parameters:
+        - name: cartItemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
   /shopper/cart/meals/{cartMealId}:
     delete:
       operationId: removeMealFromCart
@@ -2692,6 +2726,9 @@ components:
           type: string
         estimatedCostCents:
           type: integer
+        source:
+          type: string
+          enum: [meal, manual]
       required:
         - id
         - cartId
@@ -2699,6 +2736,19 @@ components:
         - totalQuantity
         - unit
         - estimatedCostCents
+        - source
+
+    AddCartItemInput:
+      type: object
+      properties:
+        name:
+          type: string
+        quantity:
+          type: string
+        unit:
+          type: string
+      required:
+        - name
 
     CartWithMeals:
       allOf:
