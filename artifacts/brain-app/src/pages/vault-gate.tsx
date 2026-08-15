@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { Lock, Eye, EyeOff, Sparkles } from "lucide-react";
+import { Eye, EyeOff, Sparkles } from "lucide-react";
 import { useVault } from "@/lib/vault-context";
+import { PresenceField } from "@/components/presence-field/PresenceField";
 
 interface VaultGateProps {
   children: ReactNode;
@@ -44,71 +45,88 @@ export function VaultGate({ children: _children }: VaultGateProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="w-full max-w-sm mx-auto px-6">
-        <div className="text-center mb-10 space-y-3">
-          <div className="h-20 w-20 mx-auto rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center shadow-[0_0_40px_rgba(70,159,104,0.12)]">
-            <Lock className="h-9 w-9 text-primary" />
+    <div className="min-h-screen bg-background flex items-center justify-center px-6 py-12">
+      <div className="w-full max-w-sm mx-auto">
+        <div className="text-center mb-8">
+          <div className="mx-auto mb-5 flex justify-center">
+            <PresenceField size={120} resting />
           </div>
-          <h1 className="text-4xl font-display font-bold text-primary tracking-widest uppercase">Brain Guardian</h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-display">Vault Locked · Enter Passphrase</p>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-accent font-medium mb-2">
+            Presence Field OS
+          </p>
+          <h1 className="text-4xl font-display font-medium text-foreground">
+            Brain Guardian
+          </h1>
+          <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
+            Care command for real life.
+            <br />
+            Quiet, adaptive, always present.
+          </p>
         </div>
 
-        <form onSubmit={handleUnlock} className="space-y-4">
-          <div className="relative">
-            <input
-              type={showPassphrase ? "text" : "password"}
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              placeholder="Enter vault passphrase"
-              autoFocus
-              className="w-full bg-secondary border border-border rounded-sm px-4 py-3 pr-12 font-display text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassphrase((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showPassphrase ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
+        <div className="glass-card p-6">
+          <p className="text-xs text-muted-foreground text-center mb-4">
+            Vault locked · enter your passphrase
+          </p>
 
-          {error && (
-            <p className="text-sm text-destructive font-display text-center">{error}</p>
-          )}
+          <form onSubmit={handleUnlock} className="space-y-4">
+            <div className="relative">
+              <input
+                type={showPassphrase ? "text" : "password"}
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                placeholder="Enter vault passphrase"
+                autoFocus
+                className="w-full bg-card/80 border border-border rounded-lg px-4 py-3 pr-12 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-shadow"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassphrase((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showPassphrase ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
+            {error && (
+              <p className="text-sm text-destructive text-center">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || !passphrase.trim()}
+              className="w-full py-3 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors"
+            >
+              {loading ? "Unlocking..." : "Unlock Vault"}
+            </button>
+          </form>
+
+          <div className="flex items-center gap-3 my-5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground/60">
+              or
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
 
           <button
-            type="submit"
-            disabled={loading || !passphrase.trim()}
-            className="w-full py-3 bg-primary text-primary-foreground font-display uppercase tracking-widest rounded-sm hover:bg-primary/90 disabled:opacity-40 transition-colors"
+            type="button"
+            onClick={handleViewDemo}
+            disabled={demoLoading}
+            className="w-full py-3 border border-border bg-card/60 text-foreground font-medium rounded-lg hover:bg-secondary/60 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
           >
-            {loading ? "Unlocking..." : "Unlock Vault"}
+            <Sparkles size={16} className="text-accent" />
+            {demoLoading ? "Loading Demo..." : "View Live Demo"}
           </button>
-        </form>
-
-        <div className="flex items-center gap-3 my-6">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground/50 font-display">or</span>
-          <div className="h-px flex-1 bg-border" />
+          <p className="text-[11px] text-center text-muted-foreground/70 mt-2">
+            No passphrase needed — explore with sample data.
+          </p>
+          {demoError && (
+            <p className="text-sm text-destructive text-center mt-2">{demoError}</p>
+          )}
         </div>
 
-        <button
-          type="button"
-          onClick={handleViewDemo}
-          disabled={demoLoading}
-          className="w-full py-3 border border-primary/40 text-primary font-display uppercase tracking-widest rounded-sm hover:bg-primary/10 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
-        >
-          <Sparkles size={16} />
-          {demoLoading ? "Loading Demo..." : "View Live Demo"}
-        </button>
-        <p className="text-[11px] text-center text-muted-foreground/60 mt-2 font-display">
-          No passphrase needed — explore with sample data.
-        </p>
-        {demoError && (
-          <p className="text-sm text-destructive font-display text-center mt-2">{demoError}</p>
-        )}
-
-        <p className="text-xs text-center text-muted-foreground/40 mt-8 font-display uppercase tracking-widest">
+        <p className="text-xs text-center text-muted-foreground/50 mt-8">
           Brain Guardian · Unconditional Software
         </p>
       </div>

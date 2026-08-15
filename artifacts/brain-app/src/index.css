@@ -1,81 +1,109 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Teko:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: 'JetBrains Mono', monospace;
-  --font-display: 'Teko', sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
-  
+
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
-  
+
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
-  
+
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
-  
+
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
-  
+
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
-  
+
   --color-accent: hsl(var(--accent));
   --color-accent-foreground: hsl(var(--accent-foreground));
-  
+
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
-  
+
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-  
+
   --color-success: hsl(var(--success));
   --color-success-foreground: hsl(var(--success-foreground));
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
 
 :root {
-  /* PASTEL GREEN & ROSE — OFF-WHITE THEME */
-  --background: 40 30% 96%;
-  --foreground: 220 20% 18%;
-  
-  --card: 40 25% 99%;
-  --card-foreground: 220 20% 18%;
-  
-  --popover: 40 25% 99%;
-  --popover-foreground: 220 20% 18%;
-  
-  --primary: 142 38% 44%;
-  --primary-foreground: 0 0% 100%;
-  
-  --secondary: 142 20% 92%;
-  --secondary-foreground: 220 15% 25%;
-  
-  --muted: 142 15% 91%;
-  --muted-foreground: 220 10% 48%;
-  
-  --accent: 355 60% 68%;
-  --accent-foreground: 0 0% 100%;
-  
-  --destructive: 0 72% 56%;
+  /* PRESENCE FIELD OS — warm elevated identity (issue #163).
+     Direction anchored on the warm concept boards: warm pearl /
+     sand ground, editorial serif, deep navy-slate band, soft-gold
+     action color, muted sage + copper accents.
+     Color carries semantic meaning:
+       green   = operational "safe / ready / approved" status ONLY (--success)
+       gold    = action / attention / the "morning" Presence state (--accent, --ring)
+       copper  = caution tier (--warning)
+       slate   = ink, command surfaces, night mode (--foreground, --primary, .surface-slate) */
+  --background: 35 40% 94%;          /* warm pearl #F6F1EA */
+  --foreground: 211 24% 17%;         /* deep slate ink #212B36 */
+
+  --card: 38 50% 97%;                /* warm near-white #FBF8F3 */
+  --card-foreground: 211 24% 17%;
+
+  --popover: 38 50% 97%;
+  --popover-foreground: 211 24% 17%;
+
+  --primary: 210 22% 21%;            /* command slate */
+  --primary-foreground: 38 40% 96%;
+
+  --secondary: 100 12% 87%;          /* pale sage surface */
+  --secondary-foreground: 211 20% 20%;
+
+  --muted: 36 28% 90%;               /* warm fog / sand */
+  --muted-foreground: 215 8% 38%;
+
+  --accent: 38 50% 50%;              /* Soft Gold — action / attention */
+  --accent-foreground: 40 40% 98%;
+
+  --destructive: 8 55% 47%;          /* terracotta signal red */
   --destructive-foreground: 0 0% 100%;
-  
-  --success: 142 55% 38%;
+
+  --success: 140 24% 33%;            /* operational sage-green — status only */
   --success-foreground: 0 0% 100%;
 
-  --border: 142 18% 82%;
-  --input: 142 15% 91%;
-  --ring: 142 38% 44%;
-  
-  --radius: 0.25rem;
+  --warning: 24 48% 44%;             /* copper amber caution */
+  --warning-foreground: 0 0% 100%;
+
+  --border: 35 18% 85%;              /* warm stone */
+  --input: 36 22% 91%;
+  --ring: 38 50% 50%;
+
+  --radius: 0.75rem;
+
+  /* Brand constants (mark, glass, Presence Field) — not part of the
+     shadcn token contract; fixed identity colors regardless of surface. */
+  --pearl: #F6F1EA;
+  --warm-sand: #EDE1D1;
+  --stone: #D9D3CF;
+  --sage: #AEC0B5;
+  --sage-deep: #4D6A4F;
+  --blush: #D8B6AA;
+  --copper: #B7754E;
+  --deep-slate: #14212D;
+  --soft-gold: #D9A441;
+  --soft-gold-light: #E8BC6A;
 }
 
 @layer base {
@@ -83,16 +111,62 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased font-sans selection:bg-primary/20 selection:text-primary;
-    background-image: 
-      radial-gradient(circle at 50% 0%, hsl(142, 30%, 94%) 0%, transparent 70%),
-      linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.02));
+    @apply bg-background text-foreground antialiased font-sans selection:bg-accent/25 selection:text-foreground;
+    /* Ambient warm-pearl ground with soft sand / sage / blush washes */
+    background-image:
+      radial-gradient(1100px 520px at 82% -6%, hsl(38 45% 91% / 0.6), transparent 60%),
+      radial-gradient(900px 480px at 6% 12%, hsl(110 16% 88% / 0.5), transparent 60%),
+      radial-gradient(760px 440px at 94% 92%, hsl(18 38% 90% / 0.4), transparent 60%);
     background-attachment: fixed;
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display tracking-wide uppercase;
+    @apply font-display;
+    letter-spacing: -0.01em;
   }
+}
+
+/* ---- Frosted glass surfaces (dashboard cards / panels) ------- */
+.glass-card {
+  background: linear-gradient(160deg, hsl(40 50% 99% / 0.78), hsl(40 40% 97% / 0.55));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid hsl(40 40% 99% / 0.7);
+  box-shadow:
+    0 1px 2px hsl(211 24% 17% / 0.04),
+    0 12px 32px -12px hsl(211 24% 17% / 0.12);
+  border-radius: var(--radius-xl);
+}
+.glass-panel {
+  background: hsl(40 45% 98% / 0.5);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid hsl(40 40% 99% / 0.6);
+  border-radius: var(--radius-lg);
+}
+
+/* ---- Deep-slate command surface ------------------------------
+   Scoped re-map of the semantic tokens for night-mode / serious
+   surfaces (the Presence Field band, command chrome). Children
+   keep using the same bg-card / text-foreground / border-border
+   utilities and pick up the slate palette automatically. */
+.surface-slate {
+  --background: 209 38% 13%;
+  --foreground: 38 40% 96%;
+  --card: 209 32% 17%;
+  --card-foreground: 38 40% 96%;
+  --popover: 209 32% 17%;
+  --popover-foreground: 38 40% 96%;
+  --primary: 38 40% 96%;
+  --primary-foreground: 209 38% 13%;
+  --secondary: 209 28% 22%;
+  --secondary-foreground: 38 40% 94%;
+  --muted: 209 26% 20%;
+  --muted-foreground: 210 20% 72%;
+  --border: 209 24% 27%;
+  --input: 209 24% 22%;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
 /* Custom Scrollbar */
@@ -108,36 +182,7 @@
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary) / 0.5);
-}
-
-/* Subtle scanline effect for terminal views */
-.scanline {
-  position: relative;
-  overflow: hidden;
-}
-.scanline::before {
-  content: " ";
-  display: block;
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-  background: linear-gradient(rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.04) 50%);
-  z-index: 10;
-  background-size: 100% 4px;
-  pointer-events: none;
-}
-
-.crt-flicker {
-  animation: flicker 0.15s infinite;
-}
-
-@keyframes flicker {
-  0% { opacity: 0.99; }
-  50% { opacity: 1; }
-  100% { opacity: 0.99; }
+  background: hsl(var(--accent) / 0.5);
 }
 
 @keyframes waveform {

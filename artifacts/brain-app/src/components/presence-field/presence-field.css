@@ -1,0 +1,121 @@
+/* ============================================================
+   PRESENCE FIELD — Brain Guardian living time mark (issue #163)
+   Artwork: the organic interlocking-ring from the 2026 boards.
+   Machinery: the Quarter Orbit kit's state machine, unchanged —
+     .is-calling / .is-resting        Jessica states
+     .q1–.q4                          discrete quarter presets
+     .daypart-*                       Presence temperature states
+     --orbit-angle                    continuous day clock
+   The slate body of the ring is constant — identity never moves.
+   The LIGHT (gradient glow end + halo) rides the ring through
+   the day and changes temperature with the daypart.
+   ============================================================ */
+
+:root{
+  --pf-ink:  #3A4456;   /* constant slate body */
+  --pf-glow: #D9A441;   /* the traveling light — daypart-tinted */
+
+  /* The day clock. 0deg = 06:00 (top). One full turn = one day.
+     Set by useDayQuarter, or by the .q1–.q4 presets below. */
+  --orbit-angle: 0deg;
+
+  /* Motion tokens — one easing + one duration scale per daypart.
+     Everything animated reads these two variables and nothing else. */
+  --ease-day: cubic-bezier(0.16, 1, 0.3, 1);   /* morning ease-out */
+  --dur-scale: 1;
+}
+
+/* ---- The rotor: the light riding the ring ------------------ */
+.presence-field .pf-rotor{
+  transform-box: view-box;
+  transform-origin: 128px 128px;      /* master grid center */
+  transform: rotate(var(--orbit-angle));
+  transition: transform calc(900ms * var(--dur-scale)) var(--ease-day);
+}
+
+/* ---- Quarter presets (no-JS mounts, admin override) --------
+   Angles are each quarter's midpoint. Quarter windows are Ray's:
+   Q1 6–10 · Q2 10–14 · Q3 14–18 · Q4 18–6 (18:00→06:00 sweeps
+   its 90° overnight). With useDayQuarter running, --orbit-angle
+   is continuous and these are unused. */
+.q1{ --orbit-angle:  45deg; }
+.q2{ --orbit-angle: 135deg; }
+.q3{ --orbit-angle: 225deg; }
+.q4{ --orbit-angle: 315deg; }
+
+/* ---- Daypart temperature (the five Presence states) --------
+   morning 6–10 · midday 10–14 · mid-afternoon 14–17 ·
+   mid-evening 17–21 · late-night 21–6. The slate ink never
+   changes; only the light does. */
+.daypart-morning{
+  --pf-glow: #E8BC6A;                          /* soft gold — begin gently */
+  --ease-day: cubic-bezier(0.16, 1, 0.3, 1);   /* ease-out */
+  --dur-scale: 1;
+}
+.daypart-midday{
+  --pf-glow: #DCCD9E;                          /* champagne — on track */
+  --ease-day: cubic-bezier(0.37, 0, 0.63, 1);  /* sine — steady loop */
+  --dur-scale: 1;
+}
+.daypart-midafternoon{
+  --pf-glow: #A8C0D9;                          /* powder blue — stay focused */
+  --ease-day: cubic-bezier(0.37, 0, 0.63, 1);
+  --dur-scale: 1.1;
+}
+.daypart-evening{
+  --pf-glow: #CFA284;                          /* copper — slow down */
+  --ease-day: cubic-bezier(0.65, 0, 0.35, 1);  /* viscous ease-in-out */
+  --dur-scale: 1.25;
+}
+.daypart-night{
+  --pf-glow: #8C97AD;                          /* fog slate — rest mode */
+  --ease-day: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-scale: 1.3;
+}
+/* Rest mode: the mark dims to a nightlight but never goes out */
+.daypart-night .pf-ring{ opacity: 0.8; }
+.daypart-night .pf-halo{ opacity: 0.5; }
+
+/* ---- Halo: the warmth around the light --------------------- */
+.presence-field .pf-halo{ opacity: 0.7; }
+.is-resting .pf-halo{
+  animation: pf-breathe calc(6s * var(--dur-scale)) ease-in-out infinite;
+}
+@keyframes pf-breathe{
+  0%,100%{ opacity: .55; }
+  50%    { opacity: 1;   }
+}
+
+/* ---- Calling: the voice carrying across a quiet room ------- */
+.presence-field .pf-ripple circle{
+  fill: none;
+  stroke: var(--pf-glow, #D9A441);
+  stroke-width: 1.5px;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.is-calling .pf-ripple circle{
+  animation: pf-call 4.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+.is-calling .pf-ripple .ring-1{ animation-delay: 0s;   }
+.is-calling .pf-ripple .ring-2{ animation-delay: 1.5s; }
+.is-calling .pf-ripple .ring-3{ animation-delay: 3s;   }
+
+@keyframes pf-call{
+  0%   { transform: scale(0.86); opacity: 0; }
+  15%  { opacity: 0.7; }                       /* peaks gently, early */
+  100% { transform: scale(1.22); opacity: 0; } /* dissolves wide */
+}
+
+/* ---- Accessibility ----------------------------------------- */
+@media (prefers-reduced-motion: reduce){
+  .presence-field .pf-rotor{ transition: none; }  /* snap, don't sweep */
+  .is-resting .pf-halo,
+  .is-calling .pf-ripple circle{ animation: none; }
+  /* Static "calling" indicator: one steady wide ring */
+  .is-calling .pf-ripple .ring-1{
+    opacity: .35;
+    transform: scale(1.12);
+  }
+}

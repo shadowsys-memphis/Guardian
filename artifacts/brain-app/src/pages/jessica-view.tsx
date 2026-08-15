@@ -13,7 +13,7 @@ export function JessicaView() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-primary font-sans overflow-hidden scanline flex flex-col selection:bg-primary/20">
+    <div className="min-h-screen bg-background text-primary font-sans overflow-hidden flex flex-col selection:bg-primary/20">
       {/* Terminal Header */}
       <header className="border-b border-primary/30 p-4 flex justify-between items-center bg-primary/5">
         <div className="flex items-center gap-4">
