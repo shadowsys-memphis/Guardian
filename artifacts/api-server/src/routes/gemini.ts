@@ -19,6 +19,7 @@ import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQuietWindow } from "./health-assessment";
 import { ensureMealsSeeded } from "./shopper";
 import { todayPacific } from "../lib/pacific-time";
+import { quarterForHour } from "../lib/jessica-tools";
 import { dispatchAll, type HermesAction } from "../lib/hermes";
 
 const router: IRouter = Router();
@@ -134,13 +135,40 @@ async function* streamLmStudio(
   if (!receivedAny) throw new Error("LM Studio returned an empty response — is the model fully loaded?");
 }
 
+/** "0730" | "07:30" -> "7:30 AM". Returns the input unchanged if unparseable. */
+function to12Hour(raw: string): string {
+  const m = /^(\d{1,2}):?(\d{2})$/.exec(raw.trim());
+  if (!m) return raw;
+  const h24 = Number(m[1]);
+  if (h24 > 23 || Number(m[2]) > 59) return raw;
+  const suffix = h24 < 12 ? "AM" : "PM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${m[2]} ${suffix}`;
+}
+
 export async function loadLiveContext(): Promise<string> {
   try {
     const [meals, schedule, symptoms, carts, showerStreakRow] = await Promise.all([
       db.select({ id: mealsTable.id, name: mealsTable.name, estimatedCostCents: mealsTable.estimatedCostCents })
         .from(mealsTable).where(eq(mealsTable.active, true)).limit(20),
-      db.select({ id: scheduleTasksTable.id, title: scheduleTasksTable.title, quarter: scheduleTasksTable.quarter, isCompleted: scheduleTasksTable.isCompleted, status: scheduleTasksTable.status })
-        .from(scheduleTasksTable).where(eq(scheduleTasksTable.isActive, true)).limit(30),
+      // No limit: with 30+ active tasks a cap silently truncated the tail of
+      // the day — on 2026-08-15 that dropped Q4's "Mail" and "Journal"
+      // entirely, so Jessica was never told the journal existed. Ordering is
+      // explicit for the same reason: without it, *which* tasks survived was
+      // arbitrary. `timeLabel`/`tier`/`voiceScript` are selected so the
+      // rendered schedule can carry times and priority instead of a bare list.
+      db.select({
+        id: scheduleTasksTable.id,
+        title: scheduleTasksTable.title,
+        quarter: scheduleTasksTable.quarter,
+        timeLabel: scheduleTasksTable.timeLabel,
+        tier: scheduleTasksTable.tier,
+        voiceScript: scheduleTasksTable.voiceScript,
+        isCompleted: scheduleTasksTable.isCompleted,
+        status: scheduleTasksTable.status,
+      })
+        .from(scheduleTasksTable).where(eq(scheduleTasksTable.isActive, true))
+        .orderBy(asc(scheduleTasksTable.quarter), asc(scheduleTasksTable.timeLabel), asc(scheduleTasksTable.order)),
       db.select().from(symptomLogsTable).orderBy(desc(symptomLogsTable.loggedAt)).limit(3),
       db.select().from(groceryCartsTable).orderBy(desc(groceryCartsTable.id)).limit(1),
       db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "shower_skip_streak")).limit(1),
@@ -150,6 +178,13 @@ export async function loadLiveContext(): Promise<string> {
       ? meals.map((m) => `  - ${m.name} (~$${((m.estimatedCostCents ?? 0) / 100).toFixed(2)})`).join("\n")
       : "  (no active meals in catalog yet)";
 
+    // Which quarter is live right now. Ray's boundaries, not clock-even —
+    // single source of truth is quarterForHour (lib/jessica-tools.ts).
+    const nowHour = Number(new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles", hour: "numeric", hour12: false,
+    }).format(new Date()));
+    const currentQuarter = quarterForHour(nowHour % 24);
+
     const scheduleByQ: Record<string, string[]> = {};
     for (const t of schedule) {
       const q = t.quarter ?? "Q1";
@@ -157,10 +192,24 @@ export async function loadLiveContext(): Promise<string> {
       // Refused and no-answer are shown distinctly — Jessica shouldn't re-ask
       // a task Pops already declined this day as if nothing happened.
       const mark = t.status === "refused" ? "✗(declined)" : t.status === "no_answer" ? "?(no answer)" : t.isCompleted ? "✓" : "○";
-      scheduleByQ[q].push(`${mark} ${t.title}`);
+      // "0730" -> "7:30 AM". 12-hour only: Pops hears these read aloud, and
+      // "twenty-one fifteen" is not how he tells time. Internal scheduling
+      // (quarterForHour, time_label storage) stays 24-hour — display only.
+      const time = to12Hour(t.timeLabel ?? "");
+      const script = t.voiceScript ? ` — say: "${t.voiceScript}"` : "";
+      scheduleByQ[q].push(`    ${mark} ${time} ${t.title} [${t.tier}]${script}`);
     }
+    const QUARTER_LABEL: Record<string, string> = {
+      Q1: "Q1 morning 6:00–10:00",
+      Q2: "Q2 midday 10:00–14:00",
+      Q3: "Q3 afternoon 14:00–18:00",
+      Q4: "Q4 wind-down 18:00–6:00",
+    };
     const scheduleStr = Object.entries(scheduleByQ).sort()
-      .map(([q, items]) => `  ${q}: ${items.join(", ")}`).join("\n") || "  (no active schedule tasks)";
+      .map(([q, items]) => {
+        const here = q === currentQuarter ? "  ◀ HAPPENING NOW" : "";
+        return `  ${QUARTER_LABEL[q] ?? q}:${here}\n${items.join("\n")}`;
+      }).join("\n") || "  (no active schedule tasks)";
 
     const symptomStr = symptoms.length > 0
       ? symptoms.map((s) => {
@@ -192,7 +241,13 @@ ${mealList}
 
 This Week's Grocery Cart: ${cartStr}
 
-Today's Schedule:
+TODAY'S SCHEDULE — THIS IS THE SPINE OF THE CALL.
+The day runs in four quarters. You are in ${currentQuarter} right now.
+Work the OPEN (○) items of ${currentQuarter}, in the listed time order, one at a
+time. That is the point of the call — the health questions further down are
+woven in around it, never instead of it. Do not read other quarters aloud
+unless Pops asks what's coming; do not re-raise ✓ done or ✗ declined items.
+When he confirms one actually happened, call complete_task for it.
 ${scheduleStr}
 
 Recent Symptom Logs (latest 3):
@@ -277,6 +332,7 @@ TONE PROFILE:
 ${toneProfile}
 
 ${liveContext ? liveContext + "\n" : ""}YOUR JOB:
+- Walk Pops through the OPEN items of the current quarter above, in time order, one at a time. This is the main purpose of every call.
 - Have a natural conversation with Pops — he experiences you as a friend checking in, not a clinical interview
 - Weave today's health check-in questions naturally into conversation — never read them as a list
 - Help with daily routine reminders, medication check-ins, and general wellbeing
@@ -286,7 +342,10 @@ ${liveContext ? liveContext + "\n" : ""}YOUR JOB:
 - Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.
 ${scriptSection}
 ${morningRoutineRules}
-HEALTH CHECK-IN (weave these naturally — pick 3-5 per call based on flow):
+HEALTH CHECK-IN — SECONDARY to the schedule above. These are woven around the
+quarter's tasks, not run as their own interview. Pick at most 2-3 per call that
+fit what he's already talking about, and skip them entirely if the quarter's
+items are taking the whole call. Never open a call with one of these:
 ${questionList}
 
 HEALTH DATA EXTRACTION — CRITICAL:

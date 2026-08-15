@@ -52,3 +52,4 @@ externalPort = 3000
 
 [nix]
 channel = "stable-25_05"
+packages = ["lightning-pool", "gotools"]
