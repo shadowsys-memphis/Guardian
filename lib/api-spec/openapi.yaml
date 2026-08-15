@@ -1037,6 +1037,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/CartItem"
 
+  /shopper/cart/scan-item:
+    post:
+      operationId: scanCartItem
+      tags: [shopper]
+      summary: Identify a product from a barcode or product photo and add it to the current cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanCartItemInput"
+      responses:
+        "201":
+          description: Product identified and added to the cart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanCartItemResult"
+
   /shopper/cart/items/{cartItemId}:
     delete:
       operationId: removeCartItem
@@ -2871,6 +2890,31 @@ components:
         - ok
         - added
         - alreadyInCart
+    ScanCartItemInput:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+          description: Base64-encoded photo of a barcode or product
+        mimeType:
+          type: string
+          description: Image MIME type (jpeg/png/webp/heic)
+      required:
+        - imageBase64
+
+    ScanCartItemResult:
+      type: object
+      properties:
+        item:
+          $ref: "#/components/schemas/CartItem"
+        identifiedName:
+          type: string
+        confidence:
+          type: string
+          enum: [high, medium, low]
+      required:
+        - item
+        - identifiedName
 
     CartWithMeals:
       allOf:

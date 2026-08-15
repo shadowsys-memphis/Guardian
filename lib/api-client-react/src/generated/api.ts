@@ -91,6 +91,8 @@ import type {
   RecordTaskOutcomeInput,
   RescheduleLabDrawInput,
   RotationTask,
+  ScanCartItemInput,
+  ScanCartItemResult,
   ScheduleTask,
   SetAiModelInput,
   SetLmStudioUrlInput,
@@ -4879,6 +4881,92 @@ export const useAddCartItem = <
   TContext
 > => {
   return useMutation(getAddCartItemMutationOptions(options));
+};
+
+/**
+ * @summary Identify a product from a barcode or product photo and add it to the current cart
+ */
+export const getScanCartItemUrl = () => {
+  return `/api/shopper/cart/scan-item`;
+};
+
+export const scanCartItem = async (
+  scanCartItemInput: ScanCartItemInput,
+  options?: RequestInit,
+): Promise<ScanCartItemResult> => {
+  return customFetch<ScanCartItemResult>(getScanCartItemUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(scanCartItemInput),
+  });
+};
+
+export const getScanCartItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof scanCartItem>>,
+    TError,
+    { data: BodyType<ScanCartItemInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof scanCartItem>>,
+  TError,
+  { data: BodyType<ScanCartItemInput> },
+  TContext
+> => {
+  const mutationKey = ["scanCartItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof scanCartItem>>,
+    { data: BodyType<ScanCartItemInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return scanCartItem(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ScanCartItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof scanCartItem>>
+>;
+export type ScanCartItemMutationBody = BodyType<ScanCartItemInput>;
+export type ScanCartItemMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Identify a product from a barcode or product photo and add it to the current cart
+ */
+export const useScanCartItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof scanCartItem>>,
+    TError,
+    { data: BodyType<ScanCartItemInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof scanCartItem>>,
+  TError,
+  { data: BodyType<ScanCartItemInput> },
+  TContext
+> => {
+  return useMutation(getScanCartItemMutationOptions(options));
 };
 
 /**

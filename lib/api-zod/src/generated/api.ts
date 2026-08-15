@@ -1511,6 +1511,19 @@ export const AddCartItemBody = zod.object({
 });
 
 /**
+ * @summary Identify a product from a barcode or product photo and add it to the current cart
+ */
+export const ScanCartItemBody = zod.object({
+  imageBase64: zod
+    .string()
+    .describe("Base64-encoded photo of a barcode or product"),
+  mimeType: zod
+    .string()
+    .optional()
+    .describe("Image MIME type (jpeg\/png\/webp\/heic)"),
+});
+
+/**
  * @summary Remove a manually added item from the current cart
  */
 export const RemoveCartItemParams = zod.object({

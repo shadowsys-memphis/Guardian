@@ -610,6 +610,120 @@ router.post("/shopper/cart/items", async (req, res) => {
   }
 });
 
+/** Bound a pathological upload — a phone photo is typically 1-5MB; base64 inflates ~4/3. */
+const MAX_SCAN_IMAGE_BASE64_CHARS = 15 * 1024 * 1024;
+
+const SCAN_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+
+// POST /shopper/cart/scan-item — identify a product from a barcode/product photo and add it to the cart
+router.post("/shopper/cart/scan-item", async (req, res) => {
+  try {
+    const { imageBase64, mimeType } = z.object({
+      imageBase64: z.string().min(1).max(MAX_SCAN_IMAGE_BASE64_CHARS),
+      mimeType: z.string().default("image/jpeg"),
+    }).parse(req.body);
+
+    if (!SCAN_IMAGE_MIME_TYPES.has(mimeType)) {
+      res.status(422).json({ error: "Unsupported image type — use a JPEG, PNG, WebP, or HEIC photo." });
+      return;
+    }
+
+    await ensureMealsSeeded(); // guarantees cart_items.source exists on first load
+    const cart = await getOrCreateCart();
+    if (cart.status !== "pending") {
+      res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
+      return;
+    }
+
+    let response: any;
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { mimeType, data: imageBase64 } },
+              {
+                text: `You are identifying a grocery/household product from a photo so it can be added to a shopping list.
+The photo shows either a product barcode (possibly with packaging visible) or the product itself.
+Respond with ONLY a JSON object, no markdown fences:
+{"identified": true, "itemName": "<short common shopping-list name, e.g. 'Pepsi 2L bottle', 'Jif Creamy Peanut Butter', 'Bananas'>", "confidence": "high"|"medium"|"low"}
+If you cannot tell what the product is (blurry, no product visible, barcode unreadable with no other clues), respond:
+{"identified": false, "reason": "<one short sentence>"}
+Do not guess a specific brand you cannot actually see. Keep itemName under 60 characters.`,
+              },
+            ],
+          },
+        ],
+      });
+    } catch (err) {
+      req.log.error({ err }, "Gemini scan-item call failed");
+      res.status(502).json({ error: "The image scanner is unavailable right now. Try again, or add the item by name." });
+      return;
+    }
+
+    const rawText: string = response?.candidates?.[0]?.content?.parts
+      ?.map((p: any) => p.text ?? "")
+      .join("") ?? "";
+    // Model output is untrusted — validate strictly rather than trusting shape.
+    const scanResultSchema = z.union([
+      z.object({
+        identified: z.literal(true),
+        itemName: z.string().trim().min(1).max(200),
+        confidence: z.enum(["high", "medium", "low"]).catch("medium"),
+      }),
+      z.object({
+        identified: z.literal(false),
+        reason: z.string().trim().max(500).optional(),
+      }),
+    ]);
+    let parsed: z.infer<typeof scanResultSchema>;
+    try {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      parsed = scanResultSchema.parse(JSON.parse(jsonMatch ? jsonMatch[0] : rawText));
+    } catch {
+      req.log.error({ rawText: rawText.slice(0, 500) }, "Gemini scan-item returned unparseable or invalid output");
+      res.status(502).json({ error: "The scanner returned an unreadable answer. Try again, or add the item by name." });
+      return;
+    }
+
+    if (!parsed.identified) {
+      res.status(422).json({
+        error: parsed.reason?.trim()
+          ? `Couldn't identify the product: ${parsed.reason.trim()}`
+          : "Couldn't identify a product in that photo. Try a clearer shot of the barcode or label.",
+      });
+      return;
+    }
+    const itemName = parsed.itemName;
+
+    // The Gemini call above can take seconds; the cart may have been approved
+    // or dismissed in the meantime. Re-verify pending status atomically with
+    // the insert so a locked cart can never gain an item.
+    const inserted = await db.execute(sql`
+      INSERT INTO cart_items (cart_id, ingredient_name, total_quantity, unit, estimated_cost_cents, source)
+      SELECT ${cart.id}, ${itemName}, '1', 'each', 0, 'manual'
+      WHERE EXISTS (
+        SELECT 1 FROM grocery_carts WHERE id = ${cart.id} AND status = 'pending'
+      )
+      RETURNING id, cart_id AS "cartId", ingredient_name AS "ingredientName",
+                total_quantity AS "totalQuantity", unit,
+                estimated_cost_cents AS "estimatedCostCents", source
+    `);
+    const item = (inserted as any).rows?.[0];
+    if (!item) {
+      res.status(409).json({ error: "Cart was approved or dismissed while scanning. Create a new week." });
+      return;
+    }
+
+    res.status(201).json({ item, identifiedName: itemName, confidence: parsed.confidence });
+  } catch (err) {
+    req.log.error({ err }, "Failed to scan item into cart");
+    res.status(400).json({ error: "Failed to scan item" });
+  }
+});
+
 // DELETE /shopper/cart/items/:cartItemId — remove a manually added item
 router.delete("/shopper/cart/items/:cartItemId", async (req, res) => {
   try {

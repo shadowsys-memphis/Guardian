@@ -752,6 +752,28 @@ export interface AddStaplesToCartResult {
   alreadyInCart: number;
 }
 
+export interface ScanCartItemInput {
+  /** Base64-encoded photo of a barcode or product */
+  imageBase64: string;
+  /** Image MIME type (jpeg/png/webp/heic) */
+  mimeType?: string;
+}
+
+export type ScanCartItemResultConfidence =
+  (typeof ScanCartItemResultConfidence)[keyof typeof ScanCartItemResultConfidence];
+
+export const ScanCartItemResultConfidence = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
+
+export interface ScanCartItemResult {
+  item: CartItem;
+  identifiedName: string;
+  confidence?: ScanCartItemResultConfidence;
+}
+
 export type CartWithMeals = GroceryCart & {
   meals?: MealWithIngredients[];
   items?: CartItem[];

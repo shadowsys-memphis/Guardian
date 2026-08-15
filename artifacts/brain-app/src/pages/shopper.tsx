@@ -22,6 +22,7 @@ import {
   FileWarning,
   Shuffle,
   Repeat,
+  Camera,
 } from "lucide-react";
 import {
   useListMeals,
@@ -34,6 +35,7 @@ import {
   useAddMealToCart,
   useRemoveMealFromCart,
   useAddCartItem,
+  useScanCartItem,
   useRemoveCartItem,
   useShuffleCart,
   useSwapCartMeal,
@@ -238,6 +240,27 @@ export function ShopperPage() {
     },
     onError: () => toast({ title: "Couldn't add staples", description: "The cart may be approved or dismissed.", variant: "destructive" }),
   } });
+  const scanCartItem = useScanCartItem({ mutation: {
+    onSuccess: (data: any) => {
+      refetchCart();
+      toast({ title: `Added "${data.identifiedName}" to the cart`, description: data.confidence === "low" ? "The scanner wasn't fully sure — double-check the name." : undefined });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error ?? "Couldn't identify the product. Try a clearer photo of the barcode or label.";
+      toast({ title: "Scan failed", description: msg, variant: "destructive" });
+    },
+  } });
+
+  const handleScanPhoto = async (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    try {
+      const imageBase64 = await readFileAsBase64(file);
+      scanCartItem.mutate({ data: { imageBase64, mimeType: file.type || "image/jpeg" } });
+    } catch {
+      toast({ title: "Could not read that photo", description: "Try taking the picture again.", variant: "destructive" });
+    }
+  };
   const approveCart = useApproveCart({ mutation: { onSuccess: () => { refetchCart(); toast({ title: "Cart approved!", description: "Order is ready." }); } } });
   const dismissCart = useDismissCart({ mutation: { onSuccess: () => { refetchCart(); toast({ title: "Cart dismissed." }); } } });
   const syncFromSheets = useSyncFromSheets({ mutation: {
@@ -612,6 +635,30 @@ export function ShopperPage() {
                     <Plus size={12} className="mr-1" /> Add
                   </Button>
                 </form>
+              )}
+              {!cartIsLocked && (
+                <div className="mb-3">
+                  <label
+                    className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border/50 text-xs font-medium cursor-pointer transition-colors ${
+                      scanCartItem.isPending ? "opacity-50 pointer-events-none" : "hover:bg-secondary/40 hover:border-primary/40"
+                    }`}
+                  >
+                    {scanCartItem.isPending ? <RefreshCw size={12} className="animate-spin" /> : <Camera size={12} />}
+                    {scanCartItem.isPending ? "Identifying…" : "Scan barcode or photo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={scanCartItem.isPending}
+                      onChange={(e) => {
+                        void handleScanPhoto(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <span className="ml-2 text-[11px] text-muted-foreground">Snap the product or its barcode — it's added by name.</span>
+                </div>
               )}
               <div className="space-y-1.5">
                 {(cart?.items ?? []).map((item: any) => {
