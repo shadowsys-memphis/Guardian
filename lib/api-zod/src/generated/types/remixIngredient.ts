@@ -5,9 +5,9 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
-import type { RemixSuggestion } from "./remixSuggestion";
 
-export interface MealRemixResult {
-  updatedPlan: string;
-  suggestion: RemixSuggestion;
+export interface RemixIngredient {
+  name: string;
+  quantity: string;
+  unit: string;
 }

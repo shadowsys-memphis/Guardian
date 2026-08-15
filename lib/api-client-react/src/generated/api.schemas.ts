@@ -1069,12 +1069,26 @@ export interface CreateInventoryItemInput {
 }
 
 export interface MealRemixInput {
-  currentPlan: string;
+  /** Deprecated — ignored; the server reads the selected recipes itself. */
+  currentPlan?: string;
   remixPrompt: string;
+}
+
+export interface RemixIngredient {
+  name: string;
+  quantity: string;
+  unit: string;
+}
+
+export interface RemixSuggestion {
+  name: string;
+  description: string;
+  ingredients: RemixIngredient[];
 }
 
 export interface MealRemixResult {
   updatedPlan: string;
+  suggestion: RemixSuggestion;
 }
 
 export interface IntakeDetectedItem {

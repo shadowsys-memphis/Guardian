@@ -113,6 +113,8 @@ export * from "./monthlyReportCategoryStatus";
 export * from "./monthlyTrendPoint";
 export * from "./recordTaskOutcomeInput";
 export * from "./recordTaskOutcomeInputStatus";
+export * from "./remixIngredient";
+export * from "./remixSuggestion";
 export * from "./reportSymptomLog";
 export * from "./rescheduleLabDrawInput";
 export * from "./rotationTask";

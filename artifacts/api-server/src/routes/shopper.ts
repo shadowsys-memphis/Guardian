@@ -1318,25 +1318,59 @@ router.get("/shopper/fulfill/current", async (req, res) => {
   }
 });
 
-// POST /shopper/remix — AI-powered meal plan remix using Gemini.
-// Remixes from the FULL recipe catalog: every active meal's ingredients are
-// pooled and Gemini composes fresh meal ideas by recombining them — not just
-// rewording the current plan or re-picking whole existing recipes.
-router.post("/shopper/remix", async (req, res) => {
+// POST /meals/remix — AI-powered meal remix using Gemini.
+// Pools the ingredients of the recipes currently selected in this week's cart
+// and asks Gemini to recombine them into a genuinely NEW meal (same
+// ingredients, different dish) — returned as structured data (name +
+// ingredient list) so it can be filed straight into the cart, not just a
+// text rewrite of the plan. Falls back to the full active catalog when the
+// cart has no meals yet.
+const remixSuggestionSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(1000).optional().default(""),
+  ingredients: z.array(z.object({
+    name: z.string().trim().min(1).max(200),
+    quantity: z.string().trim().max(50).optional().default("1"),
+    unit: z.string().trim().max(50).optional().default("each"),
+  })).min(1).max(30),
+});
+
+router.post("/meals/remix", async (req, res) => {
   try {
-    const { currentPlan, remixPrompt } = z.object({
-      currentPlan: z.string().min(1),
+    const { remixPrompt } = z.object({
+      // currentPlan is accepted for backwards compatibility but no longer
+      // used — the server reads the selected recipes itself.
+      currentPlan: z.string().optional(),
       remixPrompt: z.string().min(1),
     }).parse(req.body);
 
-    // Pool the whole catalog: recipe names plus a deduped ingredient list.
-    const catalog = await db
-      .select({ mealId: mealsTable.id, mealName: mealsTable.name, ingredient: mealIngredientsTable.name })
-      .from(mealsTable)
+    // Pool ingredients from the recipes currently in this week's cart.
+    const cart = await getOrCreateCart();
+    const selected = await db
+      .select({ mealName: mealsTable.name, ingredient: mealIngredientsTable.name, quantity: mealIngredientsTable.quantity, unit: mealIngredientsTable.unit })
+      .from(cartMealsTable)
+      .innerJoin(mealsTable, eq(cartMealsTable.mealId, mealsTable.id))
       .leftJoin(mealIngredientsTable, eq(mealIngredientsTable.mealId, mealsTable.id))
-      .where(eq(mealsTable.active, true));
-    const recipeNames = [...new Set(catalog.map((r) => r.mealName))];
-    const ingredientPool = [...new Set(catalog.map((r) => r.ingredient).filter((i): i is string => !!i))];
+      .where(eq(cartMealsTable.cartId, cart.id));
+
+    let poolRows = selected;
+    let poolSource: "cart" | "catalog" = "cart";
+    if (poolRows.length === 0) {
+      // Cart is empty — remix from the whole active catalog instead.
+      poolSource = "catalog";
+      poolRows = await db
+        .select({ mealName: mealsTable.name, ingredient: mealIngredientsTable.name, quantity: mealIngredientsTable.quantity, unit: mealIngredientsTable.unit })
+        .from(mealsTable)
+        .leftJoin(mealIngredientsTable, eq(mealIngredientsTable.mealId, mealsTable.id))
+        .where(eq(mealsTable.active, true));
+    }
+
+    const recipeNames = [...new Set(poolRows.map((r) => r.mealName))];
+    const ingredientLines = [...new Set(
+      poolRows
+        .filter((r): r is typeof r & { ingredient: string } => !!r.ingredient)
+        .map((r) => `${r.ingredient}${r.quantity ? ` (${r.quantity}${r.unit ? ` ${r.unit}` : ""})` : ""}`)
+    )];
 
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -1345,25 +1379,52 @@ router.post("/shopper/remix", async (req, res) => {
         parts: [{
           text: `You are a practical meal planning assistant for a veteran caregiver household with a $200/week budget.
 
-The household's full recipe catalog (${recipeNames.length} recipes):
+${poolSource === "cart" ? "Recipes selected for this week" : "Recipes in the household catalog"} (${recipeNames.length}):
 ${recipeNames.join(", ")}
 
-Every ingredient already used across those recipes (the pantry vocabulary):
-${ingredientPool.join(", ")}
-
-Current meal plan:
-${currentPlan}
+Ingredients available across those recipes (the ONLY pantry you may draw from):
+${ingredientLines.join(", ")}
 
 Remix instruction: "${remixPrompt}"
 
-Create FRESH meal ideas by recombining ingredients from the pool above — cross recipes, don't just re-pick existing ones (e.g. the fajita seasoning + the shrimp, the porcini sauce + the chicken). Stay close to the pool so the shopping list barely changes; only introduce an ingredient outside it when the remix instruction demands it. Respond with ONLY the updated meal plan text in the same format as the original. Be budget-conscious and practical. Keep Pepsi (exactly 4×2L bottles/week) in mind as a weekly staple for Pops.`,
+Invent ONE genuinely NEW meal by recombining ingredients from the pool above — cross recipes, don't just re-pick an existing recipe (e.g. the fajita seasoning + the shrimp, the porcini sauce + the chicken). Use ONLY ingredients from the pool unless the remix instruction explicitly demands something else. Be budget-conscious and practical.
+
+Respond with ONLY a JSON object of this exact shape:
+{"name": "meal name", "description": "one or two sentences on what it is and why it works", "ingredients": [{"name": "ingredient", "quantity": "2", "unit": "lb"}]}`,
         }],
       }],
+      config: {
+        responseMimeType: "application/json",
+        // gemini-2.5-flash spends part of this budget on internal "thinking"
+        // tokens; too small a cap truncates the JSON payload itself.
+        maxOutputTokens: 8192,
+      },
     });
 
-    const updatedPlan = ((result as any).text ?? "").trim();
-    if (!updatedPlan) throw new Error("Gemini returned an empty response");
-    res.json({ updatedPlan });
+    let rawText = ((result as any).text ?? "").trim();
+    if (!rawText) throw new Error("Gemini returned an empty response");
+    // Defensive: strip markdown fences if the model ignores the JSON mime type.
+    rawText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      // Last resort — pull out the outermost JSON object.
+      const match = rawText.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error("Gemini returned malformed JSON");
+      parsed = JSON.parse(match[0]);
+    }
+    const suggestion = remixSuggestionSchema.parse(parsed);
+
+    // Plain-text rendering kept for callers that display the plan as text.
+    const updatedPlan = [
+      `Remixed meal: ${suggestion.name}`,
+      suggestion.description ? suggestion.description : null,
+      "Ingredients:",
+      ...suggestion.ingredients.map((i) => `• ${i.name} — ${i.quantity} ${i.unit}`),
+    ].filter((l): l is string => l !== null).join("\n");
+
+    res.json({ updatedPlan, suggestion });
   } catch (err) {
     req.log.error({ err }, "Meal remix failed");
     res.status(500).json({ error: "Meal remix failed" });

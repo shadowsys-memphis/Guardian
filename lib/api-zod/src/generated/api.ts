@@ -1897,12 +1897,28 @@ export const RestockInventoryItemResponse = zod.object({
  * @summary AI-powered meal plan remix using Gemini
  */
 export const RemixMealPlanBody = zod.object({
-  currentPlan: zod.string(),
+  currentPlan: zod
+    .string()
+    .optional()
+    .describe(
+      "Deprecated — ignored; the server reads the selected recipes itself.",
+    ),
   remixPrompt: zod.string(),
 });
 
 export const RemixMealPlanResponse = zod.object({
   updatedPlan: zod.string(),
+  suggestion: zod.object({
+    name: zod.string(),
+    description: zod.string(),
+    ingredients: zod.array(
+      zod.object({
+        name: zod.string(),
+        quantity: zod.string(),
+        unit: zod.string(),
+      }),
+    ),
+  }),
 });
 
 /**

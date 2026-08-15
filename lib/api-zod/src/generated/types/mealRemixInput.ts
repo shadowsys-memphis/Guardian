@@ -7,6 +7,7 @@
  */
 
 export interface MealRemixInput {
-  currentPlan: string;
+  /** Deprecated — ignored; the server reads the selected recipes itself. */
+  currentPlan?: string;
   remixPrompt: string;
 }

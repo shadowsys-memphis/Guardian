@@ -2546,7 +2546,7 @@ export function ShopperTab() {
           <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
             <Wand2 size={16} className="text-primary" /> AI Meal Remix
           </CardTitle>
-          <CardDescription className="text-xs">Describe a modification — Gemini rewrites the plan</CardDescription>
+          <CardDescription className="text-xs">Gemini recombines this week's ingredients into a new meal — add it to the cart from the Shopper page</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="p-3 rounded-sm border border-border/40 bg-secondary/20 min-h-[80px] text-sm text-muted-foreground whitespace-pre-wrap font-mono text-xs leading-relaxed">

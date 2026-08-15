@@ -11,3 +11,6 @@ description: This monorepo generates typed clients from an OpenAPI spec; backend
 **Why:** Discovered when removing a custom auth header (`x-google-access-token`) from two routes — the header was still declared as a required parameter in the spec, invisible unless someone greps `openapi.yaml` directly, since the Express route code itself compiled and ran fine either way.
 
 **How to apply:** After editing any route's request/response shape, grep `lib/api-spec/openapi.yaml` for that route's path before considering the change done.
+
+## Rule — smoke-test through the spec's path, not the Express route you just read
+The path in `openapi.yaml` (what the generated client actually calls) can differ from the Express route path (e.g. spec `/meals/remix` vs route `/shopper/remix`) and nothing fails at build time — only the browser gets a 404. When verifying a route with curl, take the URL from the spec/generated client, not from the route file.

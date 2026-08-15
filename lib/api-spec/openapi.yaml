@@ -3538,19 +3538,52 @@ components:
       properties:
         currentPlan:
           type: string
+          description: Deprecated — ignored; the server reads the selected recipes itself.
         remixPrompt:
           type: string
       required:
-        - currentPlan
         - remixPrompt
+
+    RemixIngredient:
+      type: object
+      properties:
+        name:
+          type: string
+        quantity:
+          type: string
+        unit:
+          type: string
+      required:
+        - name
+        - quantity
+        - unit
+
+    RemixSuggestion:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        ingredients:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemixIngredient"
+      required:
+        - name
+        - description
+        - ingredients
 
     MealRemixResult:
       type: object
       properties:
         updatedPlan:
           type: string
+        suggestion:
+          $ref: "#/components/schemas/RemixSuggestion"
       required:
         - updatedPlan
+        - suggestion
 
     IntakeDetectedItem:
       type: object

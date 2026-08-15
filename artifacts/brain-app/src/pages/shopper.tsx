@@ -49,6 +49,7 @@ import {
   useRemixMealPlan,
   type MealWithIngredients,
   type MealCraving,
+  type RemixSuggestion,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -98,7 +99,8 @@ export function ShopperPage() {
   const [newStapleUnit, setNewStapleUnit] = useState("");
   const [mealDriveExporting, setMealDriveExporting] = useState(false);
   const [remixInput, setRemixInput] = useState("");
-  const [remixedPlan, setRemixedPlan] = useState("");
+  const [remixSuggestion, setRemixSuggestion] = useState<RemixSuggestion | null>(null);
+  const [remixAddingToCart, setRemixAddingToCart] = useState(false);
   const [calPushingShop, setCalPushingShop] = useState(false);
   const [urgentItems, setUrgentItems] = useState<Set<string>>(new Set());
   const [urgentPushingKey, setUrgentPushingKey] = useState<string | null>(null);
@@ -271,8 +273,12 @@ export function ShopperPage() {
   const deleteMeal = useDeleteMeal({ mutation: { onSuccess: () => { refetchMeals(); refetchCart(); } } });
   const updateCraving = useUpdateCraving({ mutation: { onSuccess: () => refetchCravings() } });
   const remixMealPlanMutation = useRemixMealPlan({ mutation: {
-    onSuccess: (data) => { setRemixedPlan((data as any).updatedPlan ?? ""); setRemixInput(""); toast({ title: "Meal plan remixed!" }); },
-    onError: () => toast({ title: "Remix failed", description: "Gemini could not remix the plan.", variant: "destructive" }),
+    onSuccess: (data) => {
+      setRemixSuggestion((data as any).suggestion ?? null);
+      setRemixInput("");
+      toast({ title: "Meal remixed!", description: "Review the new meal below and add it to the cart." });
+    },
+    onError: () => toast({ title: "Remix failed", description: "Gemini could not remix the meal.", variant: "destructive" }),
   }});
 
   const handleCookbookFiles = async (fileList: FileList | null) => {
@@ -303,9 +309,27 @@ export function ShopperPage() {
 
   const handleRemix = () => {
     if (!remixInput.trim()) return;
-    // Cart can be empty — Gemini can still build a plan from scratch off the prompt.
-    const plan = remixedPlan || currentPlanText || "(No meals in the cart yet — build a new plan from scratch.)";
-    remixMealPlanMutation.mutate({ data: { currentPlan: plan, remixPrompt: remixInput.trim() } });
+    // Server pools the ingredients of this week's selected recipes itself
+    // (falling back to the full catalog when the cart is empty).
+    remixMealPlanMutation.mutate({ data: { remixPrompt: remixInput.trim() } });
+  };
+
+  const handleAddRemixToCart = async () => {
+    if (!remixSuggestion || remixAddingToCart) return;
+    setRemixAddingToCart(true);
+    try {
+      for (const ing of remixSuggestion.ingredients) {
+        await addCartItem.mutateAsync({ data: { name: ing.name, quantity: ing.quantity || "1", unit: ing.unit || "each" } });
+      }
+      refetchCart();
+      toast({ title: `"${remixSuggestion.name}" added to cart`, description: `${remixSuggestion.ingredients.length} ingredient(s) added to the shopping list.` });
+      setRemixSuggestion(null);
+    } catch {
+      refetchCart();
+      toast({ title: "Couldn't add all ingredients", description: "Some items may not have made it into the cart — check the shopping list.", variant: "destructive" });
+    } finally {
+      setRemixAddingToCart(false);
+    }
   };
 
   const budget = cart?.budgetCents ?? 15000;
@@ -781,17 +805,17 @@ export function ShopperPage() {
           <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
             <Wand2 size={16} className="text-primary" /> AI Meal Remix
           </CardTitle>
-          <CardDescription className="text-xs">Describe a modification — Gemini rewrites the plan</CardDescription>
+          <CardDescription className="text-xs">Gemini recombines the ingredients of this week's recipes into a brand-new meal</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="p-3 rounded-sm border border-border/40 bg-secondary/20 min-h-[80px] text-sm text-muted-foreground whitespace-pre-wrap font-mono text-xs leading-relaxed">
-            {remixedPlan || currentPlanText || "Cart is empty — describe what you want and Gemini will build a plan from scratch."}
+            {currentPlanText || "Cart is empty — Gemini will remix from the whole recipe catalog instead."}
           </div>
           <div className="flex gap-2">
             <Input
               value={remixInput}
               onChange={(e) => setRemixInput(e.target.value)}
-              placeholder="e.g. Low-sodium chicken instead of steak this week"
+              placeholder="e.g. Something low-sodium with the chicken and the fajita fixings"
               className="flex-1 text-sm"
               onKeyDown={(e) => { if (e.key === "Enter" && remixInput.trim()) handleRemix(); }}
             />
@@ -800,10 +824,29 @@ export function ShopperPage() {
               Remix
             </Button>
           </div>
-          {remixedPlan && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-success">✓ Remix applied — review the updated plan above</p>
-              <button onClick={() => setRemixedPlan("")} className="text-xs text-muted-foreground hover:text-foreground">Reset</button>
+          {remixSuggestion && (
+            <div className="p-3 rounded-sm border border-primary/40 bg-primary/5 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">{remixSuggestion.name}</p>
+                  {remixSuggestion.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{remixSuggestion.description}</p>
+                  )}
+                </div>
+                <button onClick={() => setRemixSuggestion(null)} className="text-xs text-muted-foreground hover:text-foreground shrink-0">Dismiss</button>
+              </div>
+              <ul className="text-xs text-muted-foreground space-y-0.5">
+                {remixSuggestion.ingredients.map((ing, i) => (
+                  <li key={i}>• {ing.name} — {ing.quantity} {ing.unit}</li>
+                ))}
+              </ul>
+              <Button size="sm" onClick={handleAddRemixToCart} disabled={remixAddingToCart || cartIsLocked}>
+                {remixAddingToCart ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Plus size={14} className="mr-1" />}
+                Add ingredients to cart
+              </Button>
+              {cartIsLocked && (
+                <p className="text-xs text-muted-foreground">This week's cart is {cartStatus} — reset it to add the remix.</p>
+              )}
             </div>
           )}
         </CardContent>
