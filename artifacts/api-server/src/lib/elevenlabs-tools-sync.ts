@@ -28,7 +28,8 @@ type ToolKey =
   | "reschedule_task"
   | "update_daily_call_schedule"
   | "complete_task"
-  | "refuse_task";
+  | "refuse_task"
+  | "add_grocery_items";
 
 export type SyncJessicaToolsResult =
   | { ok: true; message: string; tools: Record<string, string> }
@@ -62,6 +63,33 @@ function buildToolConfigs(baseUrl: string, secret: string): Array<{ key: ToolKey
               title: { type: "string", description: "The task, reminder, or event name — e.g. 'take pills' or 'afternoon walk'." },
               time: { type: "string", description: "The time for this task in 24-hour HH:MM Pacific time, e.g. '15:00' for 3:00 PM. Always convert whatever time was spoken into this exact format." },
               details: { type: "string", description: "Optional short context about the task." },
+            },
+          },
+        },
+      },
+    },
+    {
+      key: "add_grocery_items",
+      config: {
+        type: "webhook",
+        name: "add_grocery_items",
+        description:
+          "Adds one or more one-off grocery items to this week's grocery cart. Call this whenever Pops or Ray names specific items they want added — e.g. 'add milk and eggs' or 'we need paper towels'. Do not use this for full meals. After the call returns, read the confirmation message back so they know exactly what was added.",
+        response_timeout_secs: 15,
+        tool_error_handling_mode: "auto",
+        api_schema: {
+          url: `${baseUrl}/jessica/tools/add-grocery-items`,
+          method: "POST",
+          request_headers: requestHeaders,
+          request_body_schema: {
+            type: "object",
+            required: ["items"],
+            properties: {
+              items: {
+                type: "array",
+                description: "The grocery item names exactly as spoken, one entry per item — e.g. [\"milk\", \"eggs\"].",
+                items: { type: "string", description: "A single grocery item name, e.g. 'milk'." },
+              },
             },
           },
         },

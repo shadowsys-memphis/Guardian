@@ -22,3 +22,4 @@
 - [Fleet governance & git divergence](fleet-governance-and-git-state.md) — this workspace is a copy behind AGENTS.md fleet rules with unpushed local commits; check git state before editing.
 - [Autoscale vs in-process cron scheduler](autoscale-cron-scheduler-risk.md) — safety-critical jobs need an always-on process; autoscale can silently skip them.
 - [Grocery cart lock invariant](cart-lock-invariant.md) — cart mutation routes must guard current-cart ownership + pending status; rebuild only deletes meal-sourced items.
+- [Lazy schema init](lazy-schema-init.md) — tables are created lazily by route-level ensure* fns; shared/voice-channel capabilities must await their own memoized schema-ensure or they fail on fresh deployments.

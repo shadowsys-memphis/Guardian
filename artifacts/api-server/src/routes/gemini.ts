@@ -334,6 +334,12 @@ ADD_MEAL_TO_CART — Ray or Pops names a specific meal they want added to this w
 {"type":"ADD_MEAL_TO_CART","mealName":"exact meal name as stated"}
 ---END_ACTION---
 
+ADD_GROCERY_ITEMS — Ray or Pops names one or more one-off grocery items to add to this week's cart (not a full meal). Triggers: "add milk and eggs", "put bread on the list", "we need paper towels":
+---ACTION---
+{"type":"ADD_GROCERY_ITEMS","items":["milk","eggs"]}
+---END_ACTION---
+When you emit ADD_GROCERY_ITEMS, confirm back exactly what you're adding, e.g. "Got it — adding milk and eggs to this week's cart."
+
 APPROVE_CART — Ray says "commit", "yes", "go ahead", "place the order", "looks good", or confirms they want to lock in the grocery order:
 ---ACTION---
 {"type":"APPROVE_CART","details":"approved"}
@@ -391,6 +397,12 @@ ADD_MEAL_TO_CART — Ray names a specific meal to add:
 ---ACTION---
 {"type":"ADD_MEAL_TO_CART","mealName":"meal name as stated"}
 ---END_ACTION---
+
+ADD_GROCERY_ITEMS — Ray names one or more one-off grocery items (not a full meal): "add milk and eggs", "put bread on the list":
+---ACTION---
+{"type":"ADD_GROCERY_ITEMS","items":["milk","eggs"]}
+---END_ACTION---
+When emitting ADD_GROCERY_ITEMS, confirm what you're adding, e.g. "Adding milk and eggs to the cart."
 
 APPROVE_CART — Ray says "commit", "go ahead", "place the order", "looks good":
 ---ACTION---
@@ -789,9 +801,13 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       const cravingMeal = parseCravingTag(fullResponse);
       const { healthDataTags, sessionId } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
       const parsedActions = parseActionBlocksRaw(fullResponse);
+      // Cart actions (incl. ADD_GROCERY_ITEMS) are dispatched by the phone UI
+      // client alongside GROCERY_ORDER/ADD_MEAL_TO_CART — don't also dispatch
+      // them here or spoken items would land in the cart twice.
+      const serverActions = parsedActions.filter((a: any) => a?.type !== "ADD_GROCERY_ITEMS");
       const tenantId = (req as any).tenantSession?.sub;
-      if (tenantId && parsedActions.length > 0) {
-        await dispatchAll(parsedActions as HermesAction[], { tenantId, sessionId: sessionId ?? undefined, cycleDay, source: "jessica", actor: "jessica" });
+      if (tenantId && serverActions.length > 0) {
+        await dispatchAll(serverActions as HermesAction[], { tenantId, sessionId: sessionId ?? undefined, cycleDay, source: "jessica", actor: "jessica" });
       } else if (!tenantId) {
         req.log.warn("Hermes: tenantSession.sub missing — skipping dispatchAll to prevent cross-tenant ledger writes");
       }
@@ -882,9 +898,13 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       const cravingMeal = parseCravingTag(fullResponse);
       const { healthDataTags, sessionId } = await savePostProcessing(req, conversationId, fullResponse, questions, cravingMeal);
       const parsedActions = parseActionBlocksRaw(fullResponse);
+      // Cart actions (incl. ADD_GROCERY_ITEMS) are dispatched by the phone UI
+      // client alongside GROCERY_ORDER/ADD_MEAL_TO_CART — don't also dispatch
+      // them here or spoken items would land in the cart twice.
+      const serverActions = parsedActions.filter((a: any) => a?.type !== "ADD_GROCERY_ITEMS");
       const tenantId = (req as any).tenantSession?.sub;
-      if (tenantId && parsedActions.length > 0) {
-        await dispatchAll(parsedActions as HermesAction[], { tenantId, sessionId: sessionId ?? undefined, cycleDay, source: "jessica", actor: "jessica" });
+      if (tenantId && serverActions.length > 0) {
+        await dispatchAll(serverActions as HermesAction[], { tenantId, sessionId: sessionId ?? undefined, cycleDay, source: "jessica", actor: "jessica" });
       } else if (!tenantId) {
         req.log.warn("Hermes: tenantSession.sub missing — skipping dispatchAll to prevent cross-tenant ledger writes");
       }

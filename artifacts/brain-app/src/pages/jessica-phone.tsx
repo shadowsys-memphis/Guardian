@@ -560,6 +560,29 @@ export function JessicaPhone() {
             throw new Error(`Could not add ${mealName}: ${body}`);
           }
 
+        } else if (action.type === "ADD_GROCERY_ITEMS") {
+          const rawItems = (action.payload as any).items;
+          const items: string[] = (Array.isArray(rawItems) ? rawItems : typeof rawItems === "string" ? rawItems.split(",") : [])
+            .map((i: unknown) => String(i).trim())
+            .filter((i: string) => i.length > 0);
+          if (items.length === 0) throw new Error("No items named");
+          const added: string[] = [];
+          for (const name of items) {
+            const res = await fetch(`${BASE_URL}/api/shopper/cart/items`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name }),
+            });
+            if (!res.ok) {
+              const body = await res.text().catch(() => res.statusText);
+              throw new Error(`Could not add ${name}: ${body}`);
+            }
+            added.push(name);
+          }
+          // No spoken/added message here — the model's own reply is the single
+          // confirmation layer (the prompt instructs it to read back exactly
+          // what it's adding). Failures still surface via the catch below.
+
         } else if (action.type === "APPROVE_CART") {
           const approveRes = await fetch(`${BASE_URL}/api/shopper/cart/approve`, { method: "POST" });
           if (!approveRes.ok) throw new Error("Could not approve cart");
@@ -638,6 +661,7 @@ export function JessicaPhone() {
     TOGGLE_SMART_DEVICE: { label: "Device", icon: <Zap size={10} />, color: "text-primary border-primary/30" },
     GROCERY_ORDER: { label: "Grocery Order", icon: <ShoppingCart size={10} />, color: "text-accent border-accent/30" },
     ADD_MEAL_TO_CART: { label: "Meal Added", icon: <ShoppingCart size={10} />, color: "text-accent border-accent/30" },
+    ADD_GROCERY_ITEMS: { label: "Items Added", icon: <ShoppingCart size={10} />, color: "text-accent border-accent/30" },
     APPROVE_CART: { label: "Cart Approved", icon: <CheckCircle size={10} />, color: "text-success border-success/30" },
     CANCEL_CART: { label: "Cart Cancelled", icon: <X size={10} />, color: "text-destructive border-destructive/30" },
     MED_CONFIRMED: { label: "Med Confirmed", icon: <CheckCircle size={10} />, color: "text-success border-success/30" },

@@ -3191,13 +3191,13 @@ function DevicesTab() {
 
   const LOG_TYPE_OPTIONS = [
     "", "QUICK_ACTION", "TOGGLE_SMART_DEVICE", "ADD_EVENT", "ADD_TASK",
-    "GROCERY_ORDER", "ADD_MEAL_TO_CART", "APPROVE_CART", "CANCEL_CART",
+    "GROCERY_ORDER", "ADD_MEAL_TO_CART", "ADD_GROCERY_ITEMS", "APPROVE_CART", "CANCEL_CART",
     "SCHEDULE_APPOINTMENT", "MED_CONFIRMED", "MED_REFUSED", "WELLBEING_ALERT", "COMMAND",
   ];
   const LOG_TYPE_LABELS: Record<string, string> = {
     "": "All Types", QUICK_ACTION: "Quick Action", TOGGLE_SMART_DEVICE: "Device Toggle",
     ADD_EVENT: "Event Added", ADD_TASK: "Task Added", GROCERY_ORDER: "Grocery Order",
-    ADD_MEAL_TO_CART: "Meal Added", APPROVE_CART: "Cart Approved", CANCEL_CART: "Cart Cancelled",
+    ADD_MEAL_TO_CART: "Meal Added", ADD_GROCERY_ITEMS: "Items Added", APPROVE_CART: "Cart Approved", CANCEL_CART: "Cart Cancelled",
     SCHEDULE_APPOINTMENT: "Appointment", MED_CONFIRMED: "Med Confirmed", MED_REFUSED: "Med Refused",
     WELLBEING_ALERT: "Wellbeing Alert", COMMAND: "Command",
   };

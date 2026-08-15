@@ -731,6 +731,29 @@ router.post("/jessica/tools/update-daily-call", requireToolSecret, requireRayCal
   }
 });
 
+const addGroceryItemsToolSchema = z.object({
+  items: z.array(z.string().min(1)).min(1),
+});
+
+// Task #148 — one-off spoken grocery items ("add milk and eggs") from a live
+// phone call. Intentionally usable by whoever is on the call (Ray or Pops),
+// same as the task-CRUD tools — no requireRayCaller gate.
+router.post("/jessica/tools/add-grocery-items", requireToolSecret, async (req: Request, res: Response) => {
+  try {
+    const parsed = addGroceryItemsToolSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.json({ success: false, message: "I didn't catch which items to add — could you name them again?" });
+      return;
+    }
+    const action: HermesAction = { type: "ADD_GROCERY_ITEMS", items: parsed.data.items };
+    const result = await dispatch(action, jessicaToolCtx);
+    res.json({ success: result.ok, message: result.message });
+  } catch (err) {
+    req.log.error({ err }, "Jessica add-grocery-items tool call failed");
+    res.json({ success: false, message: "Something went wrong on my end — let's try that again in a moment." });
+  }
+});
+
 // Manual, Ray-visible trigger for registering/refreshing the tools above with
 // ElevenLabs — mirrors the startup best-effort call in index.ts but gives
 // Settings a button with real success/failure feedback instead of a silent

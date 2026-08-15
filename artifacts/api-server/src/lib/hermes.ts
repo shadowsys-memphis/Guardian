@@ -60,6 +60,7 @@ import {
 } from "./jessica-tools";
 import { applySettingsPatch, dailyCallTimeSchema } from "../routes/health-assessment";
 import { inferTierFromTitle } from "./task-tiers";
+import { addManualItemsToCart, speakableItemList } from "./cart";
 
 let careEventsReady = false;
 async function ensureCareEventsTable(): Promise<void> {
@@ -110,7 +111,8 @@ export type HermesActionType =
   | "RESCHEDULE_TASK"
   | "UPDATE_CALL_SCHEDULE"
   | "COMPLETE_TASK"
-  | "REFUSE_TASK";
+  | "REFUSE_TASK"
+  | "ADD_GROCERY_ITEMS";
 
 export interface HermesAction {
   type: HermesActionType;
@@ -123,6 +125,8 @@ export interface HermesAction {
   time?: string;
   /** UPDATE_CALL_SCHEDULE only — turns the automated daily call on/off. */
   enabled?: boolean;
+  /** ADD_GROCERY_ITEMS only — one-off item names spoken by the caller. */
+  items?: string[];
   [key: string]: unknown;
 }
 
@@ -472,6 +476,35 @@ async function handleWellbeingAlert(action: HermesAction, ctx: LedgerContext): P
   logger.warn({ action, sessionId: ctx.sessionId }, "[Hermes] WELLBEING_ALERT → session flagged + ledger");
 }
 
+/**
+ * ADD_GROCERY_ITEMS (Task #148) — one-off spoken items ("add milk and eggs")
+ * land in the current weekly cart as manual items via the shared cart
+ * capability, honoring the pending-status lock invariant. Returns a spoken
+ * confirmation listing exactly what was added so Jessica can read it back.
+ */
+async function handleAddGroceryItems(action: HermesAction, ctx: LedgerContext): Promise<HermesDispatchResult> {
+  const rawItems = Array.isArray(action.items)
+    ? action.items
+    : typeof action.items === "string"
+      ? (action.items as string).split(",")
+      : [];
+  const items = rawItems.filter((i): i is string => typeof i === "string");
+
+  const result = await addManualItemsToCart(items);
+  if (!result.ok) {
+    if (result.reason === "cart_locked") {
+      await writeLedger(action, ctx, "skipped");
+      return { ok: false, message: "This week's cart is already locked in, so I can't add to it — let Ray know and he can start a new one.", outcome: "skipped" };
+    }
+    await writeLedger(action, ctx, "skipped");
+    return { ok: false, message: "I didn't catch which items to add — could you name them again?", outcome: "skipped" };
+  }
+
+  logger.info({ action, added: result.added, tenantId: ctx.tenantId }, "[Hermes] ADD_GROCERY_ITEMS → cart_items");
+  await writeLedger(action, ctx, "dispatched", { learningRelevant: true });
+  return { ok: true, message: `Added ${speakableItemList(result.added)} to this week's grocery cart.`, outcome: "dispatched" };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -495,6 +528,8 @@ export async function dispatch(action: HermesAction, ctx: LedgerContext): Promis
         return await handleRefuseTask(action, ctx);
       case "UPDATE_CALL_SCHEDULE":
         return await handleUpdateCallSchedule(action, ctx);
+      case "ADD_GROCERY_ITEMS":
+        return await handleAddGroceryItems(action, ctx);
       case "TOGGLE_SMART_DEVICE":
         await handleToggleDevice(action, ctx);
         return { ok: true, message: "Done.", outcome: "dispatched" };

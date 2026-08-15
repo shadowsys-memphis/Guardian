@@ -21,6 +21,7 @@ import {
   type ParsedRecipe,
   type UploadedFile,
 } from "../lib/cookbook-parser";
+import { getOrCreateCart, updateCartTotal, ensureCartSchema } from "../lib/cart";
 
 const router: IRouter = Router();
 
@@ -134,37 +135,15 @@ export async function ensureMealsSeeded() {
       estimated_cost_cents INTEGER NOT NULL DEFAULT 0
     )
   `);
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS grocery_carts (
-      id SERIAL PRIMARY KEY,
-      week_start_date DATE NOT NULL,
-      budget_cents INTEGER NOT NULL DEFAULT 20000,
-      total_estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'pending',
-      approved_at TIMESTAMP,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    )
-  `);
+  // grocery_carts + cart_items (incl. the source column migration) live in
+  // ../lib/cart's ensureCartSchema() so voice channels can initialize them too.
+  await ensureCartSchema();
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS cart_meals (
       id SERIAL PRIMARY KEY,
       cart_id INTEGER NOT NULL,
       meal_id INTEGER NOT NULL
     )
-  `);
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS cart_items (
-      id SERIAL PRIMARY KEY,
-      cart_id INTEGER NOT NULL,
-      ingredient_name TEXT NOT NULL,
-      total_quantity TEXT NOT NULL DEFAULT '1',
-      unit TEXT NOT NULL DEFAULT 'each',
-      estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
-      source TEXT NOT NULL DEFAULT 'meal'
-    )
-  `);
-  await db.execute(sql`
-    ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'meal'
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS staple_items (
@@ -227,35 +206,8 @@ async function getDietaryRestrictions(): Promise<string[]> {
   }
 }
 
-function getMondayOfWeek(date: Date): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  return d.toISOString().split("T")[0];
-}
-
-async function getOrCreateCart(): Promise<typeof groceryCartsTable.$inferSelect> {
-  const weekStart = getMondayOfWeek(new Date());
-  const existing = await db.select().from(groceryCartsTable)
-    .where(eq(groceryCartsTable.weekStartDate, weekStart))
-    .limit(1);
-  if (existing[0]) return existing[0];
-  const [created] = await db.insert(groceryCartsTable).values({
-    weekStartDate: weekStart,
-    budgetCents: 20000,
-    totalEstimatedCostCents: 0,
-    status: "pending",
-  }).returning();
-  return created;
-}
-
-/** Recompute the cart's total from all items currently in it (manual items count too, though they're unestimated for now). */
-async function updateCartTotal(cartId: number): Promise<void> {
-  const items = await db.select().from(cartItemsTable).where(eq(cartItemsTable.cartId, cartId));
-  const total = items.reduce((s, i) => s + i.estimatedCostCents, 0);
-  await db.update(groceryCartsTable).set({ totalEstimatedCostCents: total }).where(eq(groceryCartsTable.id, cartId));
-}
+// getMondayOfWeek/getOrCreateCart/updateCartTotal moved to ../lib/cart (Task #148)
+// so voice channels share the same current-cart + lock-invariant logic.
 
 async function rebuildCartItems(cartId: number): Promise<void> {
   // Only meal-derived items are rebuilt; manually added items must survive meal add/remove.
