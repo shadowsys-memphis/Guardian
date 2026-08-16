@@ -1,0 +1,194 @@
+es—we can fully integrate it, but we should not build from the currently checked-out LOCAL files.
+
+  Confirmed:
+
+  - The repo’s .replit:9 targets https://guardian-os-LedgerGhost90.replit.app.
+  - Deployment is an autoscale application with frontend 8081 → 80 and API on 8080.
+  - The live site still publishes the legacy br(AI)n App identity.
+  - LOCAL master is at 2361a06, dirty, and 39 commits behind origin/master.
+  - origin/master is at fe80f0b and includes recent Replit publishing commits.
+  - The current dashboard is embedded inside the 4,800-line admin-view.tsx.
+
+  ## Integration plan
+
+  ### 1. Establish the active writer
+
+  Use the Replit workspace as the only writer for this pass.
+
+  Before editing, run the required proof block there and record:
+
+  - Replit workspace path
+  - current branch and commit
+  - remote
+  - clean/dirty status
+  - whether its HEAD matches origin/master at fe80f0b
+
+  If Replit contains unpublished changes, preserve them before proceeding. Do not pull, rebase, switch branches, or
+  clean this LOCAL checkout yet.
+
+  ### 2. Create the production branch
+
+  After you approve the branch operation:
+
+  - Create presence-field-os-home from the confirmed current Replit master.
+  - Keep production on its existing deployment while we build.
+  - No database migration, API rewrite, generated-file edits, or OpenClaw changes.
+
+  ### 3. Graduate the approved prototype
+
+  Create focused production components:
+
+  artifacts/brain-app/src/features/presence-field/
+    presence-field-mark.tsx
+    presence-field-state.ts
+    presence-field.css
+
+  artifacts/brain-app/src/features/care-command/
+    care-command-shell.tsx
+    care-command-home.tsx
+    use-care-command-model.ts
+    care-command.css
+
+  The Presence Field’s five visual dayparts remain separate from Guardian’s existing Q1–Q4 care schedule. The redesign
+  must not silently change scheduling behavior.
+
+  ### 4. Connect real Guardian data
+
+  Replace prototype values using the existing hooks and APIs:
+
+  - App state and current quarter
+  - Schedule and completed routines
+  - Medication activity
+  - Inventory warnings
+  - Shopping approval
+  - Appointments
+  - Care alerts
+  - Jessica Hub actions
+
+  The view-model layer will combine those sources into only three visible zones:
+
+  1. Today
+  2. Needs Attention
+  3. Quick Actions
+
+  Local-only features remain hidden for tenant/demo sessions, preserving the current authorization boundaries.
+
+  The “Verified report” card appears only if its record can be proven to originate from session-scoped care_events. It
+  will never be a decorative hardcoded claim.
+
+  ### 5. Replace only the dashboard first
+
+  Inside AdminView:
+
+  - Replace the existing DashboardTab.
+  - Preserve Schedule, Symptoms, Inventory, Shopper, Appointments, Documents, Voice Scripts, and other working tabs.
+  - Replace the wide sidebar with the compact rail.
+  - Route existing actions into the established tabs and handlers.
+  - Add drawers for details so the home screen remains within 1440×900.
+
+  This avoids rewriting working operational features just to achieve the new visual language.
+
+  ### 6. Add the signature parallax layer
+
+  Below the operational viewport:
+
+  - Add the optional Presence Field narrative section.
+  - Use shallow depth differences for its text panels and ring.
+  - Keep all care decisions above the fold.
+  - Disable movement under prefers-reduced-motion.
+  - Never allow parallax to move buttons, alerts, or clinical information.
+
+  ### 7. Complete the Brain Guardian identity sweep
+
+  Replace legacy br(AI)n branding in:
+
+  - Browser title and descriptions
+  - PWA manifest
+  - Apple application title
+  - Favicon and application icons
+  - Open Graph image and metadata
+  - Vault gate
+  - Public Guardian page
+  - Navigation labels
+  - User-facing calendar/reminder copy
+
+  This is a naming and presentation pass—not permission to rename database entities, API contracts, or generated types
+  indiscriminately.
+
+  ### 8. Verify before publishing
+
+  Required checks:
+
+  - 1440×900: all primary controls visible without scrolling
+  - 1280×800: no clipping
+  - 390×844: usable mobile hierarchy and sticky navigation
+  - Keyboard navigation and visible focus
+  - Minimum 44px touch targets
+  - Reduced-motion behavior
+  - Local, tenant, and demo route restrictions
+  - Loading, empty, error, and partial-data states
+  - Existing Guardian typecheck and production build
+  - No API/schema/database diff
+  - Strong-model diff review plus an independent functional verifier
+
+  ### 9. Controlled Replit cutover
+
+  Before publishing:
+
+  - Record the current production commit/build as the rollback point.
+  - Take before/after screenshots of the same routes.
+  - Confirm the publish screen proposes no table deletion or database migration.
+  - Publish from the Replit-owned branch only after review.
+  - Smoke-test /, /admin, Schedule, Appointments, Shopping, Reports, and Jessica actions against production.
+  - If anything fails, republish the recorded previous build.
+
+  No files were changed during this planning pass. The immediate next action is the Replit source-of-truth proof block,
+  followed by your approval to create presence-field-os-home.
+
+─ Worked for 4m 33s ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› file:///private/tmp/brain-guardian-presence-mockup/index.html#presence-story
+
+
+• That URL opens directly at the optional parallax section because of #presence-story.
+
+  - /private/tmp/brain-guardian-presence-mockup/index.html
+  - /private/tmp/brain-guardian-presence-mockup/index.html#presence-story
+
+  The production integration will preserve that structure: complete command center first, signature parallax below.
+
+
+› like whats going on here we were 1 cm away from deep Completion mode
+
+
+• You’re right. We were essentially at completion, and I let the file URL pull us backward into explanation mode.
+
+  What is already complete:
+
+  - Final visual direction locked
+  - 1440×900 production layout approved
+  - Parallax behavior approved
+  - Live Replit target identified
+  - Application structure and real data hooks mapped
+  - Integration plan completed
+
+  The only blocker is repository safety: LOCAL master is dirty and 39 commits behind origin/master, so the project
+  rules prohibit editing it directly.
+
+  Authorize this exact execution:
+
+  > Create a clean isolated worktree from origin/master at fe80f0b, create presence-field-os-home, implement and verify
+  > the approved design, preserve the current dirty checkout untouched, and stop before merge or deployment.
+
+  Once approved, we enter implementation—not more concept work.
+
+
+› i agree approve and admire your plan
+
+
+• Approved. I’m entering implementation now: first I’ll create the isolated presence-field-os-home worktree from the
+  confirmed origin/master commit, leaving the dirty LOCAL checkout untouched. I’ll then graduate the approved prototype
+  into the real Guardian components, wire existing data, verify responsive and reduced-motion behavior, and stop before
+  merge or deployment as agreed.
+

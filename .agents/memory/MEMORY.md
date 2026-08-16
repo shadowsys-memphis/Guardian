@@ -23,3 +23,4 @@
 - [Autoscale vs in-process cron scheduler](autoscale-cron-scheduler-risk.md) — safety-critical jobs need an always-on process; autoscale can silently skip them.
 - [Grocery cart lock invariant](cart-lock-invariant.md) — cart mutation routes must guard current-cart ownership + pending status; rebuild only deletes meal-sourced items.
 - [Lazy schema init](lazy-schema-init.md) — tables are created lazily by route-level ensure* fns; shared/voice-channel capabilities must await their own memoized schema-ensure or they fail on fresh deployments.
+- [Document-apply null-field validation gap](document-apply-null-fields.md) — apply-endpoint zod schemas must mirror the extraction schema's `.nullable()` fields, or a valid null field 400s the whole request and silently drops data.

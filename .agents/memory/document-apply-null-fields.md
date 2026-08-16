@@ -1,0 +1,14 @@
+---
+name: Document-apply null-field validation gap
+description: Zod schemas at API boundaries must mirror the nullability of the upstream extraction/producer schema, or valid data gets silently dropped.
+---
+
+## The bug
+Gemini's document-extraction schema (`ExtractedAppointment`/`ExtractedMedication` in `artifacts/api-server/src/lib/document-extraction.ts`) deliberately returns `null` (not `undefined`) for any field a scanned document doesn't state — by design, per its own doc comment (`looseString` is explicitly "for nullable fields where null is the right sentinel"). The `/documents/apply` endpoint's hand-written zod request schema only had `z.string()` (required) or `z.string().optional()` (allows undefined, NOT null) for several of those same fields — provider, time, location, medication timeOfDay. Real-world scanned documents (VA paperwork especially) very often have a null provider/time/location, so most real submissions hit this.
+
+## Why it was hard to find
+The failure mode wasn't a crash or an obvious error — it was: first apply attempt got a 400 (zod `.parse()` throws before any DB work runs), the natural user workaround (uncheck the offending appointment(s), retry) "succeeded" with an empty/partial appointments array, and the source document still got marked "Applied" (green checkmark, no error shown). Data looked processed but silently never reached `medical_appointments` or `schedule_tasks`. Confirmed only by correlating production deployment logs (`POST .../documents/apply` → 400 immediately followed by a second `POST .../documents/apply` → 200 ~10s later) with the DB rows the successful retry actually produced, then reproducing it locally with a payload mirroring the real null-field shape.
+
+**Why:** any endpoint that both (a) validates a payload with a hand-written zod schema and (b) receives that payload's shape from an upstream schema that legitimately uses `.nullable()` must mirror the nullability field-by-field, or a request containing one valid null field gets the *entire* request rejected instead of just that field being skipped/defaulted.
+
+**How to apply:** when adding or editing a zod request schema for an endpoint that consumes AI-extracted (or otherwise optional-by-nature) data, check the producer/extraction schema's nullability first and match it (`.nullable().optional()`, not just `.optional()`). Then apply `??`/fallback defaults downstream for any NOT NULL DB column that field feeds — e.g. `medical_appointments.provider` is NOT NULL, so a null provider needs a placeholder string ("Provider not specified") computed once and reused consistently in both the insert and any dedup/overwrite lookup query that compares against it. Also guard any UI template string that interpolates the same nullable field directly (e.g. `` `w/ ${provider}` ``) — it will otherwise print the literal string "null".

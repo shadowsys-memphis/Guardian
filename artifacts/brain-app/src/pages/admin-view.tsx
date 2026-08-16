@@ -4800,7 +4800,7 @@ function DocumentsTab() {
                     <div className="flex-1 text-sm">
                       <span className="font-bold">{appt.date}</span>
                       {appt.time && <span className="text-muted-foreground ml-2">at {appt.time}</span>}
-                      <span className="text-muted-foreground ml-2">— {appt.provider}</span>
+                      {appt.provider && <span className="text-muted-foreground ml-2">— {appt.provider}</span>}
                       {appt.location && <span className="text-muted-foreground/60 ml-1">@ {appt.location}</span>}
                     </div>
                   </label>
@@ -5033,7 +5033,7 @@ function DocumentsTab() {
                             <p className="text-xs text-muted-foreground/70">⚠️ {structured.activity_restrictions.join(" · ")}</p>
                           )}
                           {structured.appointments?.length > 0 && (
-                            <p className="text-xs text-muted-foreground/70">📅 {structured.appointments.map((a: any) => `${a.date} w/ ${a.provider}`).join(", ")}</p>
+                            <p className="text-xs text-muted-foreground/70">📅 {structured.appointments.map((a: any) => `${a.date}${a.provider ? ` w/ ${a.provider}` : ""}`).join(", ")}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">

@@ -241,18 +241,29 @@ router.post("/documents/apply", async (req, res) => {
       source_label: z.string().default("Medical Document"),
       overwrite: z.boolean().default(false),
       appointments: z.array(z.object({
-        date: z.string(),
-        time: z.string().optional(),
-        provider: z.string(),
-        location: z.string().optional(),
-        type: z.string().optional(),
+        // Gemini's extraction schema (ExtractedAppointment in
+        // document-extraction.ts) legitimately returns null — not just
+        // undefined — for any field the source document doesn't state.
+        // These must all be .nullable() or the whole apply request 400s
+        // the moment a real-world scan (which very often lacks a provider,
+        // time, or location) is submitted, silently dropping every
+        // appointment in the batch, not just the offending one.
+        date: z.string().nullable().optional(),
+        time: z.string().nullable().optional(),
+        provider: z.string().nullable().optional(),
+        location: z.string().nullable().optional(),
+        type: z.string().nullable().optional(),
       })).default([]),
       medications: z.array(z.object({
         name: z.string(),
         dose: z.string().optional().nullable(),
         frequency: z.string().optional().nullable(),
         instructions: z.string().optional().nullable(),
-        timeOfDay: z.string().optional(),
+        // Same nullability gap as the appointments schema above: extraction
+        // returns null (not just undefined) when Gemini can't find a
+        // time-of-day, and med.timeOfDay already falls back to "morning"
+        // below — this just needed to stop rejecting the request outright.
+        timeOfDay: z.string().optional().nullable(),
       })).default([]),
       dietary_restrictions: z.array(z.string()).default([]),
       activity_restrictions: z.array(z.string()).default([]),
@@ -303,7 +314,21 @@ router.post("/documents/apply", async (req, res) => {
     // back completely — Pops' care plan is never left half-updated.
     await db.transaction(async (tx) => {
       for (const appt of body.appointments) {
-        const title = `Appt: ${appt.provider}${appt.location ? ` @ ${appt.location}` : ""}`;
+        // A date-less "appointment" can't be scheduled anywhere useful —
+        // skip it instead of writing a garbage row (also required since
+        // medical_appointments.appointment_date is NOT NULL).
+        if (!appt.date) {
+          details.push("Skipped an appointment with no date found on the document.");
+          continue;
+        }
+        // provider is nullable at extraction time but medical_appointments.provider
+        // is NOT NULL, so a real placeholder is stored — and reused for the
+        // title/dedup check below — instead of the literal string "null".
+        const providerLabel = appt.provider?.trim() || null;
+        const providerForStorage = providerLabel ?? "Provider not specified";
+        const title = providerLabel
+          ? `Appt: ${providerLabel}${appt.location ? ` @ ${appt.location}` : ""}`
+          : `Appt${appt.location ? ` @ ${appt.location}` : ""}`;
         const timeLabel = appt.time ?? "TBD";
         const descriptionPrefix = `${appt.date}${appt.location ? ` — ${appt.location}` : ""}`;
 
@@ -358,7 +383,7 @@ router.post("/documents/apply", async (req, res) => {
             .select({ id: medicalAppointmentsTable.id })
             .from(medicalAppointmentsTable)
             .where(
-              sql`${medicalAppointmentsTable.appointmentDate} = ${appt.date} AND ${medicalAppointmentsTable.provider} = ${appt.provider}`
+              sql`${medicalAppointmentsTable.appointmentDate} = ${appt.date} AND ${medicalAppointmentsTable.provider} = ${providerForStorage}`
             )
             .limit(1);
           medApptExists = existingMedAppt.length > 0;
@@ -367,7 +392,7 @@ router.post("/documents/apply", async (req, res) => {
           await tx.insert(medicalAppointmentsTable).values({
             appointmentDate: appt.date,
             appointmentTime: appt.time ?? "09:00",
-            provider: appt.provider,
+            provider: providerForStorage,
             location: appt.location ?? null,
             type: normalizeAppointmentType(appt.type),
             notes: `Source: ${body.source_label}`,
