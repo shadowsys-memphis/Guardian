@@ -42,6 +42,23 @@ export function pacificNow(): PacificNow {
   };
 }
 
+/**
+ * "0730" | "07:30" -> "7:30 AM". Returns the input unchanged if unparseable.
+ *
+ * Display-only formatting for caregiver-facing surfaces (Jessica's context
+ * string, admin/schedule UI mirrors this in brain-app's src/lib/time.ts).
+ * Internal scheduling and time_label storage stay 24-hour "HHMM".
+ */
+export function to12Hour(raw: string): string {
+  const m = /^(\d{1,2}):?(\d{2})$/.exec(raw.trim());
+  if (!m) return raw;
+  const h24 = Number(m[1]);
+  if (h24 > 23 || Number(m[2]) > 59) return raw;
+  const suffix = h24 < 12 ? "AM" : "PM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${m[2]} ${suffix}`;
+}
+
 /** Pacific calendar date (YYYY-MM-DD) that the instant `epochMs` falls on. */
 export function pacificDateOf(epochMs: number): string {
   // en-CA formats as YYYY-MM-DD, exactly the format the DB columns use.

@@ -1,5 +1,23 @@
 const PACIFIC_TZ = "America/Los_Angeles";
 
+/**
+ * "0730" | "07:30" -> "7:30 AM". Returns the input unchanged if unparseable.
+ *
+ * Display-only: schedule_tasks.time_label is stored as 24-hour "HHMM" and all
+ * scheduling logic stays 24-hour — this formats it for caregiver-facing
+ * admin/schedule views. Mirrors the server helper of the same name in
+ * api-server's lib/pacific-time.ts (used for Jessica's context string).
+ */
+export function to12Hour(raw: string): string {
+  const m = /^(\d{1,2}):?(\d{2})$/.exec(raw.trim());
+  if (!m) return raw;
+  const h24 = Number(m[1]);
+  if (h24 > 23 || Number(m[2]) > 59) return raw;
+  const suffix = h24 < 12 ? "AM" : "PM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${m[2]} ${suffix}`;
+}
+
 /** "6:32 PM" — Pacific, 12-hour. */
 export function formatPacificTime(date: string | number | Date): string {
   return new Date(date).toLocaleTimeString("en-US", {

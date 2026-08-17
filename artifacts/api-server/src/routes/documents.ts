@@ -15,6 +15,7 @@ import {
   normalizeExtracted,
   normalizeAppointmentType,
 } from "../lib/document-extraction";
+import { normalizeTimeToHHMM, quarterForTime } from "../lib/jessica-tools";
 
 const router: IRouter = Router();
 
@@ -330,6 +331,13 @@ router.post("/documents/apply", async (req, res) => {
           ? `Appt: ${providerLabel}${appt.location ? ` @ ${appt.location}` : ""}`
           : `Appt${appt.location ? ` @ ${appt.location}` : ""}`;
         const timeLabel = appt.time ?? "TBD";
+        // Resolve the quarter from the appointment's actual time (Ray's
+        // boundaries via quarterForTime — never re-derive them here).
+        // normalizeTimeToHHMM absorbs loose extraction formats ("2:00 PM",
+        // "0900"); an appointment with no parseable time falls back to Q1,
+        // matching the "09:00" default used for medical_appointments below.
+        const normalizedApptTime = appt.time ? normalizeTimeToHHMM(appt.time) : null;
+        const quarter = normalizedApptTime ? quarterForTime(normalizedApptTime) : "Q1";
         const descriptionPrefix = `${appt.date}${appt.location ? ` — ${appt.location}` : ""}`;
 
         // scheduleTasksTable (Rotation/Dashboard display) and
@@ -361,7 +369,7 @@ router.post("/documents/apply", async (req, res) => {
         if (!scheduleTaskExists) {
           await tx.insert(scheduleTasksTable).values({
             tenantId: "local",
-            quarter: "Q1",
+            quarter,
             timeLabel,
             title,
             description: `${descriptionPrefix}. Source: ${body.source_label}`,

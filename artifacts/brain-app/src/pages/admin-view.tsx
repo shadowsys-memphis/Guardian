@@ -112,7 +112,7 @@ import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useVault } from "@/lib/vault-context";
-import { formatPacificTime, formatPacificDate, formatPacificDateTime, formatPacificShortDate } from "@/lib/time";
+import { formatPacificTime, formatPacificDate, formatPacificDateTime, formatPacificShortDate, to12Hour } from "@/lib/time";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
 type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "documents" | "devices";
@@ -3772,7 +3772,7 @@ function CalendarSyncTab() {
         const startIso = `${today}T${String(h).padStart(2, "0")}:00:00`;
         const r = await pushToCalendar({
           summary: `[Schedule] ${t.title}`,
-          description: t.description ?? `Quarter: ${t.quarter} · Time: ${t.timeLabel}`,
+          description: t.description ?? `Quarter: ${t.quarter} · Time: ${to12Hour(t.timeLabel)}`,
           startTime: startIso,
         });
         newResults.push({ label: `${t.quarter}: ${t.title}`, ok: r.success, detail: r.error });

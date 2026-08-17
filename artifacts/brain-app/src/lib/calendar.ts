@@ -1,3 +1,5 @@
+import { to12Hour } from "@/lib/time";
+
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export type CalendarEventType = "appointment" | "medication" | "shopping" | "task" | "urgent" | "custom";
@@ -135,7 +137,7 @@ export function makeScheduleTaskDescription(t: {
 }): string {
   const lines = [
     `📋 Schedule Appointment — ${t.title}`,
-    `Quarter: ${t.quarter} · Time: ${t.timeLabel}`,
+    `Quarter: ${t.quarter} · Time: ${to12Hour(t.timeLabel)}`,
   ];
   if (t.description) lines.push(`Details: ${t.description}`);
   lines.push("\nOpen br(AI)n App → Schedule for full task details.");

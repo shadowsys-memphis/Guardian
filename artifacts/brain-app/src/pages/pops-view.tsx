@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { formatPacificClock, formatPacificTime } from "@/lib/time";
+import { formatPacificClock, formatPacificTime, to12Hour } from "@/lib/time";
 import {
   useGetAppState,
   useGetHaldolCycle,
@@ -139,7 +139,7 @@ function AmbientStateDisplay({
       </p>
       {task.timeLabel && (
         <p className="text-[4vw] md:text-5xl font-display text-primary/60 tracking-widest mt-4">
-          AT {task.timeLabel}
+          AT {to12Hour(task.timeLabel)}
         </p>
       )}
     </>

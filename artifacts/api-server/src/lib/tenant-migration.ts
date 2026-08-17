@@ -10,7 +10,7 @@ import { DEMO_TENANT_ID } from "./demo-tenant";
 const DEMO_SCHEDULE_TASKS = [
   { quarter: "Q1", timeLabel: "0700", title: "Morning Medication", description: "Take morning medication with breakfast.", order: 1, isCompleted: true },
   { quarter: "Q1", timeLabel: "0800", title: "Breakfast", description: "Oatmeal and fruit — a favorite.", order: 2, isCompleted: true },
-  { quarter: "Q1", timeLabel: "1000", title: "Morning Walk", description: "Short walk around the block, weather permitting.", order: 3, isCompleted: false },
+  { quarter: "Q2", timeLabel: "1000", title: "Morning Walk", description: "Short walk around the block, weather permitting.", order: 3, isCompleted: false },
   { quarter: "Q2", timeLabel: "1200", title: "Lunch", description: "Sandwich and soup.", order: 1, isCompleted: true },
   { quarter: "Q2", timeLabel: "1400", title: "Afternoon Check-in", description: "Quick call just to chat and see how the day's going.", order: 2, isCompleted: false },
   { quarter: "Q2", timeLabel: "1600", title: "Hobby Time", description: "Puzzles or music, whatever sounds good today.", order: 3, isCompleted: false },

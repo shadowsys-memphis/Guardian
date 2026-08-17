@@ -62,3 +62,6 @@ Thumbs.db
 GITHUB-SYNC-FAILED.txt
 .local/git-backups/
 .poolside/
+
+# session work orders — contain real phone numbers/PII, repo is public, never commit
+WORK-ORDER-FABLE.md

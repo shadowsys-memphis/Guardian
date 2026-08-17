@@ -18,7 +18,7 @@ import { eq, and, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQuietWindow } from "./health-assessment";
 import { ensureMealsSeeded } from "./shopper";
-import { todayPacific } from "../lib/pacific-time";
+import { todayPacific, to12Hour } from "../lib/pacific-time";
 import { quarterForHour } from "../lib/jessica-tools";
 import { dispatchAll, type HermesAction } from "../lib/hermes";
 
@@ -133,17 +133,6 @@ async function* streamLmStudio(
   }
 
   if (!receivedAny) throw new Error("LM Studio returned an empty response — is the model fully loaded?");
-}
-
-/** "0730" | "07:30" -> "7:30 AM". Returns the input unchanged if unparseable. */
-function to12Hour(raw: string): string {
-  const m = /^(\d{1,2}):?(\d{2})$/.exec(raw.trim());
-  if (!m) return raw;
-  const h24 = Number(m[1]);
-  if (h24 > 23 || Number(m[2]) > 59) return raw;
-  const suffix = h24 < 12 ? "AM" : "PM";
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h12}:${m[2]} ${suffix}`;
 }
 
 /** Same shape as the helper in schedule.ts/state.ts/symptoms.ts. */

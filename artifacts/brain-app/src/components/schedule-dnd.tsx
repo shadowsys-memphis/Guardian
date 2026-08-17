@@ -30,6 +30,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { to12Hour } from "@/lib/time";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ScheduleTask } from "@workspace/api-client-react";
@@ -124,7 +125,7 @@ function TaskCard({
         <GripVertical className="h-4 w-4" />
       </div>
 
-      <div className="w-16 shrink-0">
+      <div className="w-20 shrink-0">
         {isEditing ? (
           <input
             autoFocus
@@ -143,7 +144,7 @@ function TaskCard({
             title="Click to edit time"
             onClick={onEditStart}
           >
-            {task.timeLabel}
+            {to12Hour(task.timeLabel)}
           </span>
         )}
       </div>
