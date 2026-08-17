@@ -42,12 +42,19 @@ Ray's phone only. Pops' number is saved and correct.
   agent in a different free-tier ElevenLabs account; anyone following the doc would have
   configured the wrong agent.
 
-**In the working tree, awaiting Ray's review (NOT yet committed):**
+**Also committed (landed in `8370d19`/`4e01e95` — an earlier draft of this file called
+these "not yet committed"; they are in):**
 - Scanned appointments no longer hardcode `quarter: "Q1"` — the quarter is resolved from
   the appointment's actual time via the shared helper.
 - The demo-seed "Morning Walk" at 1000 is now labeled Q2 (10:00 is Q2, not Q1).
 - Caregiver-facing schedule times now display 12-hour with AM/PM ("6:00 AM", not "0600").
   Storage and everything Pops hears on calls are untouched.
+
+**Known residual (found 8/17 during verification, not yet fixed):** five other demo-seed
+rows in `tenant-migration.ts` still carry wrong quarter labels under Ray's boundaries —
+1400 "Afternoon Check-in" and 1600 "Hobby Time" are marked Q2 (both are Q3), and 1800
+"Dinner", 1930 "Evening Medication", 2100 "Wind Down" are marked Q3 (all are Q4).
+Demo-tenant display only; nothing Pops-facing.
 
 ---
 

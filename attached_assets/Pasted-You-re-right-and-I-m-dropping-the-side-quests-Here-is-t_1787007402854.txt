@@ -1,0 +1,91 @@
+You're right, and I'm dropping the side quests. Here
+  is the honest state of exactly the thing you bought
+  into — scan a document → schedule and appointments →
+  phone calls and reminders — and what it takes to make
+  that sentence true.
+
+  The front half works. Scanning a doctor's paper,
+  pulling out appointments and meds, "Update Care Plan"
+  putting them into the schedule — that's built, fixed,
+  and committed. Jessica can also see the schedule when
+  she's on a call. Your 22 tasks and the scanned
+  appointments are in there.
+
+  The back half — the calls and reminders — has never
+  worked in the published app. Two reasons, and neither
+  is mysterious:
+
+  1. The published app's server sleeps between visits. A
+  sleeping server cannot start a phone call. Every
+  scheduled call and reminder dies right there, and
+  always has. The fix is a one-line change on my side
+  plus a republish — but it moves you to the always-on
+  plan, roughly $10–20/month, which is why I keep
+  needing your yes instead of just doing it.
+  2. Even awake, the app only knows how to make one call
+  a day. The reminder engine — appointment reminders,
+  meds at noon and 6, the wake-up call, the ~10 daily
+  touchpoints from your own schedule — was designed but
+  never built. That's real building work, it's mine to
+  do, and it's what I should be spending this time on.
+
+  Say "yes, build it" and that's the last question I
+  ask. I'll flip the server setting, build the reminder
+  engine around the schedule you already defined, and
+  when you republish, the whole day of calls fires at
+  your phone — 909-732-4902 — until you've heard a full
+  day you're happy with. Pops' number stays untouched
+  until you say the words. That rule hasn't moved once.
+
+  Two things from today's digging that you'll want on
+  test day, then I'm done reporting:
+  - Most of the Aug 15 test calls did dial your number —
+  your phone shunted them straight to voicemail because
+  it doesn't recognize Jessica's number. Save
+  844-495-0750 as a contact before test day, or it'll
+  happen again.
+  - One Aug 15 call went to Pops' line, because the
+  "Call Now" button always dials Pops — there's no test
+  version of it in the app. I'll put a guard on that
+  button as part of the build so a test can never reach
+  him by accident.
+
+✻ Cooked for 53s
+
+❯ Not to mention, the scanned documents are now gone    
+  after I took 45 minutes scanning all the receipts and 
+  everything in                                         
+   supposedly it's in a database                        
+
+● That's not okay — 45 minutes of your work vanishing is
+  exactly the kind of thing that kills trust in this
+  app. Let me look at where those documents actually
+  went right now: checking the database directly and
+  reading the code that decides what the Documents
+  screen shows.
+
+● Bash(cd /home/runner/workspace/lib/db && node
+      --input-type=module -e "
+      import pg from 'pg';…)
+  ⎿  doc-ish tables: medical_documents
+     medical_documents: {"n":0,"latest":null}
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(cd /home/runner/workspace && grep -n
+      "router\.\(get\|delete\|post\)\|applied_at\|applie
+      dAt\|WHERE\|ORDER BY\|LIMIT"
+      artifacts/api-server/src/routes/documents.ts…)
+  ⎿  31:      applied_at TIMESTAMP,
+     72:router.get("/documents/care-context", async
+      (req, res) => {
+     … +15 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(env | grep -iE "database|postgres|pg" | sed -E
+      's/=.*/=***/' ; echo "---"; grep -n
+      "MAX_DOCUMENTS_RETURNED"
+      artifacts/api-server/src/routes/documents.ts |
+      head…)
+  ⎿  Interrupted · What should Claude do instea
