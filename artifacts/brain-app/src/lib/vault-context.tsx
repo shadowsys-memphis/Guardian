@@ -145,13 +145,18 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   };
 
   const unlock = useCallback(async (input: string): Promise<boolean> => {
-    if (!input || input.length < 4) return false;
+    // Trim incidental whitespace (trailing newline from a pasted/autofilled
+    // passphrase, accidental leading/trailing space) — the server trims the
+    // same way when a passphrase is set and when it's verified, so this must
+    // match or a copy-pasted passphrase can silently fail to match.
+    const trimmed = input.trim();
+    if (!trimmed || trimmed.length < 4) return false;
 
     try {
       const res = await _originalFetch(`${API}/tenants/auth`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ passphrase: input }),
+        body: JSON.stringify({ passphrase: trimmed }),
       });
 
       if (!res.ok) return false;
@@ -159,7 +164,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (!data.token) return false;
 
-      applySession(data.token, data.type === "tenant" ? "tenant" : "local", data.plan ?? "local", input);
+      applySession(data.token, data.type === "tenant" ? "tenant" : "local", data.plan ?? "local", trimmed);
       return true;
     } catch {
       return false;

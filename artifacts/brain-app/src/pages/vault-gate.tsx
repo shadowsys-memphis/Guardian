@@ -83,6 +83,10 @@ export function VaultGate({ children: _children }: VaultGateProps) {
                 onChange={(e) => setPassphrase(e.target.value)}
                 placeholder="Enter vault passphrase"
                 autoFocus
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                autoComplete="current-password"
                 className="w-full bg-card/80 border border-border rounded-lg px-4 py-3 pr-12 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-shadow"
               />
               <button

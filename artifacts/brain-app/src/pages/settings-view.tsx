@@ -1161,6 +1161,10 @@ function AccessTab() {
                   onChange={(e) => setForm({ ...form, currentPassphrase: e.target.value })}
                   placeholder="Enter current passphrase"
                   required
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoComplete="current-password"
                   className="pr-10"
                 />
                 <button
@@ -1182,6 +1186,10 @@ function AccessTab() {
                   onChange={(e) => setForm({ ...form, newPassphrase: e.target.value })}
                   placeholder="At least 4 characters"
                   required
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoComplete="new-password"
                   className="pr-10"
                 />
                 <button
@@ -1204,6 +1212,10 @@ function AccessTab() {
                   placeholder="Repeat new passphrase"
                   className={`pr-10 ${mismatch ? "border-destructive focus-visible:ring-destructive" : ""}`}
                   required
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"

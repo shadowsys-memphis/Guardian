@@ -16,6 +16,9 @@ async function bumpLocalSessionVersion(): Promise<void> {
 }
 
 async function verifyLocalPassphrase(passphrase: string): Promise<boolean> {
+  // Trim incidental whitespace so this matches however the stored hash (or
+  // VAULT_PASSPHRASE) was compared/set — see /tenants/auth for the same rule.
+  passphrase = passphrase.trim();
   try {
     const result = await pool.query(
       `SELECT value FROM app_settings WHERE key = 'local_passphrase_hash' LIMIT 1`
@@ -36,9 +39,9 @@ async function verifyLocalPassphrase(passphrase: string): Promise<boolean> {
 router.post("/auth/change-passphrase", loginRateLimit, async (req, res) => {
   try {
     const body = z.object({
-      currentPassphrase: z.string().min(1),
-      newPassphrase: z.string().min(4, "New passphrase must be at least 4 characters"),
-      confirmPassphrase: z.string().min(1),
+      currentPassphrase: z.string().trim().min(1),
+      newPassphrase: z.string().trim().min(4, "New passphrase must be at least 4 characters"),
+      confirmPassphrase: z.string().trim().min(1),
     }).parse(req.body);
 
     if (body.newPassphrase !== body.confirmPassphrase) {

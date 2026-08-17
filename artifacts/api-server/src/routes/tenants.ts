@@ -33,8 +33,11 @@ async function makeLocalToken() {
 
 router.post("/tenants/auth", loginRateLimit, async (req: Request, res: Response) => {
   try {
+    // .trim() strips incidental whitespace (trailing newline from a pasted
+    // passphrase, stray leading/trailing space) so it matches how the
+    // passphrase was trimmed when it was originally set — see auth.ts.
     const body = z.object({
-      passphrase: z.string().min(1),
+      passphrase: z.string().trim().min(1),
     }).parse(req.body);
 
     // 0. Check local_passphrase_hash in DB (set via change-passphrase endpoint)
