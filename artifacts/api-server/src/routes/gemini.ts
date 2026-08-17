@@ -14,7 +14,7 @@ import {
   groceryCartsTable,
 } from "@workspace/db";
 import { ai } from "@workspace/integrations-gemini-ai";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay, getSettings, isInQuietWindow } from "./health-assessment";
 import { ensureMealsSeeded } from "./shopper";
@@ -146,7 +146,25 @@ function to12Hour(raw: string): string {
   return `${h12}:${m[2]} ${suffix}`;
 }
 
-export async function loadLiveContext(): Promise<string> {
+/** Same shape as the helper in schedule.ts/state.ts/symptoms.ts. */
+function geminiTenantId(req: any): string {
+  const session = req.tenantSession;
+  return session?.type === "local" ? "local" : (session?.sub ?? "local");
+}
+
+/**
+ * Builds the live schedule/symptom/meal context injected into Jessica's system
+ * prompt.
+ *
+ * `tenantId` is REQUIRED in spirit even though it defaults: `schedule_tasks`
+ * and `symptom_logs` are tenant-scoped, and until 2026-08-16 this function
+ * queried both with no tenant predicate at all. The public demo workspace
+ * (DEMO_TENANT_ID, re-seeded on every boot by runTenantMigration) therefore
+ * bled straight into Pops' real calls — Jessica was reading a phantom 0700
+ * "Morning Medication" and 1930 "Evening Medication" that are not his, and all
+ * three "recent symptom logs" were demo rows. Never drop the tenant filter.
+ */
+export async function loadLiveContext(tenantId: string = "local"): Promise<string> {
   try {
     const [meals, schedule, symptoms, carts, showerStreakRow] = await Promise.all([
       db.select({ id: mealsTable.id, name: mealsTable.name, estimatedCostCents: mealsTable.estimatedCostCents })
@@ -167,9 +185,12 @@ export async function loadLiveContext(): Promise<string> {
         isCompleted: scheduleTasksTable.isCompleted,
         status: scheduleTasksTable.status,
       })
-        .from(scheduleTasksTable).where(eq(scheduleTasksTable.isActive, true))
+        .from(scheduleTasksTable)
+        .where(and(eq(scheduleTasksTable.isActive, true), eq(scheduleTasksTable.tenantId, tenantId)))
         .orderBy(asc(scheduleTasksTable.quarter), asc(scheduleTasksTable.timeLabel), asc(scheduleTasksTable.order)),
-      db.select().from(symptomLogsTable).orderBy(desc(symptomLogsTable.loggedAt)).limit(3),
+      db.select().from(symptomLogsTable)
+        .where(eq(symptomLogsTable.tenantId, tenantId))
+        .orderBy(desc(symptomLogsTable.loggedAt)).limit(3),
       db.select().from(groceryCartsTable).orderBy(desc(groceryCartsTable.id)).limit(1),
       db.select().from(appSettingsTable).where(eq(appSettingsTable.key, "shower_skip_streak")).limit(1),
     ]);
@@ -806,7 +827,7 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
       .orderBy(asc(messagesTable.createdAt));
 
     const { cycleDay, isZombiePhase, isOverdue, daysOverdue, intervalDays, zombiePhaseDays } = await getCurrentCycleInfo();
-    const liveContext = await loadLiveContext();
+    const liveContext = await loadLiveContext(geminiTenantId(req));
     const questions = await getActiveQuestionsForCycleDay(cycleDay);
     const cycle = { isOverdue, daysOverdue, intervalDays, zombiePhaseDays };
     const systemPrompt = mode === "ray"

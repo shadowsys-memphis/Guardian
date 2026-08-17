@@ -222,7 +222,10 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
 
     // Same live schedule/meals/symptoms context the web-chat Jessica gets —
     // without this the phone call couldn't answer schedule questions.
-    const scheduleContext = await loadLiveContext();
+    // Explicitly "local": the outbound phone call is always Ray's household,
+    // never a tenant workspace. Passing it keeps the demo tenant's seeded
+    // schedule and symptom rows out of Pops' call context.
+    const scheduleContext = await loadLiveContext("local");
     const careContextBlock = careContextLines.length > 0
       ? `CURRENT CARE CONTEXT — IMPORTANT:\n${careContextLines.join("\n")}\n\n`
       : "";
