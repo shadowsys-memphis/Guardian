@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -11,6 +11,15 @@ const API = `${BASE}/api`;
 // streaming Jessica calls, everything — without touching individual call sites.
 
 let _sessionToken: string | null = null;
+
+// Set by VaultProvider so this module-level interceptor (which runs outside
+// React) can force a re-login when a request comes back 401 with a token
+// attached. Without this, an expired/invalidated token left every screen
+// silently rendering its own "no data" empty state (each component's fetch
+// failed independently with no shared handling) instead of telling the user
+// their session lapsed — indistinguishable, from the user's side, from their
+// actual data having disappeared.
+let _onSessionExpired: (() => void) | null = null;
 
 const _originalFetch = window.fetch.bind(window);
 
@@ -28,7 +37,12 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       if (!headers.has("Authorization")) {
         headers.set("Authorization", `Bearer ${_sessionToken}`);
       }
-      return _originalFetch(input, { ...init, headers });
+      return _originalFetch(input, { ...init, headers }).then((response) => {
+        if (response.status === 401) {
+          _onSessionExpired?.();
+        }
+        return response;
+      });
     }
   }
   return _originalFetch(input, init);
@@ -52,6 +66,11 @@ interface VaultContextType {
   isLocal: boolean;
   /** True specifically for the public demo tenant (a subset of tenant sessions). */
   isDemo: boolean;
+  /** True when the vault re-locked itself because a request came back 401
+   *  (token expired or revoked), as opposed to the user locking it manually.
+   *  Lets the lock screen say "your session expired" instead of implying
+   *  the user chose to lock it — cleared on the next successful unlock. */
+  sessionExpired: boolean;
 }
 
 const VaultContext = createContext<VaultContextType | null>(null);
@@ -103,6 +122,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       return null;
     }
   });
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const applySession = (token: string, type: SessionType, planValue: string, input: string | null) => {
     _sessionToken = token; // update interceptor immediately
@@ -115,6 +135,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setSessionType(type);
     setPlan(planValue);
     setIsUnlocked(true);
+    setSessionExpired(false);
     try {
       sessionStorage.setItem(VAULT_SESSION_KEY, "1");
       sessionStorage.setItem(VAULT_TOKEN_KEY, token);
@@ -164,7 +185,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const lock = useCallback(() => {
+  const lock = useCallback((opts?: { expired?: boolean }) => {
     _sessionToken = null; // clear interceptor
     queryClient.clear(); // drop this session's cached data immediately
     setIsUnlocked(false);
@@ -172,6 +193,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setSessionToken(null);
     setSessionType(null);
     setPlan(null);
+    setSessionExpired(!!opts?.expired);
     try {
       sessionStorage.removeItem(VAULT_SESSION_KEY);
       sessionStorage.removeItem(VAULT_TOKEN_KEY);
@@ -179,6 +201,17 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       sessionStorage.removeItem(VAULT_PLAN_KEY);
     } catch {}
   }, [queryClient]);
+
+  // Registers with the module-level fetch interceptor so a 401 on any
+  // authenticated request re-locks the vault with sessionExpired=true,
+  // instead of leaving a stale "unlocked" shell up whose screens each fail
+  // their own fetch independently and quietly render empty.
+  useEffect(() => {
+    _onSessionExpired = () => lock({ expired: true });
+    return () => {
+      _onSessionExpired = null;
+    };
+  }, [lock]);
 
   // Sessions created before sessionType existed in storage (or the brief
   // window before hydration) default to local — every session prior to the
@@ -188,7 +221,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   return (
     <VaultContext.Provider
-      value={{ isUnlocked, unlock, viewDemo, lock, passphrase, sessionToken, sessionType, plan, isLocal, isDemo }}
+      value={{ isUnlocked, unlock, viewDemo, lock, passphrase, sessionToken, sessionType, plan, isLocal, isDemo, sessionExpired }}
     >
       {children}
     </VaultContext.Provider>

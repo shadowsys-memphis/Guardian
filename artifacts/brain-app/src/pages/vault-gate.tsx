@@ -8,7 +8,7 @@ interface VaultGateProps {
 }
 
 export function VaultGate({ children: _children }: VaultGateProps) {
-  const { unlock, viewDemo } = useVault();
+  const { unlock, viewDemo, sessionExpired } = useVault();
   const [passphrase, setPassphrase] = useState("");
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,9 +65,15 @@ export function VaultGate({ children: _children }: VaultGateProps) {
         </div>
 
         <div className="glass-card p-6">
-          <p className="text-xs text-muted-foreground text-center mb-4">
-            Vault locked · enter your passphrase
-          </p>
+          {sessionExpired ? (
+            <p className="text-xs text-center mb-4 text-amber-500">
+              Your session timed out — nothing was lost, please sign in again
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground text-center mb-4">
+              Vault locked · enter your passphrase
+            </p>
+          )}
 
           <form onSubmit={handleUnlock} className="space-y-4">
             <div className="relative">
