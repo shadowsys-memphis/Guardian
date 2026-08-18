@@ -1286,6 +1286,152 @@ const taskLadderSweepJob: CronJob = {
   },
 };
 
+// ─── Daily care touchpoints (the 10-moment rhythm) ───────────────────────────
+//
+// Pops' day is carried by ten voice touchpoints, wake to wind-down. The 7:00
+// wake-up call is `dailyCallJob` above (it owns the retries + the out-of-bed
+// follow-up). The nine below are the rest of the rhythm. They are deliberately
+// homogeneous — identical guardrails, differing only in the time and in what
+// Jessica says — so they are declared as DATA and built by one factory instead
+// of nine near-identical blocks. Every one of them, like every call-placing job
+// in this file:
+//   • stays OFF until Ray flips `dailyCallEnabled` (the master safety switch),
+//   • never rings inside the quiet window,
+//   • never stacks on a call that just started or is still live,
+//   • fires at most once per Pacific day (durable catch-up window, bounded so a
+//     long outage can't ring Pops hours after the moment has passed).
+//
+// Medication is mentioned on the NOON and 6 PM calls ONLY. Nothing interrogates
+// him — one gentle nudge, then Jessica lets him go. That is Ray's rule.
+//
+// This is the code-level form of the `touchpoints` table in TODO.md #4: it ships
+// the actual care rhythm now, with no schema migration, and can be promoted to
+// an admin-editable DB table later without changing this contract.
+
+interface TouchpointConfig {
+  /** Stable id — used verbatim in the job name and its once-per-day claim key. */
+  id: string;
+  /** Admin-facing title (shows in the System Jobs panel). */
+  title: string;
+  /** Pacific wall-clock trigger time, "HH:MM". */
+  time: string;
+  /** The CALL PURPOSE prompt handed to Jessica for this moment. */
+  extraContext: string;
+}
+
+// Catch-up window for a missed tick (restart/outage). Bounded so a call-placing
+// job never surprises Pops long after its moment has passed.
+const TOUCHPOINT_WINDOW_MINUTES = 60;
+
+const TOUCHPOINTS: TouchpointConfig[] = [
+  {
+    id: "morning_hydration",
+    title: "8:15 AM — Morning Hydration",
+    time: "08:15",
+    extraContext:
+      "CALL PURPOSE — MORNING HYDRATION: Very short, warm check-in. Gently encourage Pops to have a glass of water and something to drink with his morning. One friendly nudge — no medical talk, no string of questions. Keep it under two minutes.",
+  },
+  {
+    id: "morning_chores",
+    title: "10:00 AM — Morning Chores",
+    time: "10:00",
+    extraContext:
+      "CALL PURPOSE — MORNING CHORES: Short, upbeat check-in. Gently point Pops toward one light task for the late morning — tidying up, a small chore. Encourage, never pressure; if he isn't up for it today, that's completely okay. No interrogation. Under two minutes.",
+  },
+  {
+    id: "noon_medication",
+    title: "12:00 PM — Noon Medication",
+    time: "12:00",
+    extraContext:
+      "CALL PURPOSE — NOON MEDICATION: This is ONE OF ONLY TWO calls that may mention medication. Warmly remind Pops it's time for his noon medication. Ask once, gently, whether he's taken it, and mark it done if he confirms. Do not press, repeat, or quiz him if he's unsure. Short and kind.",
+  },
+  {
+    id: "midday_hydration",
+    title: "1:00 PM — Midday Hydration",
+    time: "13:00",
+    extraContext:
+      "CALL PURPOSE — MIDDAY HYDRATION: Very short, warm nudge to drink some water and have a bite if he hasn't eaten. One gentle reminder — no medical talk, no questions. Under two minutes.",
+  },
+  {
+    id: "afternoon_activity",
+    title: "2:00 PM — Afternoon Activity",
+    time: "14:00",
+    extraContext:
+      "CALL PURPOSE — AFTERNOON ACTIVITY: Short, encouraging check-in. Invite Pops into something light for the afternoon — a short walk, stepping outside, something he enjoys. Offer, don't push. No interrogation. Under two minutes.",
+  },
+  {
+    id: "evening_healthcheck",
+    title: "5:00 PM — Early-Evening Check-In",
+    time: "17:00",
+    extraContext:
+      "CALL PURPOSE — EARLY-EVENING CHECK-IN: Warm, unhurried check on how Pops is doing this evening. At most ONE gentle question about his day or how he's feeling — never a list of health questions, never medical interrogation. If he wants to talk, listen; if not, let him go kindly.",
+  },
+  {
+    id: "evening_medication",
+    title: "6:00 PM — Evening Medication",
+    time: "18:00",
+    extraContext:
+      "CALL PURPOSE — EVENING MEDICATION: This is the SECOND OF ONLY TWO calls that may mention medication. Warmly remind Pops it's time for his evening medication. Ask once, gently, whether he's taken it, and mark it done if he confirms. Do not press or repeat. Short and kind.",
+  },
+  {
+    id: "evening_journal",
+    title: "8:00 PM — Evening Journal",
+    time: "20:00",
+    extraContext:
+      "CALL PURPOSE — EVENING JOURNAL: Short, reflective check-in. Invite Pops to share one good thing about his day, or simply how he's feeling tonight. Warm and unhurried — no pressure, no questions he doesn't want to answer. Under three minutes.",
+  },
+  {
+    id: "sleep_check",
+    title: "9:00 PM — Wind-Down / Sleep",
+    time: "21:00",
+    extraContext:
+      "CALL PURPOSE — WIND-DOWN / SLEEP: Very short, calming check-in to help Pops start settling for the night. Gently encourage him to wind down. Soothing tone, one gentle nudge, no medical talk, no questions. Under two minutes.",
+  },
+];
+
+/**
+ * Builds one CronJob per touchpoint. Identical guardrails to every other
+ * call-placing job in this file (master switch, quiet window, no call-stacking,
+ * once-per-day claim); only the time and Jessica's prompt differ.
+ */
+function makeTouchpointJob(cfg: TouchpointConfig): CronJob {
+  const claimKey = `touchpoint_${cfg.id}_last_date`;
+  return {
+    name: `touchpoint_${cfg.id}`,
+    title: cfg.title,
+    schedule: `Daily at ${cfg.time} PT`,
+    intervalMs: null,
+    placesCall: true,
+    async run(now, opts) {
+      const settings = await getSettings();
+      // Master safety switch — nothing calls Pops until Ray turns it on.
+      if (!settings.dailyCallEnabled && !opts?.force) return { outcome: "skipped" };
+      // Time-of-day gate with a bounded catch-up window (call job — never late).
+      if (!isTimeOfDayDue(now, cfg.time, TOUCHPOINT_WINDOW_MINUTES) && !opts?.force) {
+        return { outcome: "skipped" };
+      }
+      // Never ring inside the quiet window — not even a forced "Run Now".
+      if (isInQuietWindow(now.hhmm, settings.quietWindowStart, settings.quietWindowEnd)) {
+        return { outcome: "warn", detail: `Quiet window active — "${cfg.title}" suppressed.` };
+      }
+      // Don't stack on a call that just started or is still live.
+      if (!opts?.force && (await sessionStartedWithinMinutes(now.date, 15, now.epochMs))) {
+        return { outcome: "skipped" };
+      }
+      // At most once per Pacific day.
+      if (!(await claimForToday(claimKey, now.date, opts?.force))) return { outcome: "skipped" };
+
+      const result = await triggerOutboundCall({ extraContext: cfg.extraContext });
+      if (!result.ok) {
+        return { outcome: "warn", detail: `"${cfg.title}" failed to start: ${result.error}` };
+      }
+      return { outcome: "ok", detail: `"${cfg.title}" placed (session ${result.sessionId})` };
+    },
+  };
+}
+
+const touchpointJobs: CronJob[] = TOUCHPOINTS.map(makeTouchpointJob);
+
 // ─── Registry + master tick ──────────────────────────────────────────────────
 
 export const CRON_JOBS: CronJob[] = [
@@ -1303,6 +1449,9 @@ export const CRON_JOBS: CronJob[] = [
   taskLadderSweepJob,
   wakeRetryJob,
   outOfBedJob,
+  // The nine remaining daily care touchpoints (hydration → wind-down). The
+  // wake-up call is dailyCallJob above; together they are Pops' 10-moment day.
+  ...touchpointJobs,
 ];
 
 const lastPolledAt = new Map<string, number>();
