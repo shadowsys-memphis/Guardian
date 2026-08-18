@@ -286,8 +286,21 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
       return { ok: false, status: 502, error: "ElevenLabs call failed", message: errBody };
     }
 
-    const elData = await elRes.json() as { conversation_id: string };
+    const elData = await elRes.json() as { conversation_id?: string };
     const elevenLabsConversationId = elData.conversation_id;
+    // Fail loudly if the outbound response carries no conversation_id. Storing an
+    // undefined/null id (the silent behavior before) permanently orphans the
+    // call: the post-call transcription webhook matches sessions by
+    // elevenlabs_conversation_id, so a null here guarantees that call's
+    // transcript can never link and is lost with an HTTP 200.
+    if (!elevenLabsConversationId) {
+      return {
+        ok: false,
+        status: 502,
+        error: "ElevenLabs outbound response missing conversation_id",
+        message: JSON.stringify(elData).slice(0, 300),
+      };
+    }
 
     // Administrative/notification calls (noSession=true) must not create a
     // call_sessions row. The missed-call detection job looks for sessions with
@@ -452,7 +465,7 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
     const summary = webhookData.analysis?.transcript_summary ?? null;
 
     const sessionResult = await pool.query(
-      `SELECT id, ended_at FROM call_sessions WHERE elevenlabs_conversation_id = $1 ORDER BY id DESC LIMIT 1`,
+      `SELECT id, ended_at, transcript FROM call_sessions WHERE elevenlabs_conversation_id = $1 ORDER BY id DESC LIMIT 1`,
       [elevenLabsConversationId]
     );
     const sessionRow = sessionResult.rows[0];
@@ -464,8 +477,17 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
 
     const sessionId: number = sessionRow.id;
 
-    if (sessionRow.ended_at) {
-      res.json({ received: true, skipped: "already_ended" });
+    // Idempotency guard — skip ONLY if a transcript was already saved for this
+    // session, NOT merely because ended_at is set. ended_at can be written by
+    // other paths that end a session with no transcript (gemini.ts auto-close
+    // at :701 and conversation-delete at :776, health-assessment.ts:261). The
+    // real post_call_transcription webhook always arrives AFTER the call ends,
+    // so skipping on ended_at alone would silently drop the transcript and leave
+    // the row blank. By line 444 above we already know this is a genuine
+    // transcription event, so writing it here is always correct; checking the
+    // transcript (not ended_at) keeps it idempotent against webhook retries.
+    if (sessionRow.transcript) {
+      res.json({ received: true, skipped: "already_saved" });
       return;
     }
 
