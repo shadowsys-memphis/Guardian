@@ -1,0 +1,10 @@
+---
+name: Orphaned nohup dev server blocks the real workflow from restarting
+description: A background `nohup <workflow-command> &> log &` started from a shell (e.g. by another coding agent session recovering from its own mistake) survives independently of Replit's workflow supervisor, squats the port, and makes the supervisor's own restart attempts fail with EADDRINUSE — while quietly keeping the app "working," so the failure is invisible until the orphan dies with nothing left to restart it.
+---
+
+A workflow reporting `failed` does not always mean the app is actually down. Check `lsof -i :<port>` before assuming so — if the port already has a listener, the app may look fine to the user while the *tracked* workflow is dead.
+
+**Why:** found when another agent's own recovery command — `nohup pnpm --filter @workspace/api-server run dev > /tmp/.../scratchpad/dev-api.log 2>&1 &`, run from its terminal session to undo having accidentally killed the real dev process — kept running unsupervised for roughly another hour. Replit's own workflow supervisor tried to restart its tracked copy in the meantime, hit `EADDRINUSE` against that orphan, and gave up (logged `failed`), while the orphan kept answering every request normally. Nothing was wrong from the user's side until the orphan eventually died on its own with no supervisor left to bring it back.
+
+**How to apply:** when a workflow shows `failed` but the app seems to respond, run `lsof -i :<port>` on the workflow's port, then inspect the listening PID: `ps -o pid,ppid,lstart,cmd -p <pid>` (an orphan reparented to PID 1, started well after the workflow's own last logged start time, is suspicious) and `ls -l /proc/<pid>/fd` (stdout/stderr redirected to a scratch/log path outside the workflow's own log location confirms it). If it's an orphan, kill the whole process tree first (parent down through the final node process), *then* call `WorkflowsRestart` so Replit's supervisor owns the process again. Never treat a manual background respawn as an actual fix — it papers over the symptom and creates exactly this kind of silent, unsupervised landmine.
