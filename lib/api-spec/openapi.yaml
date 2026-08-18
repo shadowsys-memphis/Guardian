@@ -1769,8 +1769,147 @@ paths:
         "409":
           description: Wrong state — reschedule is only reachable from pending
 
+  /touchpoints:
+    get:
+      operationId: listTouchpoints
+      tags: [touchpoints]
+      summary: List Jessica's daily touchpoint calls (times, purposes, active flags)
+      responses:
+        "200":
+          description: All touchpoints, ordered by time of day
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Touchpoint"
+
+  /touchpoints/config:
+    get:
+      operationId: getTouchpointsConfig
+      tags: [touchpoints]
+      summary: Read the call-safety config (test mode, admin phone presence, master call switch)
+      responses:
+        "200":
+          description: Current call config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TouchpointsConfig"
+    put:
+      operationId: updateTouchpointsConfig
+      tags: [touchpoints]
+      summary: Flip the global call test mode (on = every outbound call dials the admin line)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTouchpointsConfigInput"
+      responses:
+        "200":
+          description: Updated call config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TouchpointsConfig"
+        "400":
+          description: callTestMode (boolean) is required
+
+  /touchpoints/{id}:
+    patch:
+      operationId: updateTouchpoint
+      tags: [touchpoints]
+      summary: Edit a touchpoint's time, title, prompt, or active flag
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TouchpointPatch"
+      responses:
+        "200":
+          description: Updated touchpoint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Touchpoint"
+        "400":
+          description: Invalid patch (time must be 24-hour HH:MM)
+        "404":
+          description: Touchpoint not found
+
 components:
   schemas:
+    Touchpoint:
+      type: object
+      properties:
+        id:
+          type: integer
+        timeOfDay:
+          type: string
+          description: "24-hour HH:MM, Pacific"
+        purpose:
+          type: string
+        title:
+          type: string
+        purposePrompt:
+          type: string
+        active:
+          type: boolean
+        sortOrder:
+          type: integer
+      required:
+        - id
+        - timeOfDay
+        - purpose
+        - title
+        - purposePrompt
+        - active
+        - sortOrder
+
+    TouchpointPatch:
+      type: object
+      properties:
+        timeOfDay:
+          type: string
+          description: "24-hour HH:MM, Pacific"
+        title:
+          type: string
+        purposePrompt:
+          type: string
+        active:
+          type: boolean
+
+    UpdateTouchpointsConfigInput:
+      type: object
+      properties:
+        callTestMode:
+          type: boolean
+      required:
+        - callTestMode
+
+    TouchpointsConfig:
+      type: object
+      properties:
+        callTestMode:
+          type: boolean
+          description: "True (default) = every outbound call dials ADMIN_PHONE_NUMBER, never Pops"
+        adminPhoneSet:
+          type: boolean
+        dailyCallEnabled:
+          type: boolean
+      required:
+        - callTestMode
+        - adminPhoneSet
+        - dailyCallEnabled
+
     HealthStatus:
       type: object
       properties:

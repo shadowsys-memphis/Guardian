@@ -5,6 +5,36 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
+export interface Touchpoint {
+  id: number;
+  /** 24-hour HH:MM, Pacific */
+  timeOfDay: string;
+  purpose: string;
+  title: string;
+  purposePrompt: string;
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface TouchpointPatch {
+  /** 24-hour HH:MM, Pacific */
+  timeOfDay?: string;
+  title?: string;
+  purposePrompt?: string;
+  active?: boolean;
+}
+
+export interface UpdateTouchpointsConfigInput {
+  callTestMode: boolean;
+}
+
+export interface TouchpointsConfig {
+  /** True (default) = every outbound call dials ADMIN_PHONE_NUMBER, never Pops */
+  callTestMode: boolean;
+  adminPhoneSet: boolean;
+  dailyCallEnabled: boolean;
+}
+
 export interface HealthStatus {
   status: string;
 }

@@ -32,7 +32,14 @@ import {
   useSetLmStudioUrl,
   testLmStudioConnection,
   type LmStudioConnectionResult,
+  useListTouchpoints,
+  useGetTouchpointsConfig,
+  useUpdateTouchpointsConfig,
+  useUpdateTouchpoint,
+  getListTouchpointsQueryKey,
+  getGetTouchpointsConfigQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +51,107 @@ import { useToast } from "@/hooks/use-toast";
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 type SettingsTab = "general" | "jessica" | "store" | "medications" | "ai-model" | "access" | "system";
+
+function TouchpointsPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: config } = useGetTouchpointsConfig();
+  const { data: touchpoints } = useListTouchpoints();
+  const updateConfig = useUpdateTouchpointsConfig();
+  const patchTouchpoint = useUpdateTouchpoint();
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: getGetTouchpointsConfigQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListTouchpointsQueryKey() });
+  };
+
+  const handleTestModeToggle = (callTestMode: boolean) => {
+    if (!callTestMode) {
+      const sure = window.confirm(
+        "Turn OFF test mode?\n\nEvery call Jessica makes — scheduled or manual — will dial POPS' REAL NUMBER from now on.\n\nOnly do this after a test day you're happy with."
+      );
+      if (!sure) return;
+    }
+    updateConfig.mutate({ data: { callTestMode } }, {
+      onSuccess: () => { refresh(); toast({ title: callTestMode ? "Test mode ON — all calls go to your phone" : "Test mode OFF — calls now dial Pops" }); },
+      onError: () => toast({ title: "Failed to change test mode — nothing changed", variant: "destructive" }),
+    });
+  };
+
+  const handleTouchpointPatch = (id: number, patch: { active?: boolean; timeOfDay?: string }) => {
+    patchTouchpoint.mutate({ id, data: patch }, {
+      onSuccess: refresh,
+      onError: () => toast({ title: "Failed to save touchpoint", variant: "destructive" }),
+    });
+  };
+
+  const testMode = config?.callTestMode ?? true;
+
+  return (
+    <>
+      <Card className={testMode ? "border-success/50" : "border-destructive"}>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Shield size={14} className={testMode ? "text-success" : "text-destructive"} /> Call Safety
+          </CardTitle>
+          <CardDescription>
+            {testMode
+              ? "TEST MODE is on: every call Jessica makes — scheduled or manual — dials YOUR phone, never Pops'. This is the default."
+              : "TEST MODE IS OFF: calls dial Pops' real number."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label htmlFor="call-test-mode" className="text-sm font-medium">
+              {testMode ? "All calls go to my phone (test mode)" : "Calls go to Pops (LIVE)"}
+            </label>
+            <Switch id="call-test-mode" checked={testMode} onCheckedChange={handleTestModeToggle} />
+          </div>
+          {config && !config.adminPhoneSet && (
+            <p className="text-xs text-destructive flex items-center gap-1">
+              <AlertTriangle size={12} /> ADMIN_PHONE_NUMBER secret is not set — test-mode calls can't be placed until it is.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
+            <Phone size={14} className="text-primary" /> Daily Touchpoints
+          </CardTitle>
+          <CardDescription>
+            Jessica's short purpose-driven calls across the day. They fire only while the automatic daily call
+            switch above is on, and each one runs at most once a day. Times are Pacific.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {(touchpoints ?? []).map((t) => (
+            <div key={t.id} className="flex items-center gap-3 py-1.5 border-b border-border/30 last:border-0">
+              <Switch
+                id={`touchpoint-${t.id}`}
+                checked={t.active}
+                onCheckedChange={(active) => handleTouchpointPatch(t.id, { active })}
+              />
+              <label htmlFor={`touchpoint-${t.id}`} className="flex-1 text-sm font-medium">
+                {t.title}
+              </label>
+              <Input
+                type="time"
+                value={t.timeOfDay}
+                onChange={(e) => e.target.value && handleTouchpointPatch(t.id, { timeOfDay: e.target.value })}
+                className="max-w-[130px]"
+              />
+            </div>
+          ))}
+          {touchpoints && touchpoints.length === 0 && (
+            <p className="text-xs text-muted-foreground">No touchpoints yet — they seed automatically when the server starts.</p>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
 
 function SavedBadge({ visible }: { visible: boolean }) {
   if (!visible) return null;
@@ -395,6 +503,8 @@ function JessicaTab() {
           </form>
         </CardContent>
       </Card>
+
+      <TouchpointsPanel />
 
       <Card>
         <CardHeader>

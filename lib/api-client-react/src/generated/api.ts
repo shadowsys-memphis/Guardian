@@ -108,6 +108,9 @@ import type {
   SwapCartMealResult,
   SymptomLog,
   TestLmStudioConnectionParams,
+  Touchpoint,
+  TouchpointPatch,
+  TouchpointsConfig,
   TrendDataPoint,
   UpdateAppStateInput,
   UpdateCravingInput,
@@ -116,6 +119,7 @@ import type {
   UpdateRotationTaskInput,
   UpdateScheduleTaskInput,
   UpdateSmartHomeDeviceInput,
+  UpdateTouchpointsConfigInput,
   UpdateVoiceScriptInput,
   VoiceScript,
   WeeklyReport,
@@ -8134,4 +8138,328 @@ export const useRescheduleLabDraw = <
   TContext
 > => {
   return useMutation(getRescheduleLabDrawMutationOptions(options));
+};
+
+/**
+ * @summary List Jessica's daily touchpoint calls (times, purposes, active flags)
+ */
+export const getListTouchpointsUrl = () => {
+  return `/api/touchpoints`;
+};
+
+export const listTouchpoints = async (
+  options?: RequestInit,
+): Promise<Touchpoint[]> => {
+  return customFetch<Touchpoint[]>(getListTouchpointsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTouchpointsQueryKey = () => {
+  return [`/api/touchpoints`] as const;
+};
+
+export const getListTouchpointsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTouchpoints>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTouchpoints>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTouchpointsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTouchpoints>>> = ({
+    signal,
+  }) => listTouchpoints({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTouchpoints>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTouchpointsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTouchpoints>>
+>;
+export type ListTouchpointsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List Jessica's daily touchpoint calls (times, purposes, active flags)
+ */
+
+export function useListTouchpoints<
+  TData = Awaited<ReturnType<typeof listTouchpoints>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTouchpoints>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTouchpointsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Read the call-safety config (test mode, admin phone presence, master call switch)
+ */
+export const getGetTouchpointsConfigUrl = () => {
+  return `/api/touchpoints/config`;
+};
+
+export const getTouchpointsConfig = async (
+  options?: RequestInit,
+): Promise<TouchpointsConfig> => {
+  return customFetch<TouchpointsConfig>(getGetTouchpointsConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTouchpointsConfigQueryKey = () => {
+  return [`/api/touchpoints/config`] as const;
+};
+
+export const getGetTouchpointsConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTouchpointsConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTouchpointsConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTouchpointsConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTouchpointsConfig>>
+  > = ({ signal }) => getTouchpointsConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTouchpointsConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTouchpointsConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTouchpointsConfig>>
+>;
+export type GetTouchpointsConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Read the call-safety config (test mode, admin phone presence, master call switch)
+ */
+
+export function useGetTouchpointsConfig<
+  TData = Awaited<ReturnType<typeof getTouchpointsConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTouchpointsConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTouchpointsConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Flip the global call test mode (on = every outbound call dials the admin line)
+ */
+export const getUpdateTouchpointsConfigUrl = () => {
+  return `/api/touchpoints/config`;
+};
+
+export const updateTouchpointsConfig = async (
+  updateTouchpointsConfigInput: UpdateTouchpointsConfigInput,
+  options?: RequestInit,
+): Promise<TouchpointsConfig> => {
+  return customFetch<TouchpointsConfig>(getUpdateTouchpointsConfigUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateTouchpointsConfigInput),
+  });
+};
+
+export const getUpdateTouchpointsConfigMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTouchpointsConfig>>,
+    TError,
+    { data: BodyType<UpdateTouchpointsConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateTouchpointsConfig>>,
+  TError,
+  { data: BodyType<UpdateTouchpointsConfigInput> },
+  TContext
+> => {
+  const mutationKey = ["updateTouchpointsConfig"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateTouchpointsConfig>>,
+    { data: BodyType<UpdateTouchpointsConfigInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateTouchpointsConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateTouchpointsConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateTouchpointsConfig>>
+>;
+export type UpdateTouchpointsConfigMutationBody =
+  BodyType<UpdateTouchpointsConfigInput>;
+export type UpdateTouchpointsConfigMutationError = ErrorType<void>;
+
+/**
+ * @summary Flip the global call test mode (on = every outbound call dials the admin line)
+ */
+export const useUpdateTouchpointsConfig = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTouchpointsConfig>>,
+    TError,
+    { data: BodyType<UpdateTouchpointsConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateTouchpointsConfig>>,
+  TError,
+  { data: BodyType<UpdateTouchpointsConfigInput> },
+  TContext
+> => {
+  return useMutation(getUpdateTouchpointsConfigMutationOptions(options));
+};
+
+/**
+ * @summary Edit a touchpoint's time, title, prompt, or active flag
+ */
+export const getUpdateTouchpointUrl = (id: number) => {
+  return `/api/touchpoints/${id}`;
+};
+
+export const updateTouchpoint = async (
+  id: number,
+  touchpointPatch: TouchpointPatch,
+  options?: RequestInit,
+): Promise<Touchpoint> => {
+  return customFetch<Touchpoint>(getUpdateTouchpointUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(touchpointPatch),
+  });
+};
+
+export const getUpdateTouchpointMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTouchpoint>>,
+    TError,
+    { id: number; data: BodyType<TouchpointPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateTouchpoint>>,
+  TError,
+  { id: number; data: BodyType<TouchpointPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateTouchpoint"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateTouchpoint>>,
+    { id: number; data: BodyType<TouchpointPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateTouchpoint(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateTouchpointMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateTouchpoint>>
+>;
+export type UpdateTouchpointMutationBody = BodyType<TouchpointPatch>;
+export type UpdateTouchpointMutationError = ErrorType<void>;
+
+/**
+ * @summary Edit a touchpoint's time, title, prompt, or active flag
+ */
+export const useUpdateTouchpoint = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTouchpoint>>,
+    TError,
+    { id: number; data: BodyType<TouchpointPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateTouchpoint>>,
+  TError,
+  { id: number; data: BodyType<TouchpointPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateTouchpointMutationOptions(options));
 };

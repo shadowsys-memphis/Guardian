@@ -27,6 +27,7 @@ import documentsRouter from "./documents";
 import cronRouter from "./cron";
 import labsRouter from "./labs";
 import dayTypesRouter from "./day-types";
+import touchpointsRouter from "./touchpoints";
 
 const router: IRouter = Router();
 
@@ -70,6 +71,7 @@ localRouter.use(actionsRouter);
 localRouter.use(medicationsRouter);
 localRouter.use(documentsRouter);
 localRouter.use(cronRouter);
+localRouter.use(touchpointsRouter);   // Jessica's daily touchpoint calls + the global call test-mode switch
 localRouter.use(authRouter);
 localRouter.use(adminRouter);           // /admin/summary (reads Ray's real haldolCycleTable)
                                          // and /assistant (unmetered billed Gemini call)

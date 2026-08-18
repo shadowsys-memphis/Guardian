@@ -1286,6 +1286,173 @@ const taskLadderSweepJob: CronJob = {
   },
 };
 
+// ─── Touchpoints: the purpose-driven calls across Pops' day ─────────────────
+//
+// Ray's schedule expects ~10 short Jessica interactions a day, each with its
+// own purpose (hydration nudge, chores, meds at noon/6pm only, journal…).
+// One generic job fires whichever active touchpoints are due; the purpose
+// prompt flows into triggerOutboundCall's extraContext so Jessica knows this
+// is an 8:15 hydration nudge, not a generic check-in. Times/prompts are rows
+// Ray can edit (routes/touchpoints.ts) — nothing is hardcoded into the job.
+//
+// The 7:00 wake-up is deliberately seeded INACTIVE: the existing Daily
+// Morning Call (+ its wake-retry and out-of-bed follow-up chain) already owns
+// the wake-up slot. Activating both would double-call him every morning.
+
+export interface TouchpointRow {
+  id: number;
+  timeOfDay: string;
+  purpose: string;
+  title: string;
+  purposePrompt: string;
+  active: boolean;
+  sortOrder: number;
+}
+
+const TOUCHPOINT_TONE =
+  "Keep this call SHORT (2–4 minutes), warm, and easy. One question at a time, never a checklist. " +
+  "Do not bring up medication unless this purpose explicitly says to. If he sounds tired or wants to go, wrap up kindly.";
+
+const TOUCHPOINT_SEED: Array<Omit<TouchpointRow, "id">> = [
+  { timeOfDay: "07:00", purpose: "wake_up", title: "Wake-Up Call", sortOrder: 1, active: false,
+    purposePrompt: `CALL PURPOSE — WAKE-UP: A gentle good morning. Confirm he's up and moving, mention one nice thing about the day ahead. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "08:15", purpose: "hydration_morning", title: "Morning Hydration", sortOrder: 2, active: true,
+    purposePrompt: `CALL PURPOSE — MORNING HYDRATION: A quick hello. Ask if he's had some water and a little breakfast. That's the whole call. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "10:00", purpose: "chores", title: "Chores Check-In", sortOrder: 3, active: true,
+    purposePrompt: `CALL PURPOSE — CHORES: Casually mention what's on the schedule for late morning (use the schedule context you have). Encourage, never push. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "12:00", purpose: "meds_noon", title: "Noon Medication", sortOrder: 4, active: true,
+    purposePrompt: `CALL PURPOSE — NOON MEDICATION: This is one of only two calls where medication belongs. Gently confirm he's taking his noon meds, ideally with lunch. If he's already taken them, celebrate briefly and chat a moment. If he refuses, stay kind, don't argue, and note it. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "13:00", purpose: "hydration_afternoon", title: "Afternoon Hydration", sortOrder: 5, active: true,
+    purposePrompt: `CALL PURPOSE — AFTERNOON HYDRATION: A short water nudge and a friendly how's-your-day. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "14:00", purpose: "activity", title: "Fun Block", sortOrder: 6, active: true,
+    purposePrompt: `CALL PURPOSE — FUN BLOCK: Suggest one enjoyable thing for the afternoon (music, a puzzle, sitting outside, time with Koda). Follow his lead — this call is about enjoyment, not tasks. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "17:00", purpose: "health_check", title: "Health Check", sortOrder: 7, active: true,
+    purposePrompt: `CALL PURPOSE — HEALTH CHECK: This is the one call for the day's health questions. Weave them in naturally, a few at most, one at a time — never rapid-fire. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "18:00", purpose: "meds_evening", title: "Evening Medication", sortOrder: 8, active: true,
+    purposePrompt: `CALL PURPOSE — EVENING MEDICATION: The second of the two medication calls. Gently confirm the evening dose, maybe with a light snack. Same rules as noon: kind, no arguing, note a refusal. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "20:00", purpose: "journal", title: "Evening Journal", sortOrder: 9, active: true,
+    purposePrompt: `CALL PURPOSE — JOURNAL: A reflective chat about the day. What was good? Anything on his mind? Listen more than you talk. ${TOUCHPOINT_TONE}` },
+  { timeOfDay: "21:00", purpose: "sleep_check", title: "Sleep Check", sortOrder: 10, active: true,
+    purposePrompt: `CALL PURPOSE — SLEEP CHECK: Wind-down. Doors locked, lights low, settled in. Wish him a good night, keep it soft and brief. ${TOUCHPOINT_TONE}` },
+];
+
+let touchpointsSchemaReady: Promise<void> | null = null;
+
+/** Memoized create-and-seed (lazy-schema-init pattern — safe on fresh DBs). */
+export function ensureTouchpointsSchema(): Promise<void> {
+  touchpointsSchemaReady ??= (async () => {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS touchpoints (
+        id SERIAL PRIMARY KEY,
+        time_of_day TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        title TEXT NOT NULL,
+        purpose_prompt TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    // Marker-guarded seed: runs once ever, so deleting or editing a
+    // touchpoint later is a decision that sticks, not a fight with the seeder.
+    const marker = await pool.query(
+      `SELECT 1 FROM app_settings WHERE key = 'touchpoints_seed_done' LIMIT 1`
+    );
+    if ((marker.rowCount ?? 0) === 0) {
+      for (const t of TOUCHPOINT_SEED) {
+        await pool.query(
+          `INSERT INTO touchpoints (time_of_day, purpose, title, purpose_prompt, active, sort_order)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [t.timeOfDay, t.purpose, t.title, t.purposePrompt, t.active, t.sortOrder]
+        );
+      }
+      await pool.query(
+        `INSERT INTO app_settings (key, value) VALUES ('touchpoints_seed_done', $1)
+         ON CONFLICT (key) DO NOTHING`,
+        [new Date().toISOString()]
+      );
+      logger.info("Touchpoints seeded");
+    }
+  })().catch((err) => {
+    touchpointsSchemaReady = null; // let a later call retry instead of caching the failure
+    throw err;
+  });
+  return touchpointsSchemaReady;
+}
+
+function mapTouchpointRow(r: Record<string, unknown>): TouchpointRow {
+  return {
+    id: r["id"] as number,
+    timeOfDay: r["time_of_day"] as string,
+    purpose: r["purpose"] as string,
+    title: r["title"] as string,
+    purposePrompt: r["purpose_prompt"] as string,
+    active: r["active"] as boolean,
+    sortOrder: r["sort_order"] as number,
+  };
+}
+
+export async function listTouchpoints(): Promise<TouchpointRow[]> {
+  await ensureTouchpointsSchema();
+  const { rows } = await pool.query(`SELECT * FROM touchpoints ORDER BY time_of_day, sort_order`);
+  return rows.map(mapTouchpointRow);
+}
+
+export async function updateTouchpoint(
+  id: number,
+  patch: { timeOfDay?: string; title?: string; purposePrompt?: string; active?: boolean }
+): Promise<TouchpointRow | null> {
+  await ensureTouchpointsSchema();
+  const { rows } = await pool.query(
+    `UPDATE touchpoints SET
+       time_of_day = COALESCE($2, time_of_day),
+       title = COALESCE($3, title),
+       purpose_prompt = COALESCE($4, purpose_prompt),
+       active = COALESCE($5, active),
+       updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [id, patch.timeOfDay ?? null, patch.title ?? null, patch.purposePrompt ?? null, patch.active ?? null]
+  );
+  return rows[0] ? mapTouchpointRow(rows[0]) : null;
+}
+
+const touchpointsJob: CronJob = {
+  name: "touchpoints",
+  title: "Daily Touchpoint Calls",
+  schedule: "Throughout the day, at each active touchpoint's time",
+  intervalMs: null,
+  placesCall: true,
+  async run(now, opts) {
+    // Same master switch as every other call-placing job. (Whether a call
+    // dials Pops or the admin line is decided separately, inside
+    // triggerOutboundCall's global test-mode guard.)
+    const settings = await getSettings();
+    if (!settings.dailyCallEnabled && !opts?.force) return { outcome: "skipped" };
+
+    await ensureTouchpointsSchema();
+    if (await quietWindowBlocks(now)) return { outcome: "skipped" };
+
+    const due = (await listTouchpoints()).filter(
+      (t) => t.active && isTimeOfDayDue(now, t.timeOfDay, 45)
+    );
+    if (due.length === 0) return { outcome: "skipped" };
+
+    // At most ONE call per tick. If a restart lands with several windows open
+    // at once, the rest fire on later ticks — never back-to-back calls.
+    for (const t of due) {
+      if (!(await claimForToday(`touchpoint_claim_${t.id}`, now.date, opts?.force))) continue;
+      const result = await triggerOutboundCall({ extraContext: t.purposePrompt });
+      if (!result.ok) {
+        return { outcome: "error", detail: `${t.title} (${t.timeOfDay}) failed to start: ${result.error}${result.message ? ` — ${result.message}` : ""}` };
+      }
+      return { outcome: "ok", detail: `${t.title} (${t.timeOfDay}) call started (session ${result.sessionId})` };
+    }
+    return { outcome: "skipped" };
+  },
+};
+
 // ─── Registry + master tick ──────────────────────────────────────────────────
 
 export const CRON_JOBS: CronJob[] = [
@@ -1303,6 +1470,7 @@ export const CRON_JOBS: CronJob[] = [
   taskLadderSweepJob,
   wakeRetryJob,
   outOfBedJob,
+  touchpointsJob,
 ];
 
 const lastPolledAt = new Map<string, number>();
@@ -1357,6 +1525,9 @@ export function startCronScheduler(): void {
     await ensureCronLogTable();
     await ensureRoutineFoundationSchema();
     await ensureMorningSequenceSeed();
+    await ensureTouchpointsSchema().catch((err) =>
+      logger.error({ err }, "Failed to ensure touchpoints schema — touchpoint calls unavailable until a later retry")
+    );
     await tick().catch((err) => logger.error({ err }, "Cron scheduler initial tick threw"));
     setInterval(() => {
       tick().catch((err) => logger.error({ err }, "Cron scheduler tick threw"));

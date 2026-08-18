@@ -2442,3 +2442,71 @@ export const RescheduleLabDrawResponse = zod
         ),
     }),
   );
+
+/**
+ * @summary List Jessica's daily touchpoint calls (times, purposes, active flags)
+ */
+export const ListTouchpointsResponseItem = zod.object({
+  id: zod.number(),
+  timeOfDay: zod.string().describe("24-hour HH:MM, Pacific"),
+  purpose: zod.string(),
+  title: zod.string(),
+  purposePrompt: zod.string(),
+  active: zod.boolean(),
+  sortOrder: zod.number(),
+});
+export const ListTouchpointsResponse = zod.array(ListTouchpointsResponseItem);
+
+/**
+ * @summary Read the call-safety config (test mode, admin phone presence, master call switch)
+ */
+export const GetTouchpointsConfigResponse = zod.object({
+  callTestMode: zod
+    .boolean()
+    .describe(
+      "True (default) = every outbound call dials ADMIN_PHONE_NUMBER, never Pops",
+    ),
+  adminPhoneSet: zod.boolean(),
+  dailyCallEnabled: zod.boolean(),
+});
+
+/**
+ * @summary Flip the global call test mode (on = every outbound call dials the admin line)
+ */
+export const UpdateTouchpointsConfigBody = zod.object({
+  callTestMode: zod.boolean(),
+});
+
+export const UpdateTouchpointsConfigResponse = zod.object({
+  callTestMode: zod
+    .boolean()
+    .describe(
+      "True (default) = every outbound call dials ADMIN_PHONE_NUMBER, never Pops",
+    ),
+  adminPhoneSet: zod.boolean(),
+  dailyCallEnabled: zod.boolean(),
+});
+
+/**
+ * @summary Edit a touchpoint's time, title, prompt, or active flag
+ */
+export const UpdateTouchpointParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateTouchpointBody = zod.object({
+  timeOfDay: zod.string().optional().describe("24-hour HH:MM, Pacific"),
+  title: zod.string().optional(),
+  purposePrompt: zod.string().optional(),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateTouchpointResponse = zod.object({
+  id: zod.number(),
+  timeOfDay: zod.string().describe("24-hour HH:MM, Pacific"),
+  purpose: zod.string(),
+  title: zod.string(),
+  purposePrompt: zod.string(),
+  active: zod.boolean(),
+  sortOrder: zod.number(),
+});

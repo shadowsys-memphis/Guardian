@@ -66,6 +66,28 @@ async function getPopsPhonenumber(): Promise<string | null> {
   }
 }
 
+/**
+ * Global call-safety switch. While test mode is on, EVERY outbound call —
+ * scheduled jobs, touchpoints, and the manual Call Now button alike — dials
+ * ADMIN_PHONE_NUMBER instead of Pops. Enforced here, at the single point
+ * where the destination number is chosen, so no caller can bypass it.
+ *
+ * Fail-safe by construction: only the exact stored value "false" turns it
+ * off. A missing key, unreadable DB, or any other value means test mode is
+ * ON — a fresh or broken deployment can never surprise-dial Pops. Flipping
+ * it off is a deliberate act (PUT /touchpoints/config), reserved for Ray
+ * after a test day he's satisfied with.
+ */
+export async function isCallTestMode(): Promise<boolean> {
+  try {
+    const rows = await db.select().from(appSettingsTable)
+      .where(eq(appSettingsTable.key, "call_test_mode"));
+    return rows[0]?.value !== "false";
+  } catch {
+    return true;
+  }
+}
+
 function parseHealthDataTags(text: string): Array<{
   category: string;
   questionId: number | null;
@@ -175,10 +197,10 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
 
     let targetPhone: string | null = null;
 
-    if (opts?.test) {
+    if (opts?.test || (await isCallTestMode())) {
       targetPhone = process.env["ADMIN_PHONE_NUMBER"] ?? null;
       if (!targetPhone) {
-        return { ok: false, status: 400, error: "no_admin_phone", message: "ADMIN_PHONE_NUMBER secret is not set." };
+        return { ok: false, status: 400, error: "no_admin_phone", message: "Test mode is on but the ADMIN_PHONE_NUMBER secret is not set — no call placed." };
       }
     } else {
       targetPhone = await getPopsPhonenumber();
