@@ -18,6 +18,16 @@ export function to12Hour(raw: string): string {
   return `${h12}:${m[2]} ${suffix}`;
 }
 
+/**
+ * Today's Pacific calendar date (YYYY-MM-DD). Use this instead of
+ * `new Date().toISOString().split("T")[0]`, which is UTC and drifts a day
+ * off Pacific for evening times (anything from ~5pm Pacific onward is
+ * already "tomorrow" in UTC) — see api-server's lib/pacific-time.ts.
+ */
+export function todayPacific(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: PACIFIC_TZ }).format(new Date());
+}
+
 /** "6:32 PM" — Pacific, 12-hour. */
 export function formatPacificTime(date: string | number | Date): string {
   return new Date(date).toLocaleTimeString("en-US", {

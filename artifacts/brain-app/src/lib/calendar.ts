@@ -1,4 +1,4 @@
-import { to12Hour } from "@/lib/time";
+import { to12Hour, todayPacific } from "@/lib/time";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -161,7 +161,7 @@ export function makeRotationTaskDescription(t: {
 }
 
 export function todayAtTime(timeSlot: string): string {
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayPacific();
   const parts = timeSlot.trim().split(" ");
   const timePart = parts[0];
   const ampm = parts[1]?.toUpperCase();
@@ -170,13 +170,17 @@ export function todayAtTime(timeSlot: string): string {
   const m = parseInt(mStr ?? "0", 10);
   if (ampm === "PM" && h !== 12) h += 12;
   if (ampm === "AM" && h === 12) h = 0;
-  return new Date(
-    `${today}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`
-  ).toISOString();
+  // Naive (no "Z"/offset) on purpose — the calendar-push endpoint attaches an
+  // explicit Pacific timeZone to naive dateTimes. Round-tripping through
+  // `new Date(...).toISOString()` here would stamp "Z" on these Pacific wall-clock
+  // digits and reinterpret them as UTC, corrupting the actual instant.
+  return `${today}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
 }
 
 export function quarterToHour(quarter: string): number {
-  const map: Record<string, number> = { Q1: 8, Q2: 13, Q3: 18, Q4: 22 };
+  // Must land inside Ray's quarter windows (Q1 6–10, Q2 10–14, Q3 14–18,
+  // Q4 18–6) — 18:00 is already Q4, so Q3 events go mid-quarter.
+  const map: Record<string, number> = { Q1: 8, Q2: 13, Q3: 16, Q4: 22 };
   return map[quarter] ?? 9;
 }
 

@@ -111,7 +111,7 @@ import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useVault } from "@/lib/vault-context";
-import { formatPacificTime, formatPacificDate, formatPacificDateTime, formatPacificShortDate, to12Hour } from "@/lib/time";
+import { formatPacificTime, formatPacificDate, formatPacificDateTime, formatPacificShortDate, to12Hour, todayPacific } from "@/lib/time";
 import { PresenceMark } from "@/components/presence-field/PresenceMark";
 import { TAB_DEFS, type Tab } from "./admin/tabs";
 
@@ -994,7 +994,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
   const hasOverride = !!state?.quarterOverride;
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayPacific();
   const inventoryList = (rawInventory as InventoryItem[]) ?? [];
   const overdueInventory = inventoryList.filter((i) => !!(i.estimatedRunOutDate && i.estimatedRunOutDate < today));
   const lastSymptomLog = (symptomLogs as any[])?.[0];
@@ -1236,17 +1236,18 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 function ScheduleTab() {
   const { isLocal } = useVault();
   const { data: schedule } = useGetSchedule();
-  const createTask = useCreateScheduleTask();
-  const updateTask = useUpdateScheduleTask();
-  const deleteTask = useDeleteScheduleTask();
   const queryClient = useQueryClient();
   // The generated mutations don't invalidate anything, and refetchOnWindowFocus
-  // is off globally — without this the Done/Pending badge won't flip until reload.
+  // is off globally — every schedule mutation needs this or the edit only shows
+  // up after a full reload (and the DnD board snaps back to the stale order).
   const refetchSchedule = {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getGetScheduleQueryKey() });
     },
   };
+  const createTask = useCreateScheduleTask({ mutation: refetchSchedule });
+  const updateTask = useUpdateScheduleTask({ mutation: refetchSchedule });
+  const deleteTask = useDeleteScheduleTask({ mutation: refetchSchedule });
   const completeTask = useCompleteScheduleTask({ mutation: refetchSchedule });
   const uncompleteTask = useUncompleteScheduleTask({ mutation: refetchSchedule });
   const { toast } = useToast();
@@ -1257,7 +1258,7 @@ function ScheduleTab() {
 
   const handlePushTaskToCalendar = async (task: ScheduleTask) => {
     setCalSyncingId(task.id);
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayPacific();
     const h = quarterToHour(task.quarter);
     const startIso = `${today}T${String(h).padStart(2, "0")}:00:00`;
     const result = await pushToCalendar(
@@ -1301,14 +1302,6 @@ function ScheduleTab() {
     }
   };
 
-  const quarters = ["Q1", "Q2", "Q3", "Q4"];
-  const quarterLabels: Record<string, string> = {
-    Q1: "Q1 — Morning (0600-1200)",
-    Q2: "Q2 — Afternoon (1200-1800)",
-    Q3: "Q3 — Evening (1800-2200)",
-    Q4: "Q4 — Night (2200-0600)",
-  };
-
   return (
     <div>
       <header className="mb-8 border-b border-border/50 pb-4 flex justify-between items-end">
@@ -1340,10 +1333,10 @@ function ScheduleTab() {
             <div className="space-y-2">
               <label className="text-sm font-bold uppercase text-muted-foreground">Quarter</label>
               <select name="quarter" defaultValue={editingTask?.quarter ?? "Q1"} className="flex h-10 w-full rounded-sm border border-border bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                <option value="Q1">Q1 (Morning)</option>
-                <option value="Q2">Q2 (Afternoon)</option>
-                <option value="Q3">Q3 (Evening)</option>
-                <option value="Q4">Q4 (Night)</option>
+                <option value="Q1">Q1 (Morning · 6–10 AM)</option>
+                <option value="Q2">Q2 (Midday · 10 AM–2 PM)</option>
+                <option value="Q3">Q3 (Afternoon · 2–6 PM)</option>
+                <option value="Q4">Q4 (Evening · 6 PM–6 AM)</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -1836,7 +1829,7 @@ export function ShopperTab() {
     });
     if (!nowUrgent) return;
     setUrgentPushingKey(key);
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayPacific();
     const result = await pushToCalendar(
       {
         summary: `⚡ URGENT — Pick up: ${key}`,
@@ -2625,7 +2618,7 @@ function InventoryTab() {
   );
   const isInCart = (item: InventoryItem) => cartItemNames.has(item.itemName.trim().toLowerCase());
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayPacific();
 
   const grouped: Record<"weekly" | "monthly" | "quarterly" | "yearly", InventoryItem[]> = {
     weekly: inventory.filter((i) => i.replenishmentCycle === "weekly"),
@@ -3644,7 +3637,7 @@ function CalendarSyncTab() {
       for (const t of pending) {
         const quarterHours: Record<string, number> = { Q1: 8, Q2: 13, Q3: 18, Q4: 22 };
         const h = quarterHours[t.quarter] ?? 9;
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayPacific();
         const startIso = `${today}T${String(h).padStart(2, "0")}:00:00`;
         const r = await pushToCalendar({
           summary: `[Schedule] ${t.title}`,

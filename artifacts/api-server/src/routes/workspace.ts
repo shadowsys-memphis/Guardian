@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import { PACIFIC_TZ } from "../lib/pacific-time";
 
 const router: IRouter = Router();
 
@@ -60,9 +61,9 @@ router.post("/calendar/events", async (req, res) => {
     event.start = { date: dateStr };
     event.end = { date: dateStr };
   } else {
-    event.start = { dateTime: body.startTime, timeZone: "America/New_York" };
+    event.start = { dateTime: body.startTime, timeZone: PACIFIC_TZ };
     const endIso = body.endTime ?? addMinutesPreservingForm(body.startTime, 30);
-    event.end = { dateTime: endIso, timeZone: "America/New_York" };
+    event.end = { dateTime: endIso, timeZone: PACIFIC_TZ };
 
     const mins = body.reminderMinutes !== undefined ? body.reminderMinutes : 30;
     event.reminders = {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -38,11 +38,13 @@ import type { ScheduleTask } from "@workspace/api-client-react";
 const QUARTERS = ["Q1", "Q2", "Q3", "Q4"] as const;
 type Quarter = (typeof QUARTERS)[number];
 
+// Ray's quarter boundaries (2026-08-14), same as quarterForHour /
+// computeCurrentQuarter / computeQuarterForHour on the server.
 const QUARTER_LABELS: Record<Quarter, string> = {
-  Q1: "Q1 — Morning (0600-1200)",
-  Q2: "Q2 — Afternoon (1200-1800)",
-  Q3: "Q3 — Evening (1800-2200)",
-  Q4: "Q4 — Night (2200-0600)",
+  Q1: "Q1 — Morning (0600-1000)",
+  Q2: "Q2 — Midday (1000-1400)",
+  Q3: "Q3 — Afternoon (1400-1800)",
+  Q4: "Q4 — Evening (1800-0600)",
 };
 
 function groupByQuarter(tasks: ScheduleTask[]): Record<Quarter, ScheduleTask[]> {
@@ -310,14 +312,18 @@ export function ScheduleTabDnD({
     groupByQuarter(schedule ?? [])
   );
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Mirrors activeId for the sync effect below without making the effect
+  // re-fire on drag end — re-grouping from the still-stale cache at that
+  // moment is what made dropped cards snap back to their old slot.
+  const activeIdRef = useRef<string | null>(null);
   const [editingTimeId, setEditingTimeId] = useState<number | null>(null);
   const [editingTimeValue, setEditingTimeValue] = useState("");
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState("");
 
   useEffect(() => {
-    if (!activeId) setItems(groupByQuarter(schedule ?? []));
-  }, [schedule, activeId]);
+    if (activeIdRef.current === null) setItems(groupByQuarter(schedule ?? []));
+  }, [schedule]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -326,8 +332,16 @@ export function ScheduleTabDnD({
   );
 
   const handleDragStart = ({ active }: DragStartEvent) => {
+    activeIdRef.current = String(active.id);
     setActiveId(String(active.id));
     setEditingTimeId(null);
+    setEditingTitleId(null);
+  };
+
+  const handleDragCancel = () => {
+    activeIdRef.current = null;
+    setActiveId(null);
+    setItems(groupByQuarter(schedule ?? []));
   };
 
   const handleDragOver = ({ active, over }: DragOverEvent) => {
@@ -361,8 +375,13 @@ export function ScheduleTabDnD({
   };
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    activeIdRef.current = null;
     setActiveId(null);
-    if (!over) return;
+    if (!over) {
+      // Dropped nowhere: undo any cross-quarter move handleDragOver staged.
+      setItems(groupByQuarter(schedule ?? []));
+      return;
+    }
 
     const activeId = String(active.id);
     const overId = String(over.id);
@@ -382,14 +401,19 @@ export function ScheduleTabDnD({
       }
     }
 
+    let mutated = false;
     for (const q of QUARTERS) {
       finalItems[q].forEach((task, idx) => {
         const orig = schedule?.find((t) => t.id === task.id);
         if (!orig || orig.order !== idx || orig.quarter !== q) {
+          mutated = true;
           updateTask({ id: task.id, data: { order: idx, quarter: q } });
         }
       });
     }
+    // Nothing written → no refetch is coming, so pick up any schedule
+    // change that arrived while the drag was in flight.
+    if (!mutated) setItems(groupByQuarter(schedule ?? []));
   };
 
   const activeTask = activeId
@@ -419,6 +443,7 @@ export function ScheduleTabDnD({
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <div className="space-y-8">
         {QUARTERS.map((q) => (
