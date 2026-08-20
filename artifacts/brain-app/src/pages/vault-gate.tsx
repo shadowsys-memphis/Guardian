@@ -49,7 +49,7 @@ export function VaultGate({ children: _children }: VaultGateProps) {
       <div className="w-full max-w-sm mx-auto">
         <div className="text-center mb-8">
           <div className="mx-auto mb-5 flex justify-center">
-            <PresenceField size={120} resting />
+            <PresenceField size={120} />
           </div>
           <p className="text-[11px] uppercase tracking-[0.3em] text-accent font-medium mb-2">
             Presence Field OS

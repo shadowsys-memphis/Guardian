@@ -4,7 +4,12 @@
    driven by useDayQuarter. The gradient light rides the ring
    through the real day (0deg = 06:00 at the top, one turn per
    day on Ray's quarter clock); the slate body stays constant.
-   Jessica states: `calling` ripples, `resting` halo breath.
+   MOTION IS EVENT-DRIVEN. At rest the mark is completely still:
+   no halo breath, no day-long rotation, no ticking. Pass `live`
+   to let the light ride the day clock, and `calling` when Jessica
+   is actually on the line. The chrome (nav/header/favicon) uses
+   <PresenceMark /> instead — this component is for large in-app
+   moments only.
    ============================================================ */
 import { useId } from "react";
 import clsx from "clsx";
@@ -17,10 +22,11 @@ export interface PresenceFieldProps {
   size?: number;
   /** Admin lock — pins the light to this quarter's midpoint. */
   quarter?: Quarter;
-  /** Jessica speaks: ripples travel out from the ring. */
+  /** Jessica is on the line: ripples travel out from the ring. */
   calling?: boolean;
-  /** Slow halo breath at the current daypart's tempo. */
-  resting?: boolean;
+  /** Let the light ride the real day clock. Off by default — the
+      mark holds a fixed angle and stops ticking entirely. */
+  live?: boolean;
   className?: string;
 }
 
@@ -28,7 +34,7 @@ export function PresenceField({
   size = 96,
   quarter,
   calling = false,
-  resting = true,
+  live = false,
   className,
 }: PresenceFieldProps) {
   // One gradient id per instance — duplicate ids are invalid HTML
@@ -36,17 +42,17 @@ export function PresenceField({
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const strokeId = `pfStroke${uid}`;
   const haloId = `pfHalo${uid}`;
-  const day = useDayQuarter({ override: quarter });
+  // Still by default: with `live` off useDayQuarter stops its interval
+  // and pins the light, so nothing on the mark moves until an actual
+  // event (a call) says otherwise.
+  const day = useDayQuarter({ override: quarter, live });
 
   return (
     <svg
       className={clsx(
         "presence-field",
         day.className,
-        {
-          "is-calling": calling,
-          "is-resting": resting && !calling,
-        },
+        { "is-calling": calling },
         className,
       )}
       style={day.style}

@@ -10,7 +10,7 @@ export function MySubscriptionPage() {
           Workspace
         </h1>
         <p className="text-muted-foreground text-sm mt-1 font-display uppercase tracking-wider">
-          br(AI)n · Local Workspace
+          Brain Guardian · Local Workspace
         </p>
       </div>
 

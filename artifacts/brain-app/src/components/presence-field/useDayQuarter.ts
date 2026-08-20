@@ -80,6 +80,10 @@ export interface UseDayQuarterOptions {
   override?: Quarter;
   /** Tick interval. Default 30s — same cadence as the Pops view. */
   tickMs?: number;
+  /** Follow the real clock. Off by default: the hook computes the
+      day state once and then stops, so a mark at rest never moves.
+      Turn it on only where the day clock is the point. */
+  live?: boolean;
 }
 
 export interface DayClock extends DayState {
@@ -90,17 +94,21 @@ export interface DayClock extends DayState {
 }
 
 export function useDayQuarter(opts: UseDayQuarterOptions = {}): DayClock {
-  const { override, tickMs = 30_000 } = opts;
+  const { override, tickMs = 30_000, live = false } = opts;
   const [state, setState] = useState<DayState>(() => computeDayState());
   const turns = useRef(0);
   const lastAngle = useRef(state.angle);
 
   useEffect(() => {
+    // Not live: keep the state computed at mount and never schedule a
+    // tick. Without this the mark creeps around the ring all day, which
+    // reads as idle motion even though no event caused it.
+    if (!live) return;
     const tick = () => setState(computeDayState());
     const id = window.setInterval(tick, tickMs);
     tick();
     return () => window.clearInterval(id);
-  }, [tickMs]);
+  }, [tickMs, live]);
 
   const base = override !== undefined ? (override - 1) * 90 + 45 : state.angle;
 

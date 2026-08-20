@@ -204,7 +204,7 @@ function GeneralTab() {
   const { toast } = useToast();
   const [savedKey, setSavedKey] = useState<string | null>(null);
 
-  const [appName, setAppName] = useState("br(AI)n");
+  const [appName, setAppName] = useState("Brain Guardian");
 
   const [quietForm, setQuietForm] = useState({
     quietWindowStart: "22:00",
@@ -229,7 +229,7 @@ function GeneralTab() {
 
   useEffect(() => {
     if (!loading) {
-      setAppName(settings.app_name ?? "br(AI)n");
+      setAppName(settings.app_name ?? "Brain Guardian");
       setHaldolForm({
         haldol_injection_interval_days: settings.haldol_injection_interval_days ?? "28",
         haldol_zombie_phase_days: settings.haldol_zombie_phase_days ?? "5",
@@ -238,7 +238,7 @@ function GeneralTab() {
   }, [loading, settings]);
 
   const saveAppName = async () => {
-    const ok = await save({ app_name: appName.trim() || "br(AI)n" });
+    const ok = await save({ app_name: appName.trim() || "Brain Guardian" });
     if (ok) flash("app_name");
     else toast({ title: "Failed to save app name", variant: "destructive" });
   };
@@ -273,7 +273,7 @@ function GeneralTab() {
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
             onBlur={saveAppName}
-            placeholder="br(AI)n"
+            placeholder="Brain Guardian"
           />
           <SavedBadge visible={savedKey === "app_name"} />
         </CardContent>
@@ -1257,7 +1257,7 @@ function AccessTab() {
             <Shield size={14} className="text-primary" /> Change Vault Passphrase
           </CardTitle>
           <CardDescription>
-            Update the passphrase required to unlock the br(AI)n workspace. Enter your current passphrase to confirm the change.
+            Update the passphrase required to unlock the Brain Guardian workspace. Enter your current passphrase to confirm the change.
           </CardDescription>
         </CardHeader>
         <CardContent>

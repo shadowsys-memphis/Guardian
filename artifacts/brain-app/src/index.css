@@ -194,3 +194,176 @@
   animation: waveform 0.8s ease-in-out infinite;
   transform-origin: bottom;
 }
+
+/* ============================================================
+   PRESENCE FIELD DASHBOARD (issue #167)
+   Shared surface + rhythm for the admin shell. These classes are
+   the design system the individual tabs inherit — prefer adding
+   here over restating spacing/colour inside a tab.
+   ============================================================ */
+
+/* A CardContent that follows a CardHeader shouldn't re-pad the gap;
+   a Card that opens straight into CardContent still needs its own. */
+.pf-card-header + .pf-card-content { padding-top: 0; }
+
+/* ---- Zones: the calm section rhythm of the dashboard --------
+   A zone is a labelled band of related content. Few zones, wide
+   gutters — this is what separates the new dashboard from the old
+   wall-of-cards grid. */
+.pf-zone { margin-top: 2.5rem; }
+.pf-zone:first-child { margin-top: 0; }
+
+.pf-zone-label {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ---- Nav rail ----------------------------------------------
+   Compact labelled rail that replaced the 16rem sidebar: icon +
+   small uppercase label on one line, so it stays scannable without
+   the width. Collapses to a horizontal scroller under md. */
+.pf-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-md);
+  color: hsl(var(--muted-foreground));
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.pf-rail-item > svg { flex: none; }
+.pf-rail-item:hover { background: hsl(var(--secondary) / 0.7); color: hsl(var(--foreground)); }
+.pf-rail-item[aria-current="page"] {
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+}
+/* Active marker is the soft-gold accent, matching the vault gate. */
+.pf-rail-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 1.375rem;
+  border-radius: 0 3px 3px 0;
+  background: hsl(var(--accent));
+}
+/* Under md the rail lies down and scrolls; the marker moves to the top
+   edge and labels shrink so a row of tabs still fits a phone. */
+@media (max-width: 767px) {
+  .pf-rail-item {
+    width: auto;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.5625rem;
+    letter-spacing: 0.06em;
+    padding: 0.5rem 0.625rem;
+  }
+  .pf-rail-item[aria-current="page"]::before {
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    width: 1.5rem;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+  }
+}
+
+/* ---- Stat: the big quiet number ---------------------------- */
+.pf-stat-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.pf-stat-value {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+}
+
+/* ---- Pills: small status words ------------------------------
+   Colour still carries the meaning defined in :root — sage green
+   is operational status, gold is attention, copper is caution. */
+.pf-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pf-pill-ok      { background: hsl(var(--success) / 0.12); color: hsl(var(--success)); border-color: hsl(var(--success) / 0.25); }
+.pf-pill-attn    { background: hsl(var(--accent) / 0.14);  color: hsl(24 60% 34%);     border-color: hsl(var(--accent) / 0.3); }
+.pf-pill-caution { background: hsl(var(--warning) / 0.12); color: hsl(var(--warning)); border-color: hsl(var(--warning) / 0.28); }
+.pf-pill-urgent  { background: hsl(var(--destructive) / 0.1); color: hsl(var(--destructive)); border-color: hsl(var(--destructive) / 0.28); }
+.pf-pill-muted   { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); border-color: hsl(var(--border)); }
+
+/* ---- Attention rows ----------------------------------------
+   One line per thing that actually needs Ray. The left edge keeps
+   the severity colour so the list scans without reading. */
+.pf-attn-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 0.875rem;
+  border-radius: var(--radius-md);
+  border: 1px solid hsl(var(--border) / 0.8);
+  border-left-width: 3px;
+  background: hsl(var(--card));
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.pf-attn-row:hover { background: hsl(var(--secondary) / 0.5); }
+.pf-attn-urgent  { border-left-color: hsl(var(--destructive)); }
+.pf-attn-caution { border-left-color: hsl(var(--warning)); }
+.pf-attn-attn    { border-left-color: hsl(var(--accent)); }
+
+/* ---- Quick actions ------------------------------------------ */
+.pf-quick-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.875rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  text-align: left;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+.pf-quick-action:hover {
+  border-color: hsl(var(--accent) / 0.45);
+  background: hsl(var(--secondary) / 0.4);
+}
+.pf-quick-action:active { transform: translateY(1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-rail-item,
+  .pf-attn-row,
+  .pf-quick-action { transition: none; }
+  .pf-quick-action:active { transform: none; }
+}

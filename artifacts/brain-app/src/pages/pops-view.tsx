@@ -61,7 +61,7 @@ export function PopsView() {
         <div className="flex items-center gap-5">
           <div className="h-4 w-4 rounded-full bg-primary animate-pulse shadow-[0_0_15px_rgba(70,159,104,0.6)]" />
           <span className="text-3xl md:text-4xl font-display font-bold tracking-widest text-primary">
-            br(AI)n_OS // ONLINE
+            GUARDIAN_OS // ONLINE
           </span>
         </div>
         <div className="text-right">

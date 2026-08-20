@@ -90,7 +90,7 @@ export function makeMedEventDescription(opts: {
     "Administer: IM injection as directed",
   ];
   if (opts.notes) lines.push(`Clinical Notes: ${opts.notes}`);
-  lines.push("\nAction: Confirm dose, verify cycle reset in br(AI)n App after administration.");
+  lines.push("\nAction: Confirm dose, verify cycle reset in Brain Guardian after administration.");
   return lines.join("\n");
 }
 
@@ -109,7 +109,7 @@ export function makeShoppingEventDescription(opts: {
       (item) => `• ${item.ingredientName}: ${item.totalQuantity} ${item.unit} — $${(item.estimatedCostCents / 100).toFixed(2)}`
     ),
     "",
-    "Open br(AI)n App → Shopper to review cart before heading out.",
+    "Open Brain Guardian → Shopper to review cart before heading out.",
   ];
   return lines.join("\n");
 }
@@ -125,7 +125,7 @@ export function makeUrgentItemDescription(opts: {
     `Quantity needed: ${opts.totalQuantity} ${opts.unit}`,
     `Estimated cost: $${(opts.estimatedCostCents / 100).toFixed(2)}`,
     "",
-    "Open br(AI)n App → Shopper for full weekly list.",
+    "Open Brain Guardian → Shopper for full weekly list.",
   ].join("\n");
 }
 
@@ -140,7 +140,7 @@ export function makeScheduleTaskDescription(t: {
     `Quarter: ${t.quarter} · Time: ${to12Hour(t.timeLabel)}`,
   ];
   if (t.description) lines.push(`Details: ${t.description}`);
-  lines.push("\nOpen br(AI)n App → Schedule for full task details.");
+  lines.push("\nOpen Brain Guardian → Schedule for full task details.");
   return lines.join("\n");
 }
 
@@ -194,7 +194,7 @@ export function extractCalendarTitle(text: string): string {
   );
   if (dayEventMatch) return dayEventMatch[1].trim();
 
-  return "Reminder from br(AI)n";
+  return "Reminder from Brain Guardian";
 }
 
 export function handleCalendarError(error: string, toast: (opts: any) => void): void {

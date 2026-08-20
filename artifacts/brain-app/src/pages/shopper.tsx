@@ -179,7 +179,7 @@ export function ShopperPage() {
       return;
     }
     const lines: string[] = [
-      `br(AI)n Weekly Meal Plan — Week of ${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}`,
+      `Brain Guardian Weekly Meal Plan — Week of ${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}`,
       `Generated: ${formatPacificDateTime(new Date())}`,
       `Budget: $${((cart?.totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $${((cart?.budgetCents ?? 15000) / 100).toFixed(2)}`,
       `Status: ${(cart?.status ?? "pending").toUpperCase()}`,

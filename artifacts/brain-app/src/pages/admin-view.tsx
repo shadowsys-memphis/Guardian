@@ -16,7 +16,6 @@ import {
 import {
   Activity,
   Calendar,
-  ShieldAlert,
   PhoneOff,
   Check,
   Plus,
@@ -113,64 +112,81 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useVault } from "@/lib/vault-context";
 import { formatPacificTime, formatPacificDate, formatPacificDateTime, formatPacificShortDate, to12Hour } from "@/lib/time";
+import { PresenceMark } from "@/components/presence-field/PresenceMark";
+import { TAB_DEFS, type Tab } from "./admin/tabs";
 
 type Tone = "gentle" | "grounding" | "urgent" | "encouraging" | "calm";
-type Tab = "dashboard" | "schedule" | "symptoms" | "scripts" | "haldol" | "health" | "shopper" | "rotation" | "inventory" | "calendar-sync" | "appointments" | "documents" | "devices";
 
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const QUARTER_DAYPART: Record<string, string> = { Q1: "Morning", Q2: "Afternoon", Q3: "Evening", Q4: "Night" };
+
+const TAB_ICONS: Record<Tab, React.ReactNode> = {
+  dashboard: <Activity size={16} />,
+  schedule: <Calendar size={16} />,
+  symptoms: <HeartPulse size={16} />,
+  inventory: <Package size={16} />,
+  scripts: <Mic size={16} />,
+  haldol: <BrainCircuit size={16} />,
+  health: <Activity size={16} />,
+  shopper: <ShoppingCart size={16} />,
+  devices: <Zap size={16} />,
+  rotation: <RotateCcw size={16} />,
+  "calendar-sync": <CalendarPlus size={16} />,
+  appointments: <Stethoscope size={16} />,
+  documents: <Scan size={16} />,
+};
 
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [, navigate] = useLocation();
   const { isLocal, isDemo } = useVault();
+  // Local-only specialty tools (api-server routes/index.ts localRouter)
+  // aren't available to tenant/demo sessions — hide rather than show a
+  // dead/erroring tab.
+  const visibleTabs = TAB_DEFS.filter((tab) => tab.tier === "core" || isLocal);
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
-      <aside className="w-full md:w-64 bg-card border-r border-border shrink-0 flex flex-col">
-        <div className="p-6 border-b border-border/50">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-2xl font-display font-bold text-primary tracking-widest leading-none">COMMAND</h1>
-              <p className="text-xs text-muted-foreground uppercase tracking-widest">
-                {isLocal ? "Raymo / Admin" : isDemo ? "Live Demo" : "Family Workspace"}
-              </p>
-            </div>
+      <aside className="w-full md:w-56 border-b md:border-b-0 md:border-r border-border shrink-0 flex flex-col md:h-screen md:sticky md:top-0">
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <PresenceMark size={28} />
+          <div className="leading-tight">
+            <p className="font-display text-base font-medium text-foreground">Brain Guardian</p>
+            <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground/70">
+              {isLocal ? "Raymo / Admin" : isDemo ? "Live Demo" : "Family Workspace"}
+            </p>
           </div>
         </div>
 
-        <nav className="p-4 space-y-2 flex-1">
-          <NavButton active={activeTab === "dashboard"} onClick={() => setActiveTab("dashboard")} icon={<Activity size={18} />} label="Dashboard" />
-          <NavButton active={activeTab === "schedule"} onClick={() => setActiveTab("schedule")} icon={<Calendar size={18} />} label="Schedule Editor" />
-          <NavButton active={activeTab === "symptoms"} onClick={() => setActiveTab("symptoms")} icon={<HeartPulse size={18} />} label="Symptom Log" />
-          <NavButton active={activeTab === "inventory"} onClick={() => setActiveTab("inventory")} icon={<Package size={18} />} label="Inventory" />
-          {/* Everything below depends on Ray's local-only specialty tools (see
-              api-server routes/index.ts localRouter) and isn't available to
-              tenant/demo sessions — hide rather than show a dead/erroring tab. */}
+        <nav className="flex md:flex-col gap-1 px-3 pb-3 md:pb-4 md:flex-1 overflow-x-auto md:overflow-visible">
+          {visibleTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              aria-current={activeTab === tab.id ? "page" : undefined}
+              className={`pf-rail-item ${tab.groupStart ? "md:mt-2 md:pt-3 md:border-t md:border-border/60" : ""}`}
+            >
+              {TAB_ICONS[tab.id]}
+              <span className="md:hidden">{tab.shortLabel ?? tab.label}</span>
+              <span className="hidden md:inline">{tab.label}</span>
+            </button>
+          ))}
           {isLocal && (
-            <>
-              <NavButton active={activeTab === "scripts"} onClick={() => setActiveTab("scripts")} icon={<Mic size={18} />} label="Voice Scripts" />
-              <NavButton active={activeTab === "haldol"} onClick={() => setActiveTab("haldol")} icon={<BrainCircuit size={18} />} label="Haldol Tracker" />
-              <NavButton active={activeTab === "health"} onClick={() => setActiveTab("health")} icon={<Activity size={18} />} label="Health Intel" />
-              <NavButton active={activeTab === "shopper"} onClick={() => setActiveTab("shopper")} icon={<ShoppingCart size={18} />} label="Shopper" />
-              <NavButton active={activeTab === "devices"} onClick={() => setActiveTab("devices")} icon={<Zap size={18} />} label="Devices" />
-              <NavButton active={activeTab === "rotation"} onClick={() => setActiveTab("rotation")} icon={<RotateCcw size={18} />} label="Rotation" />
-              <NavButton active={activeTab === "calendar-sync"} onClick={() => setActiveTab("calendar-sync")} icon={<CalendarPlus size={18} />} label="Calendar Sync" />
-              <div className="pt-2 border-t border-border/30 mt-2">
-                <NavButton active={activeTab === "appointments"} onClick={() => setActiveTab("appointments")} icon={<Stethoscope size={18} />} label="Appointments" />
-                <NavButton active={activeTab === "documents"} onClick={() => setActiveTab("documents")} icon={<Scan size={18} />} label="Scan Docs" />
-                <NavButton active={false} onClick={() => navigate("/settings")} icon={<SlidersHorizontal size={18} />} label="Settings" />
-              </div>
-            </>
+            <button onClick={() => navigate("/settings")} className="pf-rail-item">
+              <SlidersHorizontal size={16} />
+              <span className="md:hidden">Settings</span>
+              <span className="hidden md:inline">Settings</span>
+            </button>
           )}
         </nav>
 
-        <div className="p-4 border-t border-border/30">
-          <p className="text-xs text-muted-foreground/50 uppercase tracking-widest font-display">Unconditional Software v1</p>
+        <div className="hidden md:block px-5 py-4 border-t border-border/60">
+          <p className="text-[0.625rem] text-muted-foreground/50 uppercase tracking-widest">Unconditional Software v1</p>
         </div>
       </aside>
 
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         <div className="max-w-6xl mx-auto">
           {activeTab === "dashboard" && <DashboardTab onNavigate={setActiveTab} />}
           {activeTab === "schedule" && <ScheduleTab />}
@@ -212,7 +228,7 @@ function HealthIntelligenceTab() {
     <div className="space-y-6">
       <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
         <div>
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Health Intelligence</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">Health Intelligence</h2>
           <p className="text-muted-foreground">Pops' health data extracted from Jessica's daily conversations.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -933,22 +949,6 @@ function HealthSettingsSection() {
   );
 }
 
-function NavButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm font-bold uppercase tracking-wider font-display transition-all ${
-        active
-          ? "bg-primary/10 text-primary border-l-4 border-primary"
-          : "text-muted-foreground hover:bg-secondary hover:text-foreground border-l-4 border-transparent"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
 function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { isLocal } = useVault();
   const { data: state } = useGetAppState();
@@ -967,6 +967,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const [broadcastValue, setBroadcastValue] = useState(state?.activeMessage ?? "");
   const [dietaryProfile, setDietaryProfile] = useState<{ restrictions?: string[]; source?: string; updated_at?: string } | null>(null);
   const [activityRestrictions, setActivityRestrictions] = useState<{ restrictions?: string[]; source?: string; updated_at?: string } | null>(null);
+  const [showOverride, setShowOverride] = useState(false);
 
   useEffect(() => {
     if (!isLocal) return; // documents router (care-context) is local-only
@@ -996,362 +997,237 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const today = new Date().toISOString().split("T")[0];
   const inventoryList = (rawInventory as InventoryItem[]) ?? [];
   const overdueInventory = inventoryList.filter((i) => !!(i.estimatedRunOutDate && i.estimatedRunOutDate < today));
+  const lastSymptomLog = (symptomLogs as any[])?.[0];
+  const restrictionCount = (dietaryProfile?.restrictions?.length ?? 0) + (activityRestrictions?.restrictions?.length ?? 0);
+  const cartNeedsApproval = isLocal && !!cart && (cart as any).status !== "approved";
+
+  // One line per real condition Ray should look at. Empty when everything's on track.
+  const attentionItems: { key: string; tone: "urgent" | "caution" | "attn"; text: string; detail?: string; onClick: () => void }[] = [];
+  if (isLocal && haldol?.isOverdue) {
+    attentionItems.push({
+      key: "haldol", tone: "urgent",
+      text: `Haldol injection overdue — ${haldol.daysOverdue} day${haldol.daysOverdue === 1 ? "" : "s"}`,
+      detail: `Next due ${haldol.nextInjectionDate}`,
+      onClick: () => onNavigate("haldol"),
+    });
+  } else if (isLocal && haldol?.isZombiePhase) {
+    attentionItems.push({
+      key: "haldol-phase", tone: "caution",
+      text: "High-symptom cycle phase",
+      detail: `Cycle day ${haldol?.cycleDay ?? "-"}`,
+      onClick: () => onNavigate("haldol"),
+    });
+  }
+  if (overdueInventory.length > 0) {
+    attentionItems.push({
+      key: "inventory", tone: "caution",
+      text: `${overdueInventory.length} inventory item${overdueInventory.length === 1 ? "" : "s"} overdue for restock`,
+      onClick: () => onNavigate("inventory"),
+    });
+  }
+  if (restrictionCount > 0) {
+    const chips = [...(dietaryProfile?.restrictions ?? []), ...(activityRestrictions?.restrictions ?? [])];
+    attentionItems.push({
+      key: "restrictions", tone: "attn",
+      text: `${restrictionCount} active care restriction${restrictionCount === 1 ? "" : "s"}`,
+      detail: chips.join(" · "),
+      onClick: () => onNavigate("documents"),
+    });
+  }
+  if (cartNeedsApproval) {
+    attentionItems.push({
+      key: "cart", tone: "attn",
+      text: "Grocery cart is waiting on approval",
+      detail: `$${(((cart as any).totalEstimatedCostCents ?? 0) / 100).toFixed(2)} estimated this week`,
+      onClick: () => onNavigate("shopper"),
+    });
+  }
 
   return (
-    <div className="space-y-6">
-      <header className="mb-8 border-b border-border/50 pb-4">
-        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">System Overview</h2>
-        <p className="text-muted-foreground">Live status of the br(AI)n App ecosystem.</p>
-      </header>
+    <div>
+      {/* ── Today ──────────────────────────────────────────────────────── */}
+      <div className="pf-zone">
+        <p className="pf-zone-label">Today</p>
+        <div className="flex items-start justify-between flex-wrap gap-3 mt-1.5">
+          <h2 className="text-3xl font-display font-medium text-foreground">
+            {QUARTER_DAYPART[state?.currentQuarter ?? ""] ?? "—"}
+            <span className="text-muted-foreground/60 font-normal text-xl"> · {state?.currentQuarter ?? "--"}</span>
+          </h2>
+          <div className="flex items-center gap-2">
+            <span className={`pf-pill ${state?.zombieMode ? "pf-pill-caution" : "pf-pill-ok"}`}>
+              {state?.zombieMode ? "Rest Mode" : "Normal"}
+            </span>
+            <Button size="sm" variant="outline" onClick={() => handleStateChange({ zombieMode: !state?.zombieMode })}>
+              {state?.zombieMode ? "End Rest Mode" : "Start Rest Mode"}
+            </Button>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className={hasOverride ? "border-primary/50" : ""}>
-          <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
-              <Clock size={14} /> Current Quarter
-            </CardDescription>
-            <CardTitle className="text-5xl">{state?.currentQuarter ?? "--"}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className={`text-xs uppercase font-bold tracking-widest px-2 py-1 rounded-sm inline-block ${hasOverride ? "bg-primary/10 text-primary" : "bg-success/10 text-success"}`}>
-              {hasOverride ? `Override: ${state?.quarterOverride}` : "Auto — Wall Clock"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Clock: <span className="font-bold text-foreground">{state?.computedQuarter ?? "--"}</span>
-            </p>
-            {hasOverride ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs"
-                onClick={() => handleStateChange({ quarterOverride: null })}
-              >
-                Clear Override → Resume Auto
-              </Button>
-            ) : (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1 uppercase font-bold">Override Quarter</p>
-                <div className="flex gap-1">
-                  {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => handleStateChange({ quarterOverride: q })}
-                      className="px-2 py-1 text-xs font-bold rounded bg-secondary text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className={state?.zombieMode ? "border-destructive shadow-[0_0_15px_rgba(220,38,38,0.2)]" : ""}>
-          <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold">Mode Status</CardDescription>
-            <CardTitle className={`text-4xl ${state?.zombieMode ? "text-destructive" : "text-success"}`}>
-              {state?.zombieMode ? "REST MODE" : "NORMAL"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant={state?.zombieMode ? "outline" : "destructive"}
-              size="sm"
-              className="w-full mt-2"
-              onClick={() => handleStateChange({ zombieMode: !state?.zombieMode })}
+        {hasOverride ? (
+          <p className="text-xs text-muted-foreground mt-2">
+            Pinned to {state?.quarterOverride} — the wall clock says {state?.computedQuarter ?? "--"}.{" "}
+            <button className="text-accent hover:underline font-medium" onClick={() => handleStateChange({ quarterOverride: null })}>
+              Resume auto
+            </button>
+          </p>
+        ) : (
+          <div className="mt-2">
+            <button
+              className="text-xs text-muted-foreground/70 hover:text-foreground underline decoration-dotted underline-offset-4"
+              onClick={() => setShowOverride((v) => !v)}
             >
-              {state?.zombieMode ? "Deactivate Rest Mode" : "Trigger Rest Mode"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold">Schedule Activity</CardDescription>
-            <CardTitle className="text-5xl">{completionRate}%</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="w-full bg-secondary h-2 mt-4 rounded-full overflow-hidden">
-              <div className="bg-primary h-full" style={{ width: `${completionRate}%` }} />
-            </div>
-            <p className="text-xs text-muted-foreground mt-2 text-right">
-              {completedCount} of {totalCount} tasks logged
-            </p>
-          </CardContent>
-        </Card>
-
-        {isLocal && (
-          <Card className={haldol?.isOverdue ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : undefined}>
-            <CardHeader className="pb-2">
-              <CardDescription className="uppercase tracking-widest font-bold">Haldol Cycle</CardDescription>
-              <CardTitle className="text-5xl">Day {haldol?.cycleDay ?? "-"}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mt-2">
-                Next: {haldol ? haldol.nextInjectionDate : "--"}
-              </p>
-              {haldol?.isOverdue ? (
-                <Badge variant="destructive" className="mt-2 flex items-center gap-1 w-fit">
-                  <ShieldAlert size={12} /> Injection Overdue — {haldol.daysOverdue} day{haldol.daysOverdue === 1 ? "" : "s"}
-                </Badge>
-              ) : haldol?.isZombiePhase ? (
-                <Badge variant="destructive" className="mt-2">High Symptom Phase</Badge>
-              ) : null}
-            </CardContent>
-          </Card>
-        )}
-
-        <Card
-          className={`cursor-pointer transition-colors hover:border-primary/40 ${overdueInventory.length > 0 ? "border-destructive/60 shadow-[0_0_16px_rgba(239,68,68,0.15)]" : ""}`}
-          onClick={() => onNavigate("inventory")}
-        >
-          <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
-              <Package size={14} /> Inventory
-            </CardDescription>
-            <CardTitle className="text-5xl">{overdueInventory.length}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mt-2">
-              {overdueInventory.length > 0 ? "item(s) overdue for restock" : "all items on track"}
-            </p>
-            {overdueInventory.length > 0 && (
-              <Badge variant="destructive" className="mt-2 flex items-center gap-1 w-fit">
-                <ShieldAlert size={12} /> Restock Needed
-              </Badge>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Active Care Alerts ─────────────────────────────────────────── */}
-      {(dietaryProfile?.restrictions?.length || activityRestrictions?.restrictions?.length) ? (
-        <Card className="mt-8 border-amber-500/60 shadow-[0_0_16px_rgba(245,158,11,0.15)] bg-amber-500/5">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2 text-amber-500">
-                <ShieldAlert size={14} /> Active Care Alerts
-              </CardDescription>
-              <button
-                onClick={() => onNavigate("documents")}
-                className="text-[10px] uppercase tracking-widest font-bold text-primary hover:underline flex items-center gap-1"
-              >
-                <FileText size={10} /> View Documents
-              </button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {dietaryProfile?.restrictions?.length ? (
-              <div>
-                <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1.5 flex items-center gap-1">
-                  <Flame size={10} /> Dietary Restrictions
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {dietaryProfile.restrictions.map((r, i) => (
-                    <span key={i} className="px-2 py-0.5 rounded-sm bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium border border-amber-500/30">
-                      {r}
-                    </span>
-                  ))}
-                </div>
+              Pin quarter manually
+            </button>
+            {showOverride && (
+              <div className="flex gap-1.5 mt-2">
+                {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
+                  <Button key={q} size="sm" variant="outline" className="text-xs h-7 px-2.5" onClick={() => handleStateChange({ quarterOverride: q })}>
+                    {q}
+                  </Button>
+                ))}
               </div>
-            ) : null}
-            {activityRestrictions?.restrictions?.length ? (
-              <div>
-                <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1.5 flex items-center gap-1">
-                  <Activity size={10} /> Activity Restrictions
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {activityRestrictions.restrictions.map((r, i) => (
-                    <span key={i} className="px-2 py-0.5 rounded-sm bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium border border-amber-500/30">
-                      {r}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <div className="border-t border-border/40 pt-2 flex items-center justify-between">
-              <p className="text-[10px] text-muted-foreground/60">
-                Source: <span className="font-medium text-muted-foreground">
-                  {dietaryProfile?.source ?? activityRestrictions?.source ?? "Medical Document"}
-                </span>
-              </p>
-              {(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at) && (
-                <p className="text-[10px] text-muted-foreground/60">
-                  Updated:{" "}
-                  {formatPacificDate(dietaryProfile?.updated_at ?? activityRestrictions?.updated_at!)}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Active Broadcast Message</CardTitle>
-          <CardDescription>Displayed prominently on Pops' ambient screen. Overrides the current task display.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4">
-            <Input
-              value={broadcastValue}
-              onChange={(e) => setBroadcastValue(e.target.value)}
-              className="font-display text-xl"
-              placeholder="Type message to show Pops..."
-            />
-            <Button onClick={() => handleStateChange({ activeMessage: broadcastValue })}>
-              Broadcast
-            </Button>
-            {state?.activeMessage && (
-              <Button variant="outline" onClick={() => { setBroadcastValue(""); handleStateChange({ activeMessage: null }); }}>
-                Clear
-              </Button>
             )}
           </div>
-          {state?.activeMessage && (
-            <p className="text-xs text-primary mt-2 font-bold">
-              Currently showing: "{state.activeMessage}"
-            </p>
-          )}
-        </CardContent>
-      </Card>
+        )}
 
-      {/* ── Pops Status Card ───────────────────────────────────────────── */}
-      <div className={`mt-8 grid grid-cols-1 gap-6 ${isLocal ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
-              <HeartPulse size={14} /> Pops Status
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {(() => {
-              const last = (symptomLogs as any[])?.[0];
-              if (!last) return <p className="text-xs text-muted-foreground">No symptom logs yet.</p>;
-              return (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground uppercase tracking-widest">Hallucinations</span>
-                    <span className={`text-sm font-bold ${last.hallucinationIntensity >= 3 ? "text-destructive" : last.hallucinationIntensity >= 1 ? "text-warning" : "text-success"}`}>
-                      {last.hallucinationIntensity}/5
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground uppercase tracking-widest">PTSD Trigger</span>
-                    <span className={`text-sm font-bold ${last.ptsdTrigger ? "text-destructive" : "text-success"}`}>
-                      {last.ptsdTrigger ? "Active" : "None"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground uppercase tracking-widest">Motivation</span>
-                    <span className="text-sm font-bold">{last.motivationLevel}/5</span>
-                  </div>
-                  {last.behaviorNotes && (
-                    <p className="text-xs text-muted-foreground italic border-t border-border/40 pt-2">{last.behaviorNotes}</p>
-                  )}
-                  <p className="text-[10px] text-muted-foreground/50 pt-1">
-                    Last log: {last.loggedAt ? formatPacificDateTime(last.loggedAt) : "Unknown"}
-                  </p>
-                </>
-              );
-            })()}
-            {todaySummary && (
-              <div className="border-t border-border/40 pt-2">
-                <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest mb-1">Last Check-in</p>
-                <p className="text-xs text-muted-foreground">
-                  {(todaySummary as any).sessionCount ?? 0} session{(todaySummary as any).sessionCount !== 1 ? "s" : ""} today
-                  {(todaySummary as any).lastSessionTime ? ` · ${formatPacificTime((todaySummary as any).lastSessionTime)}` : ""}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Today's Schedule by Q1-Q4 ─────────────────────────────────── */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
-              <Clock size={14} /> Today's Schedule
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => {
-              const qLabels: Record<string, string> = { Q1: "Morning", Q2: "Afternoon", Q3: "Evening", Q4: "Night" };
-              const tasks = (schedule ?? []).filter((t) => t.quarter === q && t.isActive !== false);
-              const done = tasks.filter((t) => t.isCompleted).length;
-              return (
-                <div key={q}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{q} — {qLabels[q]}</span>
-                    <span className="text-[10px] text-muted-foreground">{done}/{tasks.length}</span>
-                  </div>
-                  {tasks.length === 0 ? (
-                    <p className="text-[10px] text-muted-foreground/40 italic">No tasks</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {tasks.map((t) => (
-                        <div
-                          key={t.id}
-                          title={t.title}
-                          className={`h-2 w-2 rounded-full shrink-0 ${t.isCompleted ? "bg-success" : "bg-border"}`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {(schedule ?? []).length === 0 && (
-              <p className="text-xs text-muted-foreground/60">No active schedule tasks.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Cart Status ────────────────────────────────────────────────── */}
-        {isLocal && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription className="uppercase tracking-widest font-bold flex items-center gap-2">
-                <ShoppingCart size={14} /> Grocery Cart
-              </CardDescription>
+              <CardDescription className="pf-stat-label">Today's Rhythm</CardDescription>
+              <CardTitle className="pf-stat-value">{completionRate}%</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {!cart ? (
-                <p className="text-xs text-muted-foreground">No cart this week yet.</p>
+            <CardContent>
+              <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden">
+                <div className="bg-accent h-full rounded-full" style={{ width: `${completionRate}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">{completedCount} of {totalCount} tasks logged today</p>
+              <div className="grid grid-cols-4 gap-3 mt-4">
+                {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => {
+                  const tasks = (schedule ?? []).filter((t) => t.quarter === q && t.isActive !== false);
+                  const done = tasks.filter((t) => t.isCompleted).length;
+                  return (
+                    <div key={q}>
+                      <p className="text-[0.625rem] font-semibold uppercase tracking-widest text-muted-foreground/70">{q}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{done}/{tasks.length}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription className="pf-stat-label">Pops Right Now</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {!lastSymptomLog ? (
+                <p className="text-xs text-muted-foreground">No symptom logs yet.</p>
               ) : (
                 <>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-sm uppercase tracking-widest ${
-                      (cart as any).status === "approved" ? "bg-success/10 text-success" :
-                      "bg-secondary text-muted-foreground"
-                    }`}>
-                      {(cart as any).status ?? "pending"}
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className={`pf-pill ${lastSymptomLog.hallucinationIntensity >= 3 ? "pf-pill-urgent" : lastSymptomLog.hallucinationIntensity >= 1 ? "pf-pill-caution" : "pf-pill-ok"}`}>
+                      Hallucinations {lastSymptomLog.hallucinationIntensity}/5
                     </span>
+                    <span className={`pf-pill ${lastSymptomLog.ptsdTrigger ? "pf-pill-urgent" : "pf-pill-ok"}`}>
+                      PTSD trigger {lastSymptomLog.ptsdTrigger ? "active" : "none"}
+                    </span>
+                    <span className="pf-pill pf-pill-muted">Motivation {lastSymptomLog.motivationLevel}/5</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground uppercase tracking-widest">Estimated</span>
-                    <span className="text-sm font-bold">${(((cart as any).totalEstimatedCostCents ?? 0) / 100).toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground uppercase tracking-widest">Budget</span>
-                    <span className="text-sm font-bold">${(((cart as any).budgetCents ?? 15000) / 100).toFixed(2)}</span>
-                  </div>
-                  <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${((cart as any).totalEstimatedCostCents ?? 0) > ((cart as any).budgetCents ?? 15000) ? "bg-destructive" : "bg-success"}`}
-                      style={{ width: `${Math.min(100, (((cart as any).totalEstimatedCostCents ?? 0) / ((cart as any).budgetCents ?? 15000)) * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/50">
-                    Week of {(cart as any).weekStartDate}
-                    {(cart as any).approvedAt ? ` · Approved ${formatPacificDate((cart as any).approvedAt)}` : ""}
+                  {lastSymptomLog.behaviorNotes && (
+                    <p className="text-xs text-muted-foreground italic border-t border-border/50 pt-2">{lastSymptomLog.behaviorNotes}</p>
+                  )}
+                  <p className="text-[0.6875rem] text-muted-foreground/50">
+                    Last log {lastSymptomLog.loggedAt ? formatPacificDateTime(lastSymptomLog.loggedAt) : "unknown"}
                   </p>
                 </>
               )}
+              {isLocal && todaySummary && (
+                <p className="text-[0.6875rem] text-muted-foreground/50 border-t border-border/50 pt-2">
+                  {(todaySummary as any).sessionCount ?? 0} check-in{(todaySummary as any).sessionCount !== 1 ? "s" : ""} today
+                  {(todaySummary as any).lastSessionTime ? ` · ${formatPacificTime((todaySummary as any).lastSessionTime)}` : ""}
+                </p>
+              )}
             </CardContent>
           </Card>
+        </div>
+      </div>
+
+      {/* ── Needs Attention ────────────────────────────────────────────── */}
+      <div className="pf-zone">
+        <p className="pf-zone-label mb-3">Needs Attention</p>
+        {attentionItems.length === 0 ? (
+          <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-card px-4 py-3.5">
+            <CheckCircle size={18} className="text-success shrink-0" />
+            <div>
+              <p className="text-sm text-foreground">Nothing needs attention right now.</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Haldol, inventory, restrictions, and the grocery cart are all on track.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {attentionItems.map((item) => (
+              <button key={item.key} onClick={item.onClick} className={`pf-attn-row pf-attn-${item.tone}`}>
+                <AlertTriangle
+                  size={16}
+                  className={`mt-0.5 shrink-0 ${item.tone === "urgent" ? "text-destructive" : item.tone === "caution" ? "text-warning" : "text-accent"}`}
+                />
+                <div>
+                  <p className="text-sm text-foreground">{item.text}</p>
+                  {item.detail && <p className="text-xs text-muted-foreground mt-0.5">{item.detail}</p>}
+                </div>
+              </button>
+            ))}
+          </div>
         )}
+      </div>
+
+      {/* ── Quick Actions ──────────────────────────────────────────────── */}
+      <div className="pf-zone">
+        <p className="pf-zone-label mb-3">Quick Actions</p>
+        <Card>
+          <CardContent className="pt-5 space-y-3">
+            <p className="text-xs text-muted-foreground">Shown prominently on Pops' ambient screen, overriding the current task display.</p>
+            <div className="flex gap-3">
+              <Input
+                value={broadcastValue}
+                onChange={(e) => setBroadcastValue(e.target.value)}
+                className="font-display text-lg"
+                placeholder="Message for Pops..."
+              />
+              <Button onClick={() => handleStateChange({ activeMessage: broadcastValue })}>
+                Send
+              </Button>
+              {state?.activeMessage && (
+                <Button variant="outline" onClick={() => { setBroadcastValue(""); handleStateChange({ activeMessage: null }); }}>
+                  Clear
+                </Button>
+              )}
+            </div>
+            {state?.activeMessage && (
+              <p className="text-xs text-accent font-medium">
+                Currently showing: "{state.activeMessage}"
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+          <button className="pf-quick-action" onClick={() => onNavigate("schedule")}>
+            <Calendar size={18} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Schedule</span>
+          </button>
+          <button className="pf-quick-action" onClick={() => onNavigate("inventory")}>
+            <Package size={18} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Inventory</span>
+          </button>
+          {isLocal && (
+            <button className="pf-quick-action" onClick={() => onNavigate("documents")}>
+              <Scan size={18} className="text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">Scan Docs</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1437,7 +1313,7 @@ function ScheduleTab() {
     <div>
       <header className="mb-8 border-b border-border/50 pb-4 flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Schedule Editor</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">Schedule Editor</h2>
           <p className="text-muted-foreground">Manage the state machine. Each task becomes a Jessica voice prompt.</p>
         </div>
         <Button onClick={() => { setEditingTask(null); setIsModalOpen(true); }}>
@@ -1535,7 +1411,7 @@ function SymptomsTab() {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="lg:col-span-1 space-y-6">
         <header className="border-b border-border/50 pb-4">
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">New Log</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">New Log</h2>
         </header>
         <Card>
           <CardContent className="pt-6">
@@ -1580,7 +1456,7 @@ function SymptomsTab() {
 
       <div className="lg:col-span-2 space-y-6">
         <header className="border-b border-border/50 pb-4">
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Recent History</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">Recent History</h2>
         </header>
         <div className="space-y-4">
           {logs?.length === 0 ? (
@@ -1649,7 +1525,7 @@ function ScriptsTab() {
   return (
     <div className="space-y-6">
       <header className="mb-8 border-b border-border/50 pb-4">
-        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Live Voice Scripts</h2>
+        <h2 className="text-3xl font-display font-medium text-foreground">Live Voice Scripts</h2>
         <p className="text-muted-foreground">Patch Jessica's AI prompts in real-time based on Pops' condition.</p>
       </header>
 
@@ -1750,7 +1626,7 @@ function HaldolTab() {
   return (
     <div className="space-y-6">
       <header className="mb-8 border-b border-border/50 pb-4">
-        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Haldol Cycle Tracker</h2>
+        <h2 className="text-3xl font-display font-medium text-foreground">Haldol Cycle Tracker</h2>
         <p className="text-muted-foreground">Manage the monthly medication cycle and anticipate high-symptom rest phases.</p>
       </header>
 
@@ -2022,7 +1898,7 @@ export function ShopperTab() {
       return;
     }
     const lines: string[] = [
-      `br(AI)n Weekly Meal Plan — Week of ${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}`,
+      `Brain Guardian Weekly Meal Plan — Week of ${cart?.weekStartDate ?? new Date().toISOString().split("T")[0]}`,
       `Generated: ${formatPacificDateTime(new Date())}`,
       `Budget: $${((cart?.totalEstimatedCostCents ?? 0) / 100).toFixed(2)} of $${((cart?.budgetCents ?? 15000) / 100).toFixed(2)}`,
       `Status: ${(cart?.status ?? "pending").toUpperCase()}`,
@@ -2102,7 +1978,7 @@ export function ShopperTab() {
     <div className="space-y-6">
       <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
         <div>
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Shopper</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">Shopper</h2>
           <p className="text-sm text-muted-foreground mt-1">Weekly meal planning &amp; grocery cart for Pops</p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -2922,7 +2798,7 @@ function InventoryTab() {
     <div className="space-y-6">
       <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-3">
         <div>
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Inventory</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">Inventory</h2>
           <p className="text-sm text-muted-foreground mt-1">Household supply tracking by replenishment cycle</p>
         </div>
         <Button size="sm" onClick={() => setShowAddForm(!showAddForm)}>
@@ -3205,7 +3081,7 @@ function DevicesTab() {
   return (
     <div className="space-y-8">
       <header className="border-b border-border/50 pb-4">
-        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Devices</h2>
+        <h2 className="text-3xl font-display font-medium text-foreground">Devices</h2>
         <p className="text-muted-foreground text-sm mt-1">Smart home control grid and Jessica action dispatch history.</p>
       </header>
 
@@ -3479,7 +3355,7 @@ function RotationTab() {
       {/* Header */}
       <header className="border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
         <div>
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Rotation</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">Rotation</h2>
           <p className="text-muted-foreground text-sm">Caregiver task tracking, med response logging &amp; clinical summaries.</p>
           {cycleDay !== null && <p className="text-xs text-primary/70 mt-0.5">Haldol Cycle Day <span className="font-bold">{cycleDay}</span>/{(haldolData as any)?.intervalDays ?? 28}</p>}
         </div>
@@ -3816,7 +3692,7 @@ function CalendarSyncTab() {
   return (
     <div className="space-y-6">
       <header className="border-b border-border/50 pb-4">
-        <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Calendar Sync</h2>
+        <h2 className="text-3xl font-display font-medium text-foreground">Calendar Sync</h2>
         <p className="text-muted-foreground text-sm mt-1">Push all pending events to Ray's iOS Calendar via Google Calendar.</p>
       </header>
 
@@ -3957,7 +3833,7 @@ function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: Historica
     setCalPushingIdx(idx);
     const result = await pushToCalendar(
       {
-        summary: quickCalForm.summary || "Reminder from br(AI)n",
+        summary: quickCalForm.summary || "Reminder from Brain Guardian",
         description: `Created by System AI from conversation.\n\n${messages[idx]?.content ?? ""}`,
         startTime: `${quickCalForm.date}T09:00:00`,
         allDay: false,
@@ -3980,7 +3856,7 @@ function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: Historica
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-primary" />
           <span className="text-sm font-display uppercase tracking-widest">System AI</span>
-          <span className="text-xs text-muted-foreground/60">— br(AI)n care assistant · calendar-aware</span>
+          <span className="text-xs text-muted-foreground/60">— Brain Guardian care assistant · calendar-aware</span>
         </div>
         {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
       </button>
@@ -4054,7 +3930,7 @@ function SystemAIPanel({ tasks, logs }: { tasks: RotationTask[]; logs: Historica
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder="Ask the br(AI)n assistant..."
+              placeholder="Ask the Brain Guardian assistant..."
               className="text-xs flex-1"
               disabled={chatAssistant.isPending}
             />
@@ -4309,7 +4185,7 @@ function AppointmentsTab() {
     <div className="space-y-6">
       <header className="mb-8 border-b border-border/50 pb-4 flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Appointments</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">Appointments</h2>
           <p className="text-muted-foreground">Manage doctor and clinic visits for Pops.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -4745,7 +4621,7 @@ function DocumentsTab() {
     <div className="space-y-6">
       <header className="mb-6 border-b border-border/50 pb-4 flex justify-between items-end flex-wrap gap-4">
         <div>
-          <h2 className="text-4xl font-display text-primary tracking-widest uppercase">Scan Documents</h2>
+          <h2 className="text-3xl font-display font-medium text-foreground">Scan Documents</h2>
           <p className="text-muted-foreground">Photo a VA form, discharge slip, or appointment card. AI reads it and updates Pops' care plan.</p>
         </div>
         <Button onClick={() => fileRef.current?.click()} disabled={scanning} className="gap-2">

@@ -958,7 +958,7 @@ export function JessicaPhone() {
               <>
                 <p className="text-xl font-display font-bold text-primary tracking-widest uppercase">Active</p>
                 <p className="text-xs text-muted-foreground uppercase tracking-widest">
-                  {activeModelLabel} · br(AI)n Coordinator
+                  {activeModelLabel} · Brain Guardian Coordinator
                 </p>
               </>
             )}

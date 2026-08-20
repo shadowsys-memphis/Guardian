@@ -1,6 +1,6 @@
 {
-  "name": "br(AI)n App",
-  "short_name": "br(AI)n",
+  "name": "Brain Guardian",
+  "short_name": "Guardian",
   "description": "A secure caregiver access portal for coordinating care, schedules, and support for Veterans with complex needs.",
   "start_url": ".",
   "scope": ".",

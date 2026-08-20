@@ -2,13 +2,15 @@
    PRESENCE FIELD — Brain Guardian living time mark (issue #163)
    Artwork: the organic interlocking-ring from the 2026 boards.
    Machinery: the Quarter Orbit kit's state machine, unchanged —
-     .is-calling / .is-resting        Jessica states
+     .is-calling                      Jessica is on the line
      .q1–.q4                          discrete quarter presets
      .daypart-*                       Presence temperature states
      --orbit-angle                    continuous day clock
    The slate body of the ring is constant — identity never moves.
    The LIGHT (gradient glow end + halo) rides the ring through
    the day and changes temperature with the daypart.
+   Nothing here animates unless an event turns it on — see the
+   halo and .is-calling notes below.
    ============================================================ */
 
 :root{
@@ -76,15 +78,11 @@
 .daypart-night .pf-ring{ opacity: 0.8; }
 .daypart-night .pf-halo{ opacity: 0.5; }
 
-/* ---- Halo: the warmth around the light --------------------- */
+/* ---- Halo: the warmth around the light ---------------------
+   Static. The halo used to breathe on an infinite loop whenever the
+   mark was at rest; motion is now event-driven, so the only thing
+   that ever animates is `.is-calling` below. */
 .presence-field .pf-halo{ opacity: 0.7; }
-.is-resting .pf-halo{
-  animation: pf-breathe calc(6s * var(--dur-scale)) ease-in-out infinite;
-}
-@keyframes pf-breathe{
-  0%,100%{ opacity: .55; }
-  50%    { opacity: 1;   }
-}
 
 /* ---- Calling: the voice carrying across a quiet room ------- */
 .presence-field .pf-ripple circle{
@@ -111,7 +109,6 @@
 /* ---- Accessibility ----------------------------------------- */
 @media (prefers-reduced-motion: reduce){
   .presence-field .pf-rotor{ transition: none; }  /* snap, don't sweep */
-  .is-resting .pf-halo,
   .is-calling .pf-ripple circle{ animation: none; }
   /* Static "calling" indicator: one steady wide ring */
   .is-calling .pf-ripple .ring-1{
