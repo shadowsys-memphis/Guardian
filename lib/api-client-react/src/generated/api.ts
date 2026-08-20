@@ -4888,7 +4888,7 @@ export const useAddCartItem = <
 };
 
 /**
- * @summary Identify a product from a barcode or product photo and add it to the current cart
+ * @summary Identify a product from a barcode or product photo. High-confidence results are added to the cart immediately; medium/low confidence is returned unadded for the caller to confirm.
  */
 export const getScanCartItemUrl = () => {
   return `/api/shopper/cart/scan-item`;
@@ -4951,7 +4951,7 @@ export type ScanCartItemMutationBody = BodyType<ScanCartItemInput>;
 export type ScanCartItemMutationError = ErrorType<unknown>;
 
 /**
- * @summary Identify a product from a barcode or product photo and add it to the current cart
+ * @summary Identify a product from a barcode or product photo. High-confidence results are added to the cart immediately; medium/low confidence is returned unadded for the caller to confirm.
  */
 export const useScanCartItem = <
   TError = ErrorType<unknown>,

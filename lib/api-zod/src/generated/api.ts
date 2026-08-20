@@ -1511,7 +1511,7 @@ export const AddCartItemBody = zod.object({
 });
 
 /**
- * @summary Identify a product from a barcode or product photo and add it to the current cart
+ * @summary Identify a product from a barcode or product photo. High-confidence results are added to the cart immediately; medium/low confidence is returned unadded for the caller to confirm.
  */
 export const ScanCartItemBody = zod.object({
   imageBase64: zod
@@ -1521,6 +1521,28 @@ export const ScanCartItemBody = zod.object({
     .string()
     .optional()
     .describe("Image MIME type (jpeg\/png\/webp\/heic)"),
+});
+
+export const ScanCartItemResponse = zod.object({
+  item: zod
+    .object({
+      id: zod.number(),
+      cartId: zod.number(),
+      ingredientName: zod.string(),
+      totalQuantity: zod.string(),
+      unit: zod.string(),
+      estimatedCostCents: zod.number(),
+      source: zod.enum(["meal", "manual", "staple"]),
+    })
+    .optional()
+    .describe("Present only when added is true."),
+  identifiedName: zod.string(),
+  confidence: zod.enum(["high", "medium", "low"]),
+  added: zod
+    .boolean()
+    .describe(
+      "True if the item was already inserted into the cart (high confidence). False means Ray must confirm the name — call POST \/shopper\/cart\/items to add it.",
+    ),
 });
 
 /**

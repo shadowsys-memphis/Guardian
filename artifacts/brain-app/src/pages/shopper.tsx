@@ -106,6 +106,10 @@ export function ShopperPage() {
   const [calPushingShop, setCalPushingShop] = useState(false);
   const [urgentItems, setUrgentItems] = useState<Set<string>>(new Set());
   const [urgentPushingKey, setUrgentPushingKey] = useState<string | null>(null);
+  // A scan that came back medium/low confidence — held here so Ray can confirm
+  // or fix the name before it ever touches the cart (Task #158). High-confidence
+  // scans skip this and are added straight away.
+  const [pendingScan, setPendingScan] = useState<{ name: string; confidence: "medium" | "low" } | null>(null);
 
   const handleMarkUrgent = async (item: any) => {
     const key = item.ingredientName as string;
@@ -220,6 +224,17 @@ export function ShopperPage() {
     onSuccess: () => { refetchCart(); setQuickAddName(""); setQuickAddQty(""); setQuickAddUnit(""); },
     onError: () => toast({ title: "Couldn't add item", variant: "destructive" }),
   } });
+  // Separate mutation instance for confirming a scanned item so its pending
+  // state and onSuccess don't cross-wire with the quick-add form above
+  // (both hit the same POST /shopper/cart/items endpoint).
+  const confirmScanItem = useAddCartItem({ mutation: {
+    onSuccess: (_data: any, variables: any) => {
+      refetchCart();
+      setPendingScan(null);
+      toast({ title: `Added "${variables?.data?.name}" to the cart` });
+    },
+    onError: () => toast({ title: "Couldn't add item", variant: "destructive" }),
+  } });
   const removeCartItem = useRemoveCartItem({ mutation: { onSuccess: () => refetchCart() } });
   const createStaple = useCreateStaple({ mutation: {
     onSuccess: () => { refetchStaples(); setNewStapleName(""); setNewStapleQty(""); setNewStapleUnit(""); },
@@ -242,8 +257,13 @@ export function ShopperPage() {
   } });
   const scanCartItem = useScanCartItem({ mutation: {
     onSuccess: (data: any) => {
-      refetchCart();
-      toast({ title: `Added "${data.identifiedName}" to the cart`, description: data.confidence === "low" ? "The scanner wasn't fully sure — double-check the name." : undefined });
+      if (data.added) {
+        refetchCart();
+        toast({ title: `Added "${data.identifiedName}" to the cart` });
+      } else {
+        // Medium/low confidence — hold for Ray to confirm or fix before it's added.
+        setPendingScan({ name: data.identifiedName, confidence: data.confidence });
+      }
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.error ?? "Couldn't identify the product. Try a clearer photo of the barcode or label.";
@@ -640,7 +660,7 @@ export function ShopperPage() {
                 <div className="mb-3">
                   <label
                     className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border/50 text-xs font-medium cursor-pointer transition-colors ${
-                      scanCartItem.isPending ? "opacity-50 pointer-events-none" : "hover:bg-secondary/40 hover:border-primary/40"
+                      scanCartItem.isPending || !!pendingScan ? "opacity-50 pointer-events-none" : "hover:bg-secondary/40 hover:border-primary/40"
                     }`}
                   >
                     {scanCartItem.isPending ? <RefreshCw size={12} className="animate-spin" /> : <Camera size={12} />}
@@ -650,7 +670,7 @@ export function ShopperPage() {
                       accept="image/*"
                       capture="environment"
                       className="hidden"
-                      disabled={scanCartItem.isPending}
+                      disabled={scanCartItem.isPending || !!pendingScan}
                       onChange={(e) => {
                         void handleScanPhoto(e.target.files);
                         e.target.value = "";
@@ -658,6 +678,43 @@ export function ShopperPage() {
                     />
                   </label>
                   <span className="ml-2 text-[11px] text-muted-foreground">Snap the product or its barcode — it's added by name.</span>
+                </div>
+              )}
+              {pendingScan && (
+                <div className="mb-3 p-3 rounded-sm border border-amber-500/40 bg-amber-500/5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Confirm scanned item</p>
+                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm shrink-0 ${
+                      pendingScan.confidence === "low" ? "bg-destructive/10 text-destructive" : "bg-amber-500/15 text-amber-600"
+                    }`}>
+                      {pendingScan.confidence} confidence
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">The scanner wasn't fully sure — check the name below, edit it if needed, then add it.</p>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      value={pendingScan.name}
+                      onChange={(e) => setPendingScan({ ...pendingScan, name: e.target.value })}
+                      className="h-8 text-xs flex-1"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs shrink-0"
+                      disabled={!pendingScan.name.trim() || confirmScanItem.isPending}
+                      onClick={() => {
+                        const name = pendingScan.name.trim();
+                        if (!name) return;
+                        confirmScanItem.mutate({ data: { name } });
+                      }}
+                    >
+                      {confirmScanItem.isPending ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} className="mr-1" />}
+                      Add
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8 text-xs shrink-0" disabled={confirmScanItem.isPending} onClick={() => setPendingScan(null)}>
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
               )}
               <div className="space-y-1.5">

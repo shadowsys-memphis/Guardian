@@ -9,7 +9,10 @@ import type { CartItem } from "./cartItem";
 import type { ScanCartItemResultConfidence } from "./scanCartItemResultConfidence";
 
 export interface ScanCartItemResult {
-  item: CartItem;
+  /** Present only when added is true. */
+  item?: CartItem;
   identifiedName: string;
-  confidence?: ScanCartItemResultConfidence;
+  confidence: ScanCartItemResultConfidence;
+  /** True if the item was already inserted into the cart (high confidence). False means Ray must confirm the name — call POST /shopper/cart/items to add it. */
+  added: boolean;
 }

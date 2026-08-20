@@ -1041,7 +1041,7 @@ paths:
     post:
       operationId: scanCartItem
       tags: [shopper]
-      summary: Identify a product from a barcode or product photo and add it to the current cart
+      summary: Identify a product from a barcode or product photo. High-confidence results are added to the cart immediately; medium/low confidence is returned unadded for the caller to confirm.
       requestBody:
         required: true
         content:
@@ -1049,8 +1049,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ScanCartItemInput"
       responses:
-        "201":
-          description: Product identified and added to the cart
+        "200":
+          description: Product identified — added to the cart if high confidence, otherwise returned for confirmation
           content:
             application/json:
               schema:
@@ -3046,14 +3046,19 @@ components:
       properties:
         item:
           $ref: "#/components/schemas/CartItem"
+          description: Present only when added is true.
         identifiedName:
           type: string
         confidence:
           type: string
           enum: [high, medium, low]
+        added:
+          type: boolean
+          description: True if the item was already inserted into the cart (high confidence). False means Ray must confirm the name — call POST /shopper/cart/items to add it.
       required:
-        - item
         - identifiedName
+        - confidence
+        - added
 
     CartWithMeals:
       allOf:

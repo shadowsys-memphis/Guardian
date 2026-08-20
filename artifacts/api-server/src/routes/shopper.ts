@@ -567,7 +567,9 @@ const MAX_SCAN_IMAGE_BASE64_CHARS = 15 * 1024 * 1024;
 
 const SCAN_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
-// POST /shopper/cart/scan-item — identify a product from a barcode/product photo and add it to the cart
+// POST /shopper/cart/scan-item — identify a product from a barcode/product photo.
+// High-confidence identifications are added to the cart immediately; medium/low
+// confidence is returned unadded (added: false) for Ray to confirm or fix first.
 router.post("/shopper/cart/scan-item", async (req, res) => {
   try {
     const { imageBase64, mimeType } = z.object({
@@ -650,6 +652,14 @@ Do not guess a specific brand you cannot actually see. Keep itemName under 60 ch
     }
     const itemName = parsed.itemName;
 
+    // Only high-confidence reads go straight onto the list. Medium/low confidence
+    // is returned unadded so Ray can confirm or fix the name first (Task #158) —
+    // the client then calls POST /shopper/cart/items with the name it wants.
+    if (parsed.confidence !== "high") {
+      res.status(200).json({ identifiedName: itemName, confidence: parsed.confidence, added: false });
+      return;
+    }
+
     // The Gemini call above can take seconds; the cart may have been approved
     // or dismissed in the meantime. Re-verify pending status atomically with
     // the insert so a locked cart can never gain an item.
@@ -669,7 +679,7 @@ Do not guess a specific brand you cannot actually see. Keep itemName under 60 ch
       return;
     }
 
-    res.status(201).json({ item, identifiedName: itemName, confidence: parsed.confidence });
+    res.status(200).json({ item, identifiedName: itemName, confidence: parsed.confidence, added: true });
   } catch (err) {
     req.log.error({ err }, "Failed to scan item into cart");
     res.status(400).json({ error: "Failed to scan item" });
