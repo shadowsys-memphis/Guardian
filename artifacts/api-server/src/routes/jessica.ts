@@ -337,12 +337,11 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
       // Not yet confirmed reached — the webhook flips this to true once the
       // transcript shows Pops actually responded.
       reached: false,
+      // Written in the same insert (not a follow-up UPDATE) — a crash between
+      // the two statements used to leave a session with no conversation id,
+      // which the post-call webhook can never match to finalize.
+      elevenlabsConversationId: elevenLabsConversationId,
     }).returning();
-
-    await pool.query(
-      `UPDATE call_sessions SET elevenlabs_conversation_id = $1 WHERE id = $2`,
-      [elevenLabsConversationId, session.id]
-    );
 
     return {
       ok: true,
@@ -415,7 +414,12 @@ router.get("/jessica/call-status/:conversationId", requireLocalSession, async (r
 
 const webhookTranscriptItemSchema = z.object({
   role: z.string(),
-  message: z.string(),
+  // message is NULL on non-speech turns — confirmed against real conversations
+  // (2026-08-20): every tool-call turn arrives as { role: "agent", message:
+  // null, tool_calls: [...] }. Requiring a string here made the WHOLE payload
+  // fail parse, so any call where Jessica used a tool silently never
+  // finalized (no transcript, no summary, reached stuck false).
+  message: z.string().nullable().optional(),
   time_in_call_secs: z.number().optional(),
 });
 
@@ -431,6 +435,99 @@ const webhookPayloadSchema = z.object({
     metadata: z.record(z.unknown()).optional(),
   }).optional(),
 }).passthrough();
+
+type FinalizeCallData = {
+  conversation_id: string;
+  status?: string;
+  transcript?: Array<z.infer<typeof webhookTranscriptItemSchema>>;
+  analysis?: { transcript_summary?: string };
+};
+
+/**
+ * Finalizes an open call_sessions row from a conversation's transcript +
+ * analysis: persists transcript/summary/reached/flagged, saves health-data
+ * tags and cravings. Shared by the post-call webhook and the reconcile
+ * endpoint below so a backfilled session goes through the exact same logic
+ * as a live one.
+ */
+async function finalizeCallSession(
+  sessionId: number,
+  data: FinalizeCallData
+): Promise<{ healthDataCount: number; reached: boolean; flagged: boolean }> {
+  const transcript = data.transcript ?? [];
+  const summary = data.analysis?.transcript_summary ?? null;
+
+  // Non-speech turns (tool calls) arrive with message: null — they carry no
+  // words, so they're excluded from the saved text on both sides.
+  const agentText = transcript
+    .filter((t) => t.role === "agent" && typeof t.message === "string")
+    .map((t) => t.message ?? "")
+    .join("\n");
+
+  const allText = transcript
+    .filter((t) => typeof t.message === "string" && t.message.trim().length > 0)
+    .map((t) => `${t.role === "agent" ? "Jessica" : "Pops"}: ${t.message ?? ""}`)
+    .join("\n");
+
+  // "Reached" means Pops actually said something back — not just that the
+  // call connected. A call that rings out to voicemail can still produce a
+  // webhook with an empty or agent-only transcript.
+  const popsSpoke = transcript.some((t) => t.role !== "agent" && (t.message ?? "").trim().length > 0);
+  const reached = data.status !== "failed" && popsSpoke;
+
+  const healthDataTags = parseHealthDataTags(agentText);
+  const cravingMeal = parseCravingTag(agentText);
+
+  const { cycleDay } = await getCurrentCycleInfo();
+  const questions = await getActiveQuestionsForCycleDay(cycleDay);
+
+  if (cravingMeal) {
+    await db.insert(mealCravingsTable).values({ mealName: cravingMeal, source: "jessica", status: "pending" })
+      .catch(() => {});
+  }
+
+  const categories: string[] = [];
+  let flagged = false;
+
+  for (const tag of healthDataTags) {
+    const resolvedQuestionId = tag.questionId ?? (questions.find((q) => q.category === tag.category)?.id ?? null);
+    const saved = await saveHealthDataPoint({
+      sessionId,
+      questionId: resolvedQuestionId,
+      category: tag.category,
+      rawResponse: tag.rawResponse,
+      parsedValue: tag.parsedValue,
+      parsedIntensity: tag.parsedIntensity,
+    }).catch(() => null);
+    if (saved) {
+      if (!categories.includes(tag.category)) categories.push(tag.category);
+      if (tag.parsedValue === "unsafe" || tag.parsedIntensity === "severe") flagged = true;
+    }
+  }
+
+  if (categories.length === 0) {
+    const dataPoints = await db.select().from(healthDataPointsTable)
+      .where(eq(healthDataPointsTable.sessionId, sessionId));
+    for (const d of dataPoints) {
+      if (!categories.includes(d.category)) categories.push(d.category);
+      if (d.flagged) flagged = true;
+    }
+  }
+
+  const callSummary = summary
+    ?? (categories.length > 0
+      ? `Phone call with Pops. Covered: ${categories.join(", ")}. ${healthDataTags.length} data point(s) recorded.${flagged ? " ⚠️ Flagged." : ""}`
+      : reached
+        ? "Phone call with Pops. No structured health data captured."
+        : "Call did not reach Pops (no answer or voicemail).");
+
+  await pool.query(
+    `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2, transcript = $3, reached = $4 WHERE id = $5`,
+    [callSummary, flagged, allText || null, reached, sessionId]
+  );
+
+  return { healthDataCount: healthDataTags.length, reached, flagged };
+}
 
 router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) => {
   // Fail closed: if the shared secret isn't configured yet, refuse to process
@@ -454,7 +551,21 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
   try {
     const parsed = webhookPayloadSchema.safeParse(req.body);
 
+    // Every early return below answers 200 — retry_enabled is off on the
+    // ElevenLabs side and non-2xx responses can get a webhook auto-disabled —
+    // but each one must say WHY in the logs. Until 2026-08-20 these branches
+    // were bare `{ received: true }`, indistinguishable from success, which
+    // hid weeks of dropped transcripts.
     if (!parsed.success || !parsed.data.data?.conversation_id) {
+      const bodyConversationId =
+        (req.body as { data?: { conversation_id?: unknown } } | undefined)?.data?.conversation_id ?? null;
+      req.log.error(
+        {
+          conversationId: bodyConversationId,
+          parseIssues: parsed.success ? "missing conversation_id" : parsed.error.issues.slice(0, 5),
+        },
+        "ElevenLabs webhook payload did not match expected shape — call session NOT finalized"
+      );
       res.json({ received: true });
       return;
     }
@@ -466,14 +577,16 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
     // one (or mark it "already_ended" before the real transcription webhook
     // arrives). Only the transcription event should ever update health data.
     if (parsed.data.type && parsed.data.type !== "post_call_transcription") {
+      req.log.info(
+        { eventType: parsed.data.type, conversationId: parsed.data.data.conversation_id },
+        "Skipping non-transcription ElevenLabs webhook event"
+      );
       res.json({ received: true, skipped: "unsupported_event_type" });
       return;
     }
 
     const { data: webhookData } = parsed.data;
     const elevenLabsConversationId = webhookData.conversation_id;
-    const transcript = webhookData.transcript ?? [];
-    const summary = webhookData.analysis?.transcript_summary ?? null;
 
     const sessionResult = await pool.query(
       `SELECT id, ended_at FROM call_sessions WHERE elevenlabs_conversation_id = $1 ORDER BY id DESC LIMIT 1`,
@@ -482,6 +595,13 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
     const sessionRow = sessionResult.rows[0];
 
     if (!sessionRow) {
+      // Common benign cause: a call placed from the dev workspace — its
+      // session row lives in the dev DB, but ElevenLabs delivers the webhook
+      // to the deployed (prod) URL, so prod has no matching row.
+      req.log.warn(
+        { conversationId: elevenLabsConversationId },
+        "ElevenLabs webhook for a conversation with no matching call_sessions row in THIS database — nothing finalized"
+      );
       res.json({ received: true });
       return;
     }
@@ -489,82 +609,100 @@ router.post("/jessica/elevenlabs-webhook", async (req: Request, res: Response) =
     const sessionId: number = sessionRow.id;
 
     if (sessionRow.ended_at) {
+      req.log.info(
+        { sessionId, conversationId: elevenLabsConversationId },
+        "ElevenLabs webhook for an already-finalized session — skipped"
+      );
       res.json({ received: true, skipped: "already_ended" });
       return;
     }
 
-    const agentText = transcript
-      .filter((t) => t.role === "agent")
-      .map((t) => t.message)
-      .join("\n");
+    const result = await finalizeCallSession(sessionId, webhookData);
 
-    const allText = transcript
-      .map((t) => `${t.role === "agent" ? "Jessica" : "Pops"}: ${t.message}`)
-      .join("\n");
-
-    // "Reached" means Pops actually said something back — not just that the
-    // call connected. A call that rings out to voicemail can still produce a
-    // webhook with an empty or agent-only transcript.
-    const popsSpoke = transcript.some((t) => t.role !== "agent" && t.message.trim().length > 0);
-    const reached = webhookData.status !== "failed" && popsSpoke;
-
-    const healthDataTags = parseHealthDataTags(agentText);
-    const cravingMeal = parseCravingTag(agentText);
-
-    const { cycleDay } = await getCurrentCycleInfo();
-    const questions = await getActiveQuestionsForCycleDay(cycleDay);
-
-    if (cravingMeal) {
-      await db.insert(mealCravingsTable).values({ mealName: cravingMeal, source: "jessica", status: "pending" })
-        .catch(() => {});
-    }
-
-    const categories: string[] = [];
-    let flagged = false;
-
-    for (const tag of healthDataTags) {
-      const resolvedQuestionId = tag.questionId ?? (questions.find((q) => q.category === tag.category)?.id ?? null);
-      const saved = await saveHealthDataPoint({
-        sessionId,
-        questionId: resolvedQuestionId,
-        category: tag.category,
-        rawResponse: tag.rawResponse,
-        parsedValue: tag.parsedValue,
-        parsedIntensity: tag.parsedIntensity,
-      }).catch(() => null);
-      if (saved) {
-        if (!categories.includes(tag.category)) categories.push(tag.category);
-        if (tag.parsedValue === "unsafe" || tag.parsedIntensity === "severe") flagged = true;
-      }
-    }
-
-    if (categories.length === 0) {
-      const dataPoints = await db.select().from(healthDataPointsTable)
-        .where(eq(healthDataPointsTable.sessionId, sessionId));
-      for (const d of dataPoints) {
-        if (!categories.includes(d.category)) categories.push(d.category);
-        if (d.flagged) flagged = true;
-      }
-    }
-
-    const callSummary = summary
-      ?? (categories.length > 0
-        ? `Phone call with Pops. Covered: ${categories.join(", ")}. ${healthDataTags.length} data point(s) recorded.${flagged ? " ⚠️ Flagged." : ""}`
-        : reached
-          ? "Phone call with Pops. No structured health data captured."
-          : "Call did not reach Pops (no answer or voicemail).");
-
-    await pool.query(
-      `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2, transcript = $3, reached = $4 WHERE id = $5`,
-      [callSummary, flagged, allText || null, reached, sessionId]
+    req.log.info(
+      { sessionId, elevenLabsConversationId, healthDataCount: result.healthDataCount, reached: result.reached },
+      "ElevenLabs webhook processed"
     );
 
-    req.log.info({ sessionId, elevenLabsConversationId, healthDataCount: healthDataTags.length }, "ElevenLabs webhook processed");
-
-    res.json({ received: true, sessionId, healthDataCount: healthDataTags.length });
+    res.json({ received: true, sessionId, healthDataCount: result.healthDataCount });
   } catch (err) {
     req.log.error({ err }, "ElevenLabs webhook processing failed");
     res.status(500).json({ error: "Webhook processing failed" });
+  }
+});
+
+/**
+ * Backfill/repair for call sessions the post-call webhook never finalized —
+ * the silent parse failures fixed 2026-08-20, calls placed from the dev
+ * workspace (whose webhook lands on the prod deployment), or any delivery
+ * ElevenLabs dropped outright (retry is off on their side). Local-only and
+ * manual: fetches each open session's conversation from the ElevenLabs API
+ * (read-only there) and runs it through the same finalizeCallSession() as a
+ * live webhook. Sessions younger than 30 minutes, or still in progress on
+ * ElevenLabs' side, are left alone; sessions with no conversation id can't
+ * be matched and are reported but never touched.
+ */
+router.post("/jessica/reconcile-calls", requireLocalSession, async (req: Request, res: Response) => {
+  try {
+    const apiKey = getElevenLabsKey();
+    if (!apiKey) {
+      res.status(503).json({ error: "ElevenLabs not configured" });
+      return;
+    }
+
+    const open = await pool.query(
+      `SELECT id, elevenlabs_conversation_id FROM call_sessions
+       WHERE ended_at IS NULL
+         AND elevenlabs_conversation_id IS NOT NULL
+         AND started_at < NOW() - INTERVAL '30 minutes'
+       ORDER BY id ASC
+       LIMIT 100`
+    );
+
+    const results: Array<{ sessionId: number; conversationId: string; outcome: string }> = [];
+
+    for (const row of open.rows as Array<{ id: number; elevenlabs_conversation_id: string }>) {
+      const conversationId = row.elevenlabs_conversation_id;
+      try {
+        const elRes = await fetch(`${ELEVENLABS_BASE}/convai/conversations/${conversationId}`, {
+          headers: { "xi-api-key": apiKey },
+        });
+        if (!elRes.ok) {
+          results.push({ sessionId: row.id, conversationId, outcome: `fetch_failed_${elRes.status}` });
+          continue;
+        }
+        const convo = await elRes.json() as FinalizeCallData;
+        if (convo.status !== "done" && convo.status !== "failed") {
+          results.push({ sessionId: row.id, conversationId, outcome: `still_${convo.status ?? "unknown"}` });
+          continue;
+        }
+        const outcome = await finalizeCallSession(row.id, { ...convo, conversation_id: conversationId });
+        results.push({
+          sessionId: row.id,
+          conversationId,
+          outcome: outcome.reached ? "finalized_reached" : "finalized_not_reached",
+        });
+      } catch (err) {
+        req.log.error({ err, sessionId: row.id, conversationId }, "Reconcile failed for one session");
+        results.push({ sessionId: row.id, conversationId, outcome: "error" });
+      }
+    }
+
+    const unlinked = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM call_sessions WHERE ended_at IS NULL AND elevenlabs_conversation_id IS NULL`
+    );
+
+    req.log.info({ scanned: open.rows.length, results }, "Call-session reconcile run complete");
+
+    res.json({
+      scanned: open.rows.length,
+      finalized: results.filter((r) => r.outcome.startsWith("finalized")).length,
+      unlinkedLeftOpen: unlinked.rows[0]?.n ?? 0,
+      results,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Reconcile-calls failed");
+    res.status(500).json({ error: "Reconcile failed" });
   }
 });
 

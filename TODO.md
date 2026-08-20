@@ -1,7 +1,7 @@
 # TODO — Guardian
 
-*Built 2026-08-17. Every item below was verified against source at commit `775bc80`,
-not copied forward from older notes. Companion to `STATUS.md` (narrative) — this file
+*Built 2026-08-17 at `775bc80`; re-verified against source 2026-08-20 (origin/master `eb241d7`
+plus this session's uncommitted webhook fix). Companion to `STATUS.md` (narrative) — this file
 is the actionable list.*
 
 > **Permanent safety rule:** the automated daily call stays **OFF** until Ray runs a full
@@ -12,65 +12,46 @@ is the actionable list.*
 
 ## P0 — Blockers
 
-### 1. Deployment target is `autoscale` — no scheduled job can fire in production
-`.replit:11` → `deploymentTarget = "autoscale"`. Autoscale scales to zero between HTTP
-requests; `index.ts:30` starts the job runner as an in-process `setInterval`
-(`lib/call-scheduler.ts`). The container owning the timer is gone between requests.
+### 3. Call sessions intermittently never finalize — ROOT CAUSE FOUND 2026-08-20, fix in tree
+Delivery was never the problem: ElevenLabs' webhook status shows **zero failures ever**
+(`most_recent_failure_error_code: null`) because the handler answers 200 and then silently
+drops the payload. The handler's Zod schema required every transcript item's `message` to be
+a string, but ElevenLabs sends `message: null` on tool-call turns — so **any call where
+Jessica used one of her voice tools failed schema parse and hit a bare `{received:true}`
+early-return**. Proven against a real stuck conversation (`conv_9401m0321…`): the old schema
+fails at `data.transcript[2].message` ("Expected string, received null"), the fixed one passes.
 
-**Nothing in `call-scheduler.ts` can run in prod** — not the daily call, not missed-call
-detection, not streak escalation, not quarter auto-advance. This, not the ElevenLabs
-credentials and not `dailyCallEnabled`, is why no calls reach Pops.
+Two smaller contributors, both real in the data:
+- Calls placed from the **dev workspace** create their session row in the dev DB, but the
+  webhook URL points at the **prod** deployment — prod finds no row and silently no-ops.
+  (This is why every dev-DB session, 24/24, is unfinalized.)
+- The conversation id was backfilled by a separate UPDATE after the INSERT — a crash between
+  the two left a session with no id the webhook could ever match (one such row exists).
 
-- **Fix:** `deploymentTarget = "vm"` (Reserved VM, always-on). Existing code then works as written.
-- **Alternative:** keep autoscale + Replit Scheduled Deployment hitting an authed endpoint —
-  requires rewriting the scheduler around statelessness (it assumes 60s ticks, an in-memory
-  `lastPolledAt` Map, and a missed-call job that wakes two hours later).
-- Reserved VM costs money — **Ray's decision, not an agent's.**
-- **Blocks #4 and #5.**
+**Fixed in `routes/jessica.ts` (2026-08-20, uncommitted at time of writing):**
+- `message` is now `.nullable().optional()`; null-message turns are excluded from saved text.
+- Every early-return branch now logs *why* (Zod issues, unknown session, skipped event type,
+  already-finalized) instead of a silent 200.
+- Conversation id is written atomically in the session INSERT (follow-up UPDATE removed).
+- Finalization extracted to `finalizeCallSession()`, shared with a new **local-only
+  `POST /jessica/reconcile-calls`** endpoint that backfills any still-open session from the
+  ElevenLabs API through the exact same path (skips sessions <30 min old or still in
+  progress; sessions with no conversation id are counted, never touched).
 
-### 2. GitHub push auth is broken — today's work exists only on this Repl
-`.git/autopush.log`: `Invalid username or token. Password authentication is not supported`.
-Needs a Personal Access Token.
-
-Local `master` is **2 commits ahead** of `origin/master`:
-- `bb5b4dd` — tenant-scoping fix in `loadLiveContext()`
-- `775bc80` — session-expiry handling
-
-Until this is fixed, any other machine or agent working from GitHub reads code **without the
-tenant fix** and will describe a system that doesn't match what's running.
-
-### 3. No transcript has ever saved — 0 across 20 call sessions
-Webhook is attached (`ea0faa50cbed4960ae8923d261087141`) and the server side verifies:
-bad signature → 401, correctly-signed probe → 200. Nothing has ever landed.
-
-- **Prime suspect:** the HMAC secret on ElevenLabs' side ≠ `ELEVENLABS_WEBHOOK_SECRET` in Replit Secrets.
-- **Check:** `curl -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v1/workspace/webhooks`
-  → if `most_recent_failure_error_code` is 401, the secrets differ. Regenerate on ElevenLabs, paste into Replit Secrets.
-- `retry_enabled` is **false** — failed deliveries vanish silently.
-- Nothing is lost: all transcripts remain retrievable from ElevenLabs' API and can be backfilled.
+**Remaining:** deploy, then hit reconcile once **on prod** (`POST /api/jessica/reconcile-calls`
+with a local session token); spot-check the Calls view shows recovered transcripts; watch the
+new warn/error log lines. Until reconciled, the missed-call streak can false-alarm — a day
+Pops *was* reached but the webhook dropped counts as missed and walks toward the admin-alert
+call.
 
 ---
 
 ## P1 — The actual product
 
-### 4. Nine of ten daily touchpoints don't exist
-Ray's schedule expects ~**10** Jessica interactions/day — 6:00 wake-up, 8:15 hydration,
-10:00 chores, 12:00 meds, 1:00 hydration, 2:00 activity, 5:00 health check, 6:00 meds,
-8:00 journal, 9:00 sleep check. `call-scheduler.ts` implements **one** (`dailyCallJob`).
-
-All ten are **voice** — Pops does not use a screen; `/pops` is a caregiver view, not his.
-
-- **Design:** a `touchpoints` table (`time_of_day`, `purpose`, `purpose_prompt`, `active`),
-  one generic job firing whichever are due, per-touchpoint once-daily claim keys reusing
-  `claimForToday`, and `purpose_prompt` flowing into the `extraContext` arg
-  `triggerOutboundCall()` already accepts.
-- **Blocked on #1** — ten touchpoints on a scale-to-zero deployment is zero touchpoints.
-- **Related:** the live ElevenLabs prompt asks about medication on *every* call. Once
-  touchpoints exist, medication language belongs only on the noon and 6:00 PM prompts.
-
 ### 5. Test day against Ray's phone
-Run the day's calls to 909-732-4902, listen, fix. Prerequisite for ever enabling the daily call.
-Blocked on #1 for the automated path (manual "Call Now" still works).
+Run the day's calls to 909-732-4902, listen, fix. Prerequisite for ever enabling the daily
+call. Deployment target is now VM (see Verified fixed), so the automated path can fire —
+`dailyCallEnabled` and test mode still gate it.
 
 ### 6. Trim the health question list in Admin — before publishing
 The full prompt asks 3–5 questions per call plus routine walkthroughs. That is *more*
@@ -81,28 +62,13 @@ question-pressure than the 8/14 call Pops hung up on at 60 seconds, not less.
 
 ## P2 — Cleanups
 
-### 7. ElevenLabs account hygiene
-- Jessica's tools are registered **in triplicate** with two different secrets (repeated sync runs) — dedup.
-- Built-in guardrails are **all switched off**, including `medical_and_legal_information` — turn on.
+### 7. ElevenLabs account hygiene *(not re-verified 2026-08-20 — check before acting)*
+- Jessica's tools were registered **in triplicate** with two different secrets — dedup.
+- Built-in guardrails were **all off**, including `medical_and_legal_information` — turn on.
 
-### 8. `documents.ts:364` — `quarter: "Q1"` hardcoded
-Scanned appointments should land in the active quarter. Currently masked because the wall
-clock happens to be Q1; breaks at the next advance. *(Confirmed still present — the rest of
-this route's defects were fixed in `309ceeb`.)*
-
-### 9. `tenant-migration.ts:13` — demo seed in the wrong quarter
-`{ quarter: "Q1", timeLabel: "1000", title: "Morning Walk" }` — 10:00 is **Q2** under Ray's
-real boundaries. Demo-tenant only, cosmetic, but it's the row that used to bleed into Pops'
-call context before today's fix.
-
-### 10. 12-hour time in the admin/schedule views
-`schedule_tasks.time_label` is stored and rendered as military (`"0600"`, `"1800"`). Ray wants
-12-hour with AM/PM. A `to12Hour()` helper exists but **only** in `gemini.ts:139`, for Jessica's
-context string — the frontend has none. Caregiver-facing nicety, not Pops-facing.
-
-### 11. `STATUS.md` is stale
-Last updated 2026-08-14; doesn't reflect the quarter fix, the documents.ts fixes, the handoff-doc
-correction, or today's two commits. Refresh once P0 settles.
+### 11. `STATUS.md` refresh
+Updated 2026-08-17; still missing: VM deployment target, touchpoints landing, the webhook
+root cause + fix above, and the GitHub push being restored.
 
 ---
 
@@ -122,24 +88,28 @@ correction, or today's two commits. Refresh once P0 settles.
 
 ## Verified fixed — do not redo
 
-These appear as open in older notes (`.agents/memory/known-defects-2026-08-14.md`). They are done —
-checked against source 2026-08-17.
+Checked against source/environment on the date shown.
 
 | Item | Evidence |
 |---|---|
-| Quarter boundaries wrong in 3 files | All three now `6/10/14/18` — `state.ts:14`, `call-scheduler.ts:920`, `jessica-tools.ts:25` |
-| `documents.ts` apply not transactional | `db.transaction()` at `:315`; `appliedAt` set inside it at `:488` |
-| Restrictions couldn't be cleared | Now gated `.length > 0 \|\| body.overwrite` at `:439`, `:457` |
-| `ELEVENLABS_HANDOFF.md` pointed at wrong agent (Laura) | Line 13 now `agent_2101kkxm5vnwety8ycdrv0d1fadn` (Jessica) |
-| `loadLiveContext()` had no tenant filter — demo data bled into Pops' calls | Fixed today in `bb5b4dd` |
-| Post-call webhook never attached to the Jessica agent | Attached + verified 2026-08-14 |
+| Quarter boundaries wrong in 3 files | All three now `6/10/14/18` — `state.ts:14`, `call-scheduler.ts:920`, `jessica-tools.ts:25` (08-17) |
+| `documents.ts` apply not transactional | `db.transaction()` at `:315`; `appliedAt` set inside it (08-17) |
+| Restrictions couldn't be cleared | Gated `.length > 0 \|\| body.overwrite` (08-17) |
+| `ELEVENLABS_HANDOFF.md` pointed at wrong agent (Laura) | Line 13 now Jessica's agent id (08-17) |
+| `loadLiveContext()` had no tenant filter | Fixed in `bb5b4dd` (08-17) |
+| Post-call webhook never attached to the agent | Attached + signature-verified (08-14) |
+| **#1 — deployment target `autoscale`** | `.replit:11` now `deploymentTarget = "vm"`; scheduler can run in prod (08-20) |
+| **#2 — GitHub push auth broken** | `GITHUB_TOKEN` PAT works; 8 stranded commits pushed, `origin/master` == `master` @ `eb241d7` (08-20) |
+| **#4 — touchpoints didn't exist** | `touchpoints` table auto-created + seeded, generic due-touchpoint job in `call-scheduler.ts` (~`:1300`), config API in `routes/touchpoints.ts` incl. global call test-mode switch. Test day (#5) still pending (08-20) |
+| **#8 — `documents.ts` hardcoded `Q1`** | Quarter resolved via `quarterForTime()` at `documents.ts:334–340` (08-20) |
+| **#9 — demo seed in wrong quarter** | `tenant-migration.ts:13` now `Q2` (08-20) |
+| **#10 — military time in admin UI** | `to12Hour()` lives in `brain-app/src/lib/time.ts`, used by the schedule editor + calendar descriptions (08-20) |
+| Schedule editor edits didn't stick / snapped back | Mutations now invalidate the schedule query; DnD no longer resyncs from stale cache; drag-cancel wired (`89474aa`, 08-20) |
 
 ---
 
 ## Suggested order
 
-1. **#2** (push auth) — cheap, and everything else is easier once other machines see real code.
-2. **#3** (transcript check) — one API call; it's the oldest open wound and answers whether 20 calls of data are recoverable.
-3. **#1** (deployment target) — Ray's cost decision. Unblocks the product.
-4. **#6** then **#5** — trim questions, then test day.
-5. **#4** — touchpoints. The actual product.
+1. **#3** — commit + deploy the webhook fix, run reconcile on prod, confirm transcripts appear.
+2. **#6** then **#5** — trim questions, then test day.
+3. **#7** and **#11** — hygiene + status refresh whenever.
