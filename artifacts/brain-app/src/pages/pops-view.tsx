@@ -72,7 +72,7 @@ export function PopsView() {
           </div>
         </div>
       </header>
-      <main className="flex-1 flex flex-col items-center justify-center px-8 py-12 text-center border-t-[color:var(--color-amber-400)] border-r-[color:var(--color-amber-400)] border-b-[color:var(--color-amber-400)] border-l-[color:var(--color-amber-400)]">
+      <main className="flex-1 flex flex-col items-center justify-center px-8 py-12 text-center border-t-[color:var(--color-sky-800)] border-r-[color:var(--color-sky-800)] border-b-[color:var(--color-sky-800)] border-l-[color:var(--color-sky-800)] bg-[color:var(--stone)] text-[color:var(--sage)]">
         {state?.activeMessage ? (
           <ActiveMessage message={state.activeMessage} />
         ) : (
@@ -131,11 +131,11 @@ function AmbientStateDisplay({
       <p className="text-[4vw] md:text-5xl font-display text-muted-foreground tracking-widest uppercase mb-4">
         IT'S {timeOfDay}.
       </p>
-      <p className="text-[7vw] md:text-[5.5rem] font-display font-bold text-primary leading-tight tracking-widest uppercase">
+      <p className="text-[7vw] md:text-[5.5rem] font-display font-bold leading-tight tracking-widest uppercase text-[color:var(--color-sky-800)] bg-[color:var(--sage)]">
         {task.title.toUpperCase()}
       </p>
       {task.timeLabel && (
-        <p className="text-[4vw] md:text-5xl font-display text-primary/60 tracking-widest mt-4">
+        <p className="text-[4vw] md:text-5xl font-display text-primary/60 tracking-widest mt-4 border-t-[5px] border-r-[5px] border-b-[5px] border-l-[5px]">
           AT {to12Hour(task.timeLabel)}
         </p>
       )}
