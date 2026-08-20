@@ -15,6 +15,7 @@ import { resolveAndStoreDayType } from "./day-type";
 import { isTaskTier, nextLadderStep, DEFAULT_TIER, type TaskStatus } from "./task-tiers";
 import { getSettings, isInQuietWindow } from "../routes/health-assessment";
 import { triggerOutboundCall } from "../routes/jessica";
+import type { JessicaCallFocus } from "../routes/gemini";
 import { logger } from "./logger";
 import { pacificNow, pacificDateOf, pacificWallTimeToEpochMs, type PacificNow } from "./pacific-time";
 
@@ -501,6 +502,9 @@ const dailyCallJob: CronJob = {
     }
     if (!(await claimForToday(KEY.dailyCallClaim, now.date, opts?.force))) return { outcome: "skipped" };
 
+    // NO focus here — the general daily call keeps the full prompt (quarter
+    // walkthrough, health questions, morning routine). On Haldol-overdue days
+    // the extra context rides on top of the full prompt, same as always.
     const result = await triggerOutboundCall({ extraContext: await overdueHaldolContext() });
     if (!result.ok) {
       // Record the failure reason for the per-day banner — but do NOT increment
@@ -567,7 +571,7 @@ const appointmentReminderJob: CronJob = {
 
     const extraContext = `CALL PURPOSE — APPOINTMENT REMINDER: This is a night-before reminder call. Work the following into the conversation naturally and reassuringly, then let him ask questions about it:\n${lines.join("\n")}`;
 
-    const result = await triggerOutboundCall({ extraContext });
+    const result = await triggerOutboundCall({ extraContext, focus: {} });
     if (!result.ok) {
       // Do NOT record these appointment ids as reminded — the next tick,
       // still within the 20:00–22:00 window, retries automatically.
@@ -867,6 +871,7 @@ const missedCallJob: CronJob = {
           noSession: true, // MUST be true — see above; admin sessions must not
                           // appear as Pops sessions in the missed-call detection query
           extraContext: `CALL PURPOSE — AUTOMATED SYSTEM ALERT: Do NOT treat this as a normal care check-in. This is an automated system message. Pops' daily Jessica check-in call has not successfully reached him for ${streak} consecutive days. The most recent missed day was ${now.date}. Please open the Brain app, check the System Jobs panel on the Dashboard, and investigate why the daily call is failing. This message was placed automatically by the scheduling system.`,
+          focus: {},
         }).catch(() => {});
       }
     }
@@ -1062,6 +1067,7 @@ const wakeRetryJob: CronJob = {
     await setSetting(KEY.wakeRetryState, JSON.stringify({ date: now.date, attempts: attempts + 1, lastAt: new Date(now.epochMs).toISOString() }));
     const result = await triggerOutboundCall({
       extraContext: `CALL PURPOSE — WAKE-UP RETRY ${attempts + 1} of 2: The first wake-up call this morning didn't reach Pops. Keep this call short and gentle — just help him get his morning started. Do not mention missed calls in a way that could worry him.`,
+      focus: { morningRoutine: true, medsTalk: false },
     });
     if (!result.ok) {
       return { outcome: "warn", detail: `Wake retry ${attempts + 1} failed to start: ${result.error}` };
@@ -1104,6 +1110,7 @@ const outOfBedJob: CronJob = {
 
     const result = await triggerOutboundCall({
       extraContext: "CALL PURPOSE — OUT-OF-BED CHECK: This is a very short, warm follow-up to this morning's wake-up call. Ask one thing: is he up and out of bed? If yes, celebrate briefly and let him go. If he's still in bed, gently encourage him to get up now, but do not lecture or repeat yourself — one nudge, then wrap up kindly either way. Keep the whole call under two minutes.",
+      focus: { medsTalk: false },
     });
     if (!result.ok) {
       return { outcome: "warn", detail: `Out-of-bed follow-up failed to start: ${result.error}` };
@@ -1418,6 +1425,26 @@ export async function updateTouchpoint(
   return rows[0] ? mapTouchpointRow(rows[0]) : null;
 }
 
+// Which heavy prompt sections each touchpoint gets. Everything not listed here
+// is purpose-only: no quarter walkthrough, no health-question list, an
+// explicit don't-bring-up-meds instruction, no morning-routine rules — just
+// the CALL PURPOSE. health_check leaves medsTalk neutral (undefined): its
+// question list can include medication-category questions, so a blanket
+// "don't mention meds" would contradict them.
+function focusForTouchpoint(purpose: string): JessicaCallFocus {
+  switch (purpose) {
+    case "health_check":
+      return { healthQuestions: true };
+    case "meds_noon":
+    case "meds_evening":
+      return { medsTalk: true };
+    case "wake_up":
+      return { morningRoutine: true, medsTalk: false };
+    default:
+      return { medsTalk: false };
+  }
+}
+
 const touchpointsJob: CronJob = {
   name: "touchpoints",
   title: "Daily Touchpoint Calls",
@@ -1443,7 +1470,7 @@ const touchpointsJob: CronJob = {
     // at once, the rest fire on later ticks — never back-to-back calls.
     for (const t of due) {
       if (!(await claimForToday(`touchpoint_claim_${t.id}`, now.date, opts?.force))) continue;
-      const result = await triggerOutboundCall({ extraContext: t.purposePrompt });
+      const result = await triggerOutboundCall({ extraContext: t.purposePrompt, focus: focusForTouchpoint(t.purpose) });
       if (!result.ok) {
         return { outcome: "error", detail: `${t.title} (${t.timeOfDay}) failed to start: ${result.error}${result.message ? ` — ${result.message}` : ""}` };
       }

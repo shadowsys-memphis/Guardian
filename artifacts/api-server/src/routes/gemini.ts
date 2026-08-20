@@ -153,7 +153,12 @@ function geminiTenantId(req: any): string {
  * "Morning Medication" and 1930 "Evening Medication" that are not his, and all
  * three "recent symptom logs" were demo rows. Never drop the tenant filter.
  */
-export async function loadLiveContext(tenantId: string = "local"): Promise<string> {
+// scheduleStyle: "spine" (default) = the schedule walkthrough IS the call —
+// used by the general daily call and web chat. "reference" = a focused call
+// (touchpoint/reminder) where the CALL PURPOSE is the agenda and the schedule
+// is context only — the header must not tell Jessica to walk the quarter, or
+// it contradicts the focused jobBullets in buildJessicaSystemPrompt.
+export async function loadLiveContext(tenantId: string = "local", opts?: { scheduleStyle?: "spine" | "reference" }): Promise<string> {
   try {
     const [meals, schedule, symptoms, carts, showerStreakRow] = await Promise.all([
       db.select({ id: mealsTable.id, name: mealsTable.name, estimatedCostCents: mealsTable.estimatedCostCents })
@@ -245,19 +250,29 @@ export async function loadLiveContext(tenantId: string = "local"): Promise<strin
       ? `\n\nHYGIENE NOTE: It's been ${showerStreak} days since the last shower. Once this call, gently and without any shame, check in about it ("thinking a shower might feel good today?"). Do not lecture, do not repeat it, and drop it completely if he declines.`
       : "";
 
+    const scheduleHeader = opts?.scheduleStyle === "reference"
+      ? `TODAY'S SCHEDULE — FOR REFERENCE ONLY on this call.
+The day runs in four quarters. You are in ${currentQuarter} right now.
+The CALL PURPOSE above is the agenda — do NOT walk through this schedule.
+Use it to answer his questions and to know where he is in his day. Do not
+read items aloud unprompted; do not re-raise ✓ done or ✗ declined items.
+If he tells you during THIS call that an item actually happened, call
+complete_task for it — never assume it happened.`
+      : `TODAY'S SCHEDULE — THIS IS THE SPINE OF THE CALL.
+The day runs in four quarters. You are in ${currentQuarter} right now.
+Work the OPEN (○) items of ${currentQuarter}, in the listed time order, one at a
+time. That is the point of the call — the health questions further down are
+woven in around it, never instead of it. Do not read other quarters aloud
+unless Pops asks what's coming; do not re-raise ✓ done or ✗ declined items.
+When he confirms one actually happened, call complete_task for it.`;
+
     return `LIVE SYSTEM CONTEXT (refreshed each message):
 Meal Catalog — active meals available to add to cart:
 ${mealList}
 
 This Week's Grocery Cart: ${cartStr}
 
-TODAY'S SCHEDULE — THIS IS THE SPINE OF THE CALL.
-The day runs in four quarters. You are in ${currentQuarter} right now.
-Work the OPEN (○) items of ${currentQuarter}, in the listed time order, one at a
-time. That is the point of the call — the health questions further down are
-woven in around it, never instead of it. Do not read other quarters aloud
-unless Pops asks what's coming; do not re-raise ✓ done or ✗ declined items.
-When he confirms one actually happened, call complete_task for it.
+${scheduleHeader}
 ${scheduleStr}
 
 Recent Symptom Logs (latest 3):
@@ -267,7 +282,24 @@ ${symptomStr}${showerNote}`;
   }
 }
 
-export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string, overdue?: { isOverdue: boolean; daysOverdue: number; intervalDays?: number; zombiePhaseDays?: number }, opts?: { channel?: "phone" | "text" }): string {
+// Focused calls (touchpoints, wake-retries, reminder calls) get a slimmed
+// prompt: the CALL PURPOSE in liveContext is the whole agenda, and the heavy
+// sections below (quarter walkthrough, health-question list, morning routine,
+// medication talk) appear only on the calls they belong to. `focus` absent =
+// the original full prompt — web chat and the general daily call are unchanged.
+// medsTalk is tri-state: true = this IS a medication call, confirm the dose;
+// false = explicitly tell her NOT to bring meds up (ordinary touchpoints);
+// undefined = neutral — say nothing either way, the CALL PURPOSE governs
+// (appointment reminders with bloodwork med-hold instructions, Haldol
+// reminders, system alerts — a blanket "don't mention meds" would contradict
+// the purpose text on those calls).
+export interface JessicaCallFocus {
+  healthQuestions?: boolean;
+  morningRoutine?: boolean;
+  medsTalk?: boolean;
+}
+
+export function buildJessicaSystemPrompt(questions: { id: number; text: string; category: string; responseType: string; higherIsBetter: boolean }[], cycleDay: number | null, isZombiePhase: boolean, liveContext?: string, overdue?: { isOverdue: boolean; daysOverdue: number; intervalDays?: number; zombiePhaseDays?: number }, opts?: { channel?: "phone" | "text"; focus?: JessicaCallFocus }): string {
   // Phone calls use ElevenLabs' real-time tool-calling (Task #116) instead of
   // the invisible ---ACTION--- text markers below — the phone webhook never
   // parses those blocks, so on a live call they'd silently do nothing. Text
@@ -320,7 +352,9 @@ REFUSE_TASK — Pops clearly declines a task (different from not answering). Rec
 
 `;
 
-  const morningRoutineRules = `DAILY ROUTINE RULES:
+  const focus = opts?.focus;
+
+  const morningRoutineRules = (focus && !focus.morningRoutine) ? "" : `DAILY ROUTINE RULES:
 - Morning order (guide him through it gently, one thing at a time): wake → water → let Koda out → make the bed → tidy the room → shower/hygiene → breakfast. Never rattle off the whole list at once.
 - Out of bed: if you're checking whether he's up, one warm nudge only. Never nag, never repeat, never guilt.
 - Koda (the dog): the task is DONE once Koda is out, fed, and watered. A walk is a separate bonus — celebrate it if it happens, never mention it as missing. Bad weather or Pops feeling unwell NEVER makes the dog task a failure.
@@ -328,6 +362,48 @@ REFUSE_TASK — Pops clearly declines a task (different from not answering). Rec
 - Breakfast: ask what he ate and how much — all, some, or none. "All" or "some" counts as done (record it, and emit an appetite health_data tag). "None" is a decline — record it as a refusal, don't push, and let Ray's dashboard handle it.
 - Water check-ins (4x/day): only count the water as done when he confirms drinking it DURING this call — "I'll have some later" is not a completion. Encourage warmly, never lecture.
 `;
+
+  const jobBullets = !focus
+    ? `- Walk Pops through the OPEN items of the current quarter above, in time order, one at a time. This is the main purpose of every call.
+- Have a natural conversation with Pops — he experiences you as a friend checking in, not a clinical interview
+- Weave today's health check-in questions naturally into conversation — never read them as a list
+- Help with daily routine reminders, medication check-ins, and general wellbeing
+- Answer questions about the day, schedule, medications, or how he's feeling
+- You know what meals are coming this week and can mention them casually ("we've got your favorites lined up")
+- Parse smart home commands and confirm them (e.g. "turn on the living room light")
+- Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.`
+    : [
+        `- The CALL PURPOSE block above is your ENTIRE agenda for this call. The schedule context is reference material for answering his questions — not a checklist to walk through.`,
+        `- Have a natural conversation with Pops — he experiences you as a friend checking in, not a clinical interview`,
+        ...(focus.healthQuestions
+          ? [`- Weave today's health check-in questions naturally into conversation — never read them as a list`]
+          : []),
+        ...(focus.medsTalk === true
+          ? [`- Gently confirm the medication named in the CALL PURPOSE — this is one of the only two calls of the day where medication belongs`]
+          : focus.medsTalk === false
+            ? [`- Do NOT bring up medication on this call — it has its own dedicated calls at noon and 6 PM. If Pops raises it himself, answer kindly and move on.`]
+            : []),
+        `- Answer questions about the day, schedule, or how he's feeling`,
+        `- Parse smart home commands and confirm them (e.g. "turn on the living room light")`,
+        `- Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.`,
+      ].join("\n");
+
+  const healthCheckSection = !focus
+    ? `HEALTH CHECK-IN — SECONDARY to the schedule above. These are woven around the
+quarter's tasks, not run as their own interview. Pick at most 2-3 per call that
+fit what he's already talking about, and skip them entirely if the quarter's
+items are taking the whole call. Never open a call with one of these:
+${questionList}
+
+`
+    : focus.healthQuestions
+      ? `HEALTH CHECK-IN — today's question list. Follow the CALL PURPOSE above: weave a
+few in naturally, one at a time, never rapid-fire, and stop early if he sounds
+tired or done talking. Never open the call with one of these:
+${questionList}
+
+`
+      : "";
 
   return `You are Jessica, the AI companion and care coordinator for a veteran named Pops who lives with his caregiver Ray (Raymo). You have a warm, grounding, and calm voice. You speak clearly and gently — never rushed, never clinical.
 
@@ -342,23 +418,10 @@ TONE PROFILE:
 ${toneProfile}
 
 ${liveContext ? liveContext + "\n" : ""}YOUR JOB:
-- Walk Pops through the OPEN items of the current quarter above, in time order, one at a time. This is the main purpose of every call.
-- Have a natural conversation with Pops — he experiences you as a friend checking in, not a clinical interview
-- Weave today's health check-in questions naturally into conversation — never read them as a list
-- Help with daily routine reminders, medication check-ins, and general wellbeing
-- Answer questions about the day, schedule, medications, or how he's feeling
-- You know what meals are coming this week and can mention them casually ("we've got your favorites lined up")
-- Parse smart home commands and confirm them (e.g. "turn on the living room light")
-- Be a reassuring, steady presence. You are not a chatbot — you are family infrastructure.
+${jobBullets}
 ${scriptSection}
 ${morningRoutineRules}
-HEALTH CHECK-IN — SECONDARY to the schedule above. These are woven around the
-quarter's tasks, not run as their own interview. Pick at most 2-3 per call that
-fit what he's already talking about, and skip them entirely if the quarter's
-items are taking the whole call. Never open a call with one of these:
-${questionList}
-
-HEALTH DATA EXTRACTION — CRITICAL:
+${healthCheckSection}HEALTH DATA EXTRACTION — CRITICAL:
 When Pops responds to any health-related question, you MUST emit a structured tag immediately after your response text (NOT visible in conversation):
 <health_data>{"category":"CATEGORY","questionId":QID_NUMBER,"parsedValue":"VALUE","parsedIntensity":"INTENSITY","rawResponse":"EXACT QUOTE"}</health_data>
 

@@ -11,7 +11,7 @@ import {
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { saveHealthDataPoint, getActiveQuestionsForCycleDay } from "./health-assessment";
-import { buildJessicaSystemPrompt, getCurrentCycleInfo, loadLiveContext } from "./gemini";
+import { buildJessicaSystemPrompt, getCurrentCycleInfo, loadLiveContext, type JessicaCallFocus } from "./gemini";
 import { todayPacific } from "../lib/pacific-time";
 import { verifyElevenLabsSignature, getElevenLabsWebhookSecret, getElevenLabsSignatureHeader } from "../lib/webhook-auth";
 import { dispatch, type HermesAction, type LedgerContext } from "../lib/hermes";
@@ -178,7 +178,7 @@ export type OutboundCallResult =
  * missed-call detection job could see the admin call's `reached=true` as
  * proof that Pops was reached and incorrectly reset the missed-call streak.
  */
-export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?: string; noSession?: boolean; intro?: boolean }): Promise<OutboundCallResult> {
+export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?: string; noSession?: boolean; intro?: boolean; focus?: JessicaCallFocus }): Promise<OutboundCallResult> {
   try {
     const apiKey = getElevenLabsKey();
     const agentId = getAgentId();
@@ -247,7 +247,9 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
     // Explicitly "local": the outbound phone call is always Ray's household,
     // never a tenant workspace. Passing it keeps the demo tenant's seeded
     // schedule and symptom rows out of Pops' call context.
-    const scheduleContext = await loadLiveContext("local");
+    // Focused calls get the schedule as reference material; only the general
+    // daily call (no focus) gets the walk-the-quarter "spine" framing.
+    const scheduleContext = await loadLiveContext("local", { scheduleStyle: opts?.focus ? "reference" : "spine" });
     const careContextBlock = careContextLines.length > 0
       ? `CURRENT CARE CONTEXT — IMPORTANT:\n${careContextLines.join("\n")}\n\n`
       : "";
@@ -260,7 +262,7 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
     const extraBlock = opts?.extraContext ? `${opts.extraContext}\n\n` : "";
     const liveContext = introBlock + extraBlock + careContextBlock + scheduleContext;
 
-    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue, intervalDays, zombiePhaseDays }, { channel: "phone" });
+    const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue, intervalDays, zombiePhaseDays }, { channel: "phone", focus: opts?.focus });
 
     // The override MUST be nested inside conversation_initiation_client_data.
     // Sent at the top level, the Twilio outbound-call endpoint silently drops
