@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "br(AI)n App"
+title = "BrainGuardianApp"
 version = "1.0.0"
 id = "artifacts/brain-app"
 router = "path"
