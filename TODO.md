@@ -73,9 +73,6 @@ root cause + fix above, and the GitHub push being restored.
 ---
 
 ## Parked — do not start without Ray's go-ahead
-
-- **Haldol cycle inaccuracy** — Ray reports still wrong after one fix. Investigate only on his word.
-- **"Rest mode always active"** — likely the same root cause as the Haldol bug.
 - **Hermes rename** — in-app `hermes.ts` is an internal dispatcher an AI named on July 3. It is
   **not** Ray's real Hermes system. Rename to `care-dispatch.ts` pending his go-ahead.
 - **Quarter Orbit logo** — `quarter-orbit-*.svg`, spec in `docs/quarter-orbit-kit.md`. Designed to
@@ -105,6 +102,8 @@ Checked against source/environment on the date shown.
 | **#9 — demo seed in wrong quarter** | `tenant-migration.ts:13` now `Q2` (08-20) |
 | **#10 — military time in admin UI** | `to12Hour()` lives in `brain-app/src/lib/time.ts`, used by the schedule editor + calendar descriptions (08-20) |
 | Schedule editor edits didn't stick / snapped back | Mutations now invalidate the schedule query; DnD no longer resyncs from stale cache; drag-cancel wired (`89474aa`, 08-20) |
+| Computed quarter ran on the server's UTC clock | `state.ts` `computeCurrentQuarter()` now `quarterForHour(pacificNow().hour)` — was `new Date().getHours()`, ~7h ahead in prod, fighting the Pacific-correct auto-advance job (08-20). Ray to confirm on live app |
+| **Haldol cycle "thrashed" / rest mode stuck on** | `haldol-cycle.ts` now counts whole *Pacific calendar days* (was raw 24h blocks from UTC midnight → cycle day rolled over at 5pm Pacific nightly); negative day count clamped so a future-dated injection can't pin rest mode on (08-20). Ray to confirm on live app |
 
 ---
 

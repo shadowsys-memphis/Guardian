@@ -10,11 +10,20 @@
  * Nothing should recompute cycle days locally. Import this.
  */
 
+import { pacificDateOf } from "./pacific-time";
+
 // Monthly per Dr Uddin (2026-07-28). The DB row's interval_days is the real
 // source; this fallback only covers a missing/invalid value and must match
 // the prescribed cadence so a fallback never silently shortens the cycle.
 export const DEFAULT_INTERVAL_DAYS = 28;
 export const DEFAULT_ZOMBIE_PHASE_DAYS = 5;
+
+/** Epoch ms of UTC midnight for a "YYYY-MM-DD" string — a timezone-neutral
+ *  anchor for whole-calendar-day arithmetic. */
+function utcMidnightMs(dateStr: string): number {
+  const [y, m, d] = dateStr.slice(0, 10).split("-").map((v) => parseInt(v, 10));
+  return Date.UTC(y!, m! - 1, d!);
+}
 
 export interface HaldolCycleInfo {
   /** 1-based day within the current cycle. Never clamped — it wraps. */
@@ -41,14 +50,21 @@ export function computeHaldolCycle(
   const zombiePhaseDays =
     opts?.zombiePhaseDays && opts.zombiePhaseDays >= 0 ? opts.zombiePhaseDays : DEFAULT_ZOMBIE_PHASE_DAYS;
 
-  const injection = new Date(lastInjectionDate);
   const now = opts?.now ?? new Date();
-  const daysSinceInjection = Math.floor((now.getTime() - injection.getTime()) / 86_400_000);
+  // Whole PACIFIC calendar days since the injection date. The old math parsed
+  // the date as UTC midnight and counted raw 24-hour blocks to "now", which
+  // rolled the cycle day over at 5pm Pacific every evening — dragging the
+  // zombie window and due/overdue flags with it. Clamped at 0 so a
+  // future-dated injection reads as day 1 instead of a negative modulo
+  // pinning cycleDay ≤ 1 (rest mode stuck on).
+  const injectionMs = utcMidnightMs(lastInjectionDate);
+  const todayMs = utcMidnightMs(pacificDateOf(now.getTime()));
+  const daysSinceInjection = Math.max(0, Math.round((todayMs - injectionMs) / 86_400_000));
 
   const cycleDay = (daysSinceInjection % intervalDays) + 1;
 
-  const nextInjection = new Date(injection);
-  nextInjection.setDate(injection.getDate() + intervalDays * Math.ceil((daysSinceInjection + 1) / intervalDays));
+  const nextInjectionMs =
+    injectionMs + intervalDays * Math.ceil((daysSinceInjection + 1) / intervalDays) * 86_400_000;
 
   // The dose is DUE on the day a full interval has elapsed, and only overdue
   // after that day passes. (Getting this boundary wrong told Ray the injection
@@ -64,7 +80,7 @@ export function computeHaldolCycle(
     intervalDays,
     zombiePhaseDays,
     isZombiePhase: cycleDay <= zombiePhaseDays,
-    nextInjectionDate: nextInjection.toISOString().split("T")[0],
+    nextInjectionDate: new Date(nextInjectionMs).toISOString().split("T")[0],
     isDueToday,
     isOverdue,
     daysOverdue: isOverdue ? daysSinceInjection - intervalDays : 0,

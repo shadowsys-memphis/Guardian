@@ -3,19 +3,18 @@ import { db } from "@workspace/db";
 import { appStateTable, scheduleTasksTable } from "@workspace/db/schema";
 import { UpdateAppStateBody } from "@workspace/api-zod";
 import { eq, and, asc } from "drizzle-orm";
+import { pacificNow } from "../lib/pacific-time";
+import { quarterForHour } from "../lib/jessica-tools";
 
 const router: IRouter = Router();
 
-// Ray's quarter boundaries (2026-08-14): Q1 morning 6-10, Q2 midday 10-2,
-// Q3 fun block 2-6, Q4 wind-down 6pm onward. Keep in sync with
-// quarterForHour (lib/jessica-tools.ts) and computeQuarterForHour
-// (lib/call-scheduler.ts).
+// Ray's quarter boundaries live in quarterForHour (lib/jessica-tools.ts;
+// mirrored by computeQuarterForHour in lib/call-scheduler.ts). Evaluated
+// against Pacific wall-clock — the old new Date().getHours() here was the
+// server's UTC hour, which put the computed quarter ~7h ahead of Ray's day
+// and fought the (Pacific-correct) quarter auto-advance job all day long.
 function computeCurrentQuarter(): "Q1" | "Q2" | "Q3" | "Q4" {
-  const hour = new Date().getHours();
-  if (hour >= 6 && hour < 10) return "Q1";
-  if (hour >= 10 && hour < 14) return "Q2";
-  if (hour >= 14 && hour < 18) return "Q3";
-  return "Q4";
+  return quarterForHour(pacificNow().hour);
 }
 
 /** tenantId is "local" for Ray's session or the tenant UUID for subscribers. */
