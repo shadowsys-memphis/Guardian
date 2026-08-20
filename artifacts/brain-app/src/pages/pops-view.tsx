@@ -60,12 +60,11 @@ export function PopsView() {
       <header className="bg-secondary/40 border-b-2 border-primary px-8 py-5 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-5">
           <div className="h-4 w-4 rounded-full bg-primary animate-pulse shadow-[0_0_15px_rgba(70,159,104,0.6)]" />
-          <span className="text-3xl md:text-4xl font-display font-bold tracking-widest text-primary">
-            GUARDIAN_OS // ONLINE
-          </span>
+          <span className="md:text-4xl font-display tracking-widest text-primary text-[56px] font-bold text-right">Brain Guardian 
+           </span>
         </div>
         <div className="text-right">
-          <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums">
+          <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums opacity-[0.85]">
             {formatPacificClock(currentTime)}
           </div>
           <div className="text-lg md:text-xl text-muted-foreground uppercase tracking-widest">
@@ -73,8 +72,7 @@ export function PopsView() {
           </div>
         </div>
       </header>
-
-      <main className="flex-1 flex flex-col items-center justify-center px-8 py-12 text-center">
+      <main className="flex-1 flex flex-col items-center justify-center px-8 py-12 text-center border-t-[color:var(--color-amber-400)] border-r-[color:var(--color-amber-400)] border-b-[color:var(--color-amber-400)] border-l-[color:var(--color-amber-400)]">
         {state?.activeMessage ? (
           <ActiveMessage message={state.activeMessage} />
         ) : (
@@ -84,7 +82,6 @@ export function PopsView() {
           />
         )}
       </main>
-
       {(todaySummary || assessmentSettings) && <CallTimeline todaySummary={todaySummary ?? null} assessmentSettings={assessmentSettings ?? null} currentTime={currentTime} />}
       {haldol && <HaldolBar haldol={haldol} todaySummary={todaySummary ?? null} />}
     </div>
