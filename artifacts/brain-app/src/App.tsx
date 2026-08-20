@@ -109,7 +109,10 @@ function PrivateWorkspace() {
     );
   }
 
-  const isFullPageRoute = location.startsWith("/admin");
+  // Pops' view is Ray's zero-touch ambient display — it renders its own
+  // full-screen layout and should never carry the family/admin tab bar.
+  const isFullPageRoute =
+    location.startsWith("/admin") || location === "/pops" || location === "/";
 
   return (
     <div className={isFullPageRoute ? undefined : "pb-16"}>

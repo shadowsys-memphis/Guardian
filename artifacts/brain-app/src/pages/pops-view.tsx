@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { formatPacificClock, formatPacificTime, to12Hour } from "@/lib/time";
+import { PresenceField } from "@/components/presence-field/PresenceField";
+import { PresenceMark } from "@/components/presence-field/PresenceMark";
 import {
   useGetAppState,
   useGetHaldolCycle,
@@ -57,14 +59,15 @@ export function PopsView() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <header className="bg-secondary/40 border-b-2 border-primary px-8 py-5 flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-5">
-          <div className="h-4 w-4 rounded-full bg-primary animate-pulse shadow-[0_0_15px_rgba(70,159,104,0.6)]" />
-          <span className="md:text-4xl font-display tracking-widest text-primary text-[56px] font-bold text-right">Brain Guardian 
-           </span>
+      <header className="border-b border-border px-8 py-5 flex justify-between items-center shrink-0">
+        <div className="flex items-center gap-3">
+          <PresenceMark size={40} />
+          <span className="text-2xl md:text-3xl font-display font-medium tracking-wide text-foreground">
+            Brain Guardian
+          </span>
         </div>
         <div className="text-right">
-          <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums opacity-[0.85]">
+          <div className="text-5xl md:text-7xl font-display text-foreground tracking-wider tabular-nums">
             {formatPacificClock(currentTime)}
           </div>
           <div className="text-lg md:text-xl text-muted-foreground uppercase tracking-widest">
@@ -72,7 +75,8 @@ export function PopsView() {
           </div>
         </div>
       </header>
-      <main className="flex-1 flex flex-col items-center justify-center px-8 py-12 text-center border-t-[color:var(--color-sky-800)] border-r-[color:var(--color-sky-800)] border-b-[color:var(--color-sky-800)] border-l-[color:var(--color-sky-800)] bg-[color:var(--stone)] text-[color:var(--sage)]">
+      <main className="flex-1 flex flex-col items-center justify-center px-8 py-12 text-center gap-8">
+        <PresenceField live size={132} />
         {state?.activeMessage ? (
           <ActiveMessage message={state.activeMessage} />
         ) : (
@@ -91,6 +95,7 @@ export function PopsView() {
 function ZombieScreen({ currentTime }: { currentTime: Date }) {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center">
+      <PresenceField live size={110} className="mb-8" />
       <div className="text-5xl md:text-7xl font-display text-primary tracking-wider tabular-nums mb-12">
         {formatPacificClock(currentTime)}
       </div>
@@ -131,11 +136,11 @@ function AmbientStateDisplay({
       <p className="text-[4vw] md:text-5xl font-display text-muted-foreground tracking-widest uppercase mb-4">
         IT'S {timeOfDay}.
       </p>
-      <p className="text-[7vw] md:text-[5.5rem] font-display font-bold leading-tight tracking-widest uppercase text-[color:var(--color-sky-800)] bg-[color:var(--sage)]">
+      <p className="text-[7vw] md:text-[5.5rem] font-display font-bold leading-tight tracking-widest uppercase text-accent">
         {task.title.toUpperCase()}
       </p>
       {task.timeLabel && (
-        <p className="text-[4vw] md:text-5xl font-display text-primary/60 tracking-widest mt-4 border-t-[5px] border-r-[5px] border-b-[5px] border-l-[5px]">
+        <p className="text-[4vw] md:text-5xl font-display text-primary/60 tracking-widest mt-6 pt-6 border-t border-border/50">
           AT {to12Hour(task.timeLabel)}
         </p>
       )}
