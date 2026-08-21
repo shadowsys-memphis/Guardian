@@ -119,7 +119,7 @@ function PrivateWorkspace() {
       <Suspense fallback={null}>
         <Switch>
           <Route path="/">
-            <Redirect to="/pops" />
+            <Redirect to="/admin" />
           </Route>
           <Route path="/pops" component={PopsView} />
           <Route path="/jessica" component={JessicaPhone} />

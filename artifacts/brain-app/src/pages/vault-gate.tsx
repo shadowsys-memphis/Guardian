@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useLocation } from "wouter";
 import { Eye, EyeOff, Sparkles } from "lucide-react";
 import { useVault } from "@/lib/vault-context";
 import { PresenceField } from "@/components/presence-field/PresenceField";
@@ -9,6 +10,7 @@ interface VaultGateProps {
 
 export function VaultGate({ children: _children }: VaultGateProps) {
   const { unlock, viewDemo, sessionExpired } = useVault();
+  const [, navigate] = useLocation();
   const [passphrase, setPassphrase] = useState("");
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,11 @@ export function VaultGate({ children: _children }: VaultGateProps) {
     setError(null);
     try {
       const ok = await unlock(passphrase);
-      if (!ok) setError("Incorrect passphrase. Try again.");
+      if (!ok) {
+        setError("Incorrect passphrase. Try again.");
+      } else {
+        navigate("/admin");
+      }
     } catch {
       setError("Unlock failed. Try again.");
     } finally {
@@ -36,7 +42,11 @@ export function VaultGate({ children: _children }: VaultGateProps) {
     setDemoError(null);
     try {
       const ok = await viewDemo();
-      if (!ok) setDemoError("Demo is unavailable right now. Please try again shortly.");
+      if (!ok) {
+        setDemoError("Demo is unavailable right now. Please try again shortly.");
+      } else {
+        navigate("/admin");
+      }
     } catch {
       setDemoError("Demo is unavailable right now. Please try again shortly.");
     } finally {
