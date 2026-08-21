@@ -64,6 +64,7 @@ import {
   CreditCard,
   Pencil,
   Search,
+  LogOut,
 } from "lucide-react";
 
 import {
@@ -140,7 +141,7 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
 export function AdminView() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [, navigate] = useLocation();
-  const { isLocal, isDemo } = useVault();
+  const { isLocal, isDemo, lock } = useVault();
   // Local-only specialty tools (api-server routes/index.ts localRouter)
   // aren't available to tenant/demo sessions — hide rather than show a
   // dead/erroring tab.
@@ -151,13 +152,32 @@ export function AdminView() {
       <aside className="w-full md:w-56 border-b md:border-b-0 md:border-r border-border shrink-0 flex flex-col md:h-screen md:sticky md:top-0">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <PresenceMark size={28} />
-          <div className="leading-tight">
+          <div className="leading-tight flex-1 min-w-0">
             <p className="font-display text-base font-medium text-foreground">Brain Guardian</p>
             <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground/70">
               {isLocal ? "Raymo / Admin" : isDemo ? "Live Demo" : "Family Workspace"}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => lock()}
+            title={isLocal ? "Lock owner workspace" : "Leave this session"}
+            aria-label={isLocal ? "Lock owner workspace" : "Leave this session"}
+            className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          >
+            <LogOut size={15} />
+          </button>
         </div>
+
+        {!isLocal && (
+          <div className="mx-4 mb-3 rounded-lg border border-border/70 bg-secondary/30 px-3 py-2.5">
+            <p className="text-[0.65rem] leading-relaxed text-muted-foreground">
+              {isDemo
+                ? "You are viewing the safe demo workspace. Use the passphrase login for the full owner app."
+                : "This workspace shows tenant-safe tools only."}
+            </p>
+          </div>
+        )}
 
         <nav className="flex md:flex-col gap-1 px-3 pb-3 md:pb-4 md:flex-1 overflow-x-auto md:overflow-visible">
           {visibleTabs.map((tab) => (
