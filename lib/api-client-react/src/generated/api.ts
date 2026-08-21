@@ -89,6 +89,7 @@ import type {
   MealWithIngredients,
   MonthlyReport,
   RecordTaskOutcomeInput,
+  RemixSuggestion,
   RescheduleLabDrawInput,
   RotationTask,
   ScanCartItemInput,
@@ -4390,6 +4391,92 @@ export const useCreateMeal = <
   TContext
 > => {
   return useMutation(getCreateMealMutationOptions(options));
+};
+
+/**
+ * @summary Save an AI-remixed meal to the catalog
+ */
+export const getSaveRemixMealUrl = () => {
+  return `/api/shopper/meals/remix`;
+};
+
+export const saveRemixMeal = async (
+  remixSuggestion: RemixSuggestion,
+  options?: RequestInit,
+): Promise<MealWithIngredients> => {
+  return customFetch<MealWithIngredients>(getSaveRemixMealUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(remixSuggestion),
+  });
+};
+
+export const getSaveRemixMealMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveRemixMeal>>,
+    TError,
+    { data: BodyType<RemixSuggestion> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof saveRemixMeal>>,
+  TError,
+  { data: BodyType<RemixSuggestion> },
+  TContext
+> => {
+  const mutationKey = ["saveRemixMeal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof saveRemixMeal>>,
+    { data: BodyType<RemixSuggestion> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return saveRemixMeal(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SaveRemixMealMutationResult = NonNullable<
+  Awaited<ReturnType<typeof saveRemixMeal>>
+>;
+export type SaveRemixMealMutationBody = BodyType<RemixSuggestion>;
+export type SaveRemixMealMutationError = ErrorType<void>;
+
+/**
+ * @summary Save an AI-remixed meal to the catalog
+ */
+export const useSaveRemixMeal = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveRemixMeal>>,
+    TError,
+    { data: BodyType<RemixSuggestion> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof saveRemixMeal>>,
+  TError,
+  { data: BodyType<RemixSuggestion> },
+  TContext
+> => {
+  return useMutation(getSaveRemixMealMutationOptions(options));
 };
 
 /**

@@ -298,6 +298,40 @@ router.post("/shopper/meals", async (req, res) => {
   }
 });
 
+// POST /shopper/meals/remix — save an AI remix as a reusable catalog meal
+router.post("/shopper/meals/remix", async (req, res) => {
+  try {
+    const suggestion = remixSuggestionSchema.parse(req.body);
+    const saved = await db.transaction(async (tx) => {
+      const [meal] = await tx.insert(mealsTable).values({
+        name: suggestion.name,
+        description: suggestion.description,
+        estimatedCostCents: 0,
+        active: true,
+      }).returning();
+
+      const ingredients = await tx.insert(mealIngredientsTable).values(
+        suggestion.ingredients.map((ingredient) => ({
+          mealId: meal.id,
+          name: ingredient.name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          estimatedCostCents: 0,
+        }))
+      ).returning();
+      return { meal, ingredients };
+    });
+
+    res.status(201).json({
+      ...saved.meal,
+      ingredients: saved.ingredients,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save remixed meal");
+    res.status(400).json({ error: "Failed to save remixed meal" });
+  }
+});
+
 // DELETE /shopper/meals/:id
 router.delete("/shopper/meals/:id", async (req, res) => {
   try {

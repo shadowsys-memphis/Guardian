@@ -49,6 +49,7 @@ import {
   useListCravings,
   useUpdateCraving,
   useRemixMealPlan,
+  useSaveRemixMeal,
   type MealWithIngredients,
   type MealCraving,
   type RemixSuggestion,
@@ -103,6 +104,7 @@ export function ShopperPage() {
   const [remixInput, setRemixInput] = useState("");
   const [remixSuggestion, setRemixSuggestion] = useState<RemixSuggestion | null>(null);
   const [remixAddingToCart, setRemixAddingToCart] = useState(false);
+  const [remixSavingToCatalog, setRemixSavingToCatalog] = useState(false);
   const [calPushingShop, setCalPushingShop] = useState(false);
   const [urgentItems, setUrgentItems] = useState<Set<string>>(new Set());
   const [urgentPushingKey, setUrgentPushingKey] = useState<string | null>(null);
@@ -323,6 +325,7 @@ export function ShopperPage() {
     },
     onError: () => toast({ title: "Remix failed", description: "Gemini could not remix the meal.", variant: "destructive" }),
   }});
+  const saveRemixMeal = useSaveRemixMeal();
 
   const handleCookbookFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -372,6 +375,25 @@ export function ShopperPage() {
       toast({ title: "Couldn't add all ingredients", description: "Some items may not have made it into the cart — check the shopping list.", variant: "destructive" });
     } finally {
       setRemixAddingToCart(false);
+    }
+  };
+
+  const handleSaveRemixToCatalog = async () => {
+    if (!remixSuggestion || remixSavingToCatalog) return;
+    setRemixSavingToCatalog(true);
+    try {
+      await saveRemixMeal.mutateAsync({ data: remixSuggestion });
+      await refetchMeals();
+      toast({ title: `"${remixSuggestion.name}" saved to catalog`, description: "You can add it to a cart any time from the Meal Catalog." });
+      setRemixSuggestion(null);
+    } catch (err: any) {
+      toast({
+        title: "Couldn't save meal",
+        description: err?.response?.data?.error ?? "The remixed meal could not be saved.",
+        variant: "destructive",
+      });
+    } finally {
+      setRemixSavingToCatalog(false);
     }
   };
 
@@ -944,10 +966,16 @@ export function ShopperPage() {
                   <li key={i}>• {ing.name} — {ing.quantity} {ing.unit}</li>
                 ))}
               </ul>
-              <Button size="sm" onClick={handleAddRemixToCart} disabled={remixAddingToCart || cartIsLocked}>
-                {remixAddingToCart ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Plus size={14} className="mr-1" />}
-                Add ingredients to cart
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={handleAddRemixToCart} disabled={remixAddingToCart || cartIsLocked}>
+                  {remixAddingToCart ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Plus size={14} className="mr-1" />}
+                  Add ingredients to cart
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleSaveRemixToCatalog} disabled={remixSavingToCatalog}>
+                  {remixSavingToCatalog ? <RefreshCw size={14} className="animate-spin mr-1" /> : <CheckCircle size={14} className="mr-1" />}
+                  Save to catalog
+                </Button>
+              </div>
               {cartIsLocked && (
                 <p className="text-xs text-muted-foreground">This week's cart is {cartStatus} — reset it to add the remix.</p>
               )}

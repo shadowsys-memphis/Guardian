@@ -1363,6 +1363,21 @@ export const CreateMealBody = zod.object({
 });
 
 /**
+ * @summary Save an AI-remixed meal to the catalog
+ */
+export const SaveRemixMealBody = zod.object({
+  name: zod.string(),
+  description: zod.string(),
+  ingredients: zod.array(
+    zod.object({
+      name: zod.string(),
+      quantity: zod.string(),
+      unit: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Soft-delete a meal
  */
 export const DeleteMealParams = zod.object({

@@ -936,6 +936,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Meal"
+  /shopper/meals/remix:
+    post:
+      operationId: saveRemixMeal
+      tags: [shopper]
+      summary: Save an AI-remixed meal to the catalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemixSuggestion"
+      responses:
+        "201":
+          description: Saved catalog meal with ingredients
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealWithIngredients"
+        "400":
+          description: Invalid remixed meal
 
   /shopper/meals/{id}:
     delete:
