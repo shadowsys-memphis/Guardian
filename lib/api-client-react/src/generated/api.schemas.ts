@@ -405,7 +405,7 @@ export interface HaldolCycle {
   lastInjectionDate: string;
   /** Injection dose in milligrams (null until confirmed) */
   doseMg?: number | null;
-  /** Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped) */
+  /** Current 1-based day within the dosing cycle. It stays at intervalDays while a dose is overdue, until a new injection is recorded. */
   cycleDay: number;
   /** Prescribed dosing interval in days (e.g. 14 biweekly, 28 monthly) */
   intervalDays?: number;
@@ -413,10 +413,11 @@ export interface HaldolCycle {
   zombiePhaseDays?: number;
   /** Days elapsed since lastInjectionDate */
   daysSinceInjection?: number;
-  /** True while cycleDay is within the post-injection high-symptom window */
+  /** True while a non-overdue cycle day is within the post-injection high-symptom window */
   isZombiePhase: boolean;
+  /** Due date calculated from the last confirmed injection; it stays fixed when the dose becomes overdue. */
   nextInjectionDate: string;
-  /** True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle */
+  /** True when the prescribed interval has passed since lastInjectionDate with no new injection logged. */
   isOverdue: boolean;
   /** Days past the expected injection date; 0 when not overdue */
   daysOverdue: number;

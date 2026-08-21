@@ -676,7 +676,7 @@ export const GetHaldolCycleResponse = zod.object({
   cycleDay: zod
     .number()
     .describe(
-      "Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped)",
+      "Current 1-based day within the dosing cycle. It stays at intervalDays while a dose is overdue, until a new injection is recorded.",
     ),
   intervalDays: zod
     .number()
@@ -695,13 +695,17 @@ export const GetHaldolCycleResponse = zod.object({
   isZombiePhase: zod
     .boolean()
     .describe(
-      "True while cycleDay is within the post-injection high-symptom window",
+      "True while a non-overdue cycle day is within the post-injection high-symptom window",
     ),
-  nextInjectionDate: zod.date(),
+  nextInjectionDate: zod
+    .date()
+    .describe(
+      "Due date calculated from the last confirmed injection; it stays fixed when the dose becomes overdue.",
+    ),
   isOverdue: zod
     .boolean()
     .describe(
-      "True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle",
+      "True when the prescribed interval has passed since lastInjectionDate with no new injection logged.",
     ),
   daysOverdue: zod
     .number()
@@ -743,7 +747,7 @@ export const UpdateHaldolCycleResponse = zod.object({
   cycleDay: zod
     .number()
     .describe(
-      "Current 1-based day within the dosing cycle (wraps at intervalDays; never clamped)",
+      "Current 1-based day within the dosing cycle. It stays at intervalDays while a dose is overdue, until a new injection is recorded.",
     ),
   intervalDays: zod
     .number()
@@ -762,13 +766,17 @@ export const UpdateHaldolCycleResponse = zod.object({
   isZombiePhase: zod
     .boolean()
     .describe(
-      "True while cycleDay is within the post-injection high-symptom window",
+      "True while a non-overdue cycle day is within the post-injection high-symptom window",
     ),
-  nextInjectionDate: zod.date(),
+  nextInjectionDate: zod
+    .date()
+    .describe(
+      "Due date calculated from the last confirmed injection; it stays fixed when the dose becomes overdue.",
+    ),
   isOverdue: zod
     .boolean()
     .describe(
-      "True when 14+ days have passed since lastInjectionDate with no new injection logged — the dosing window has been missed, not just wrapped to a fresh cycle",
+      "True when the prescribed interval has passed since lastInjectionDate with no new injection logged.",
     ),
   daysOverdue: zod
     .number()
