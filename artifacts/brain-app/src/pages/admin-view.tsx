@@ -2795,7 +2795,13 @@ function InventoryTab() {
   const { data: cart, refetch: refetchCart } = useGetCart({ query: { queryKey: getGetCartQueryKey() } });
   const addCartItem = useAddCartItem({
     mutation: {
-      onSuccess: (item) => { refetchCart(); toast({ title: "Added to cart", description: item.ingredientName }); },
+      onSuccess: (item: any) => {
+        refetchCart();
+        toast({
+          title: item?.alreadyInCart ? "Already in cart" : "Added to cart",
+          description: item?.ingredientName,
+        });
+      },
       onError: () => toast({ title: "Failed to add to cart", variant: "destructive" }),
     }
   });

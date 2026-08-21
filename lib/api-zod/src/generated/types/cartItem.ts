@@ -15,4 +15,6 @@ export interface CartItem {
   unit: string;
   estimatedCostCents: number;
   source: CartItemSource;
+  /** True when this request found and returned an existing matching item instead of inserting a new row. */
+  alreadyInCart?: boolean;
 }

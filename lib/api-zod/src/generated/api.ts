@@ -1505,6 +1505,12 @@ export const GetCartResponse = zod
             unit: zod.string(),
             estimatedCostCents: zod.number(),
             source: zod.enum(["meal", "manual", "staple"]),
+            alreadyInCart: zod
+              .boolean()
+              .optional()
+              .describe(
+                "True when this request found and returned an existing matching item instead of inserting a new row.",
+              ),
           }),
         )
         .optional(),
@@ -1556,6 +1562,12 @@ export const ScanCartItemResponse = zod.object({
       unit: zod.string(),
       estimatedCostCents: zod.number(),
       source: zod.enum(["meal", "manual", "staple"]),
+      alreadyInCart: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when this request found and returned an existing matching item instead of inserting a new row.",
+        ),
     })
     .optional()
     .describe("Present only when added is true."),

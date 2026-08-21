@@ -223,7 +223,16 @@ export function ShopperPage() {
   const addMealToCart = useAddMealToCart({ mutation: { onSuccess: () => refetchCart() } });
   const removeMealFromCart = useRemoveMealFromCart({ mutation: { onSuccess: () => refetchCart() } });
   const addCartItem = useAddCartItem({ mutation: {
-    onSuccess: () => { refetchCart(); setQuickAddName(""); setQuickAddQty(""); setQuickAddUnit(""); },
+    onSuccess: (item: any) => {
+      refetchCart();
+      setQuickAddName("");
+      setQuickAddQty("");
+      setQuickAddUnit("");
+      toast({
+        title: item?.alreadyInCart ? "Already in cart" : "Added to cart",
+        description: item?.ingredientName,
+      });
+    },
     onError: () => toast({ title: "Couldn't add item", variant: "destructive" }),
   } });
   // Separate mutation instance for confirming a scanned item so its pending
@@ -233,7 +242,10 @@ export function ShopperPage() {
     onSuccess: (_data: any, variables: any) => {
       refetchCart();
       setPendingScan(null);
-      toast({ title: `Added "${variables?.data?.name}" to the cart` });
+      toast({
+        title: _data?.alreadyInCart ? "Already in cart" : `Added "${variables?.data?.name}" to the cart`,
+        description: _data?.alreadyInCart ? `"${variables?.data?.name}" was already on this week's list.` : undefined,
+      });
     },
     onError: () => toast({ title: "Couldn't add item", variant: "destructive" }),
   } });

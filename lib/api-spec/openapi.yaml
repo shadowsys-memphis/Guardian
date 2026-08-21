@@ -2974,6 +2974,9 @@ components:
         source:
           type: string
           enum: [meal, manual, staple]
+        alreadyInCart:
+          type: boolean
+          description: True when this request found and returned an existing matching item instead of inserting a new row.
       required:
         - id
         - cartId

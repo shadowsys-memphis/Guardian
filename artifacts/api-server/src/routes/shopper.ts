@@ -577,19 +577,47 @@ router.post("/shopper/cart/items", async (req, res) => {
       unit: z.string().trim().min(1).max(50).optional(),
     }).parse(req.body);
     const cart = await getOrCreateCart();
-    if (cart.status !== "pending") {
+    const result = await db.transaction(async (tx) => {
+      // Serialize additions to this cart. The duplicate check and insert must
+      // share the same lock, otherwise two stale callers can both insert.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${cart.id})`);
+
+      const [currentCart] = await tx.select().from(groceryCartsTable)
+        .where(eq(groceryCartsTable.id, cart.id))
+        .limit(1);
+      if (!currentCart || currentCart.status !== "pending") {
+        return { locked: true as const };
+      }
+
+      const [existing] = await tx.select().from(cartItemsTable)
+        .where(and(
+          eq(cartItemsTable.cartId, cart.id),
+          sql`lower(trim(${cartItemsTable.ingredientName})) = lower(trim(${name}))`,
+        ))
+        .limit(1);
+      if (existing) {
+        return { item: existing, alreadyInCart: true as const };
+      }
+
+      const [item] = await tx.insert(cartItemsTable).values({
+        cartId: cart.id,
+        ingredientName: name,
+        totalQuantity: quantity ?? "1",
+        unit: unit ?? "each",
+        estimatedCostCents: 0, // manual items are unestimated for now
+        source: "manual",
+      }).returning();
+      return { item, alreadyInCart: false as const };
+    });
+
+    if (result.locked) {
       res.status(409).json({ error: "Cart is already approved or dismissed. Create a new week." });
       return;
     }
-    const [item] = await db.insert(cartItemsTable).values({
-      cartId: cart.id,
-      ingredientName: name,
-      totalQuantity: quantity ?? "1",
-      unit: unit ?? "each",
-      estimatedCostCents: 0, // manual items are unestimated for now
-      source: "manual",
-    }).returning();
-    res.status(201).json(item);
+    res.status(result.alreadyInCart ? 200 : 201).json({
+      ...result.item,
+      alreadyInCart: result.alreadyInCart,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to add item to cart");
     res.status(400).json({ error: "Failed to add item" });
