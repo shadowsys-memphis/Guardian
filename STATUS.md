@@ -49,6 +49,42 @@ no-transcript-has-ever-saved item on the worry list below. The report states tha
 instead of papering over it; once the webhook secret question is resolved and transcripts
 land, responses will populate on their own.
 
+## 8/21 later — today's bad test calls traced to four root causes (`82e6dca`)
+
+Ray's morning test calls (generic greeting, "authorization error" on voice tools, an
+October colonoscopy announced as today) were traced against the actual ElevenLabs
+transcripts and live agent config. **Good news first: the 8/14 nesting fix works** — the
+full caregiver context (schedule, call purpose, Haldol day, symptom logs) verifiably
+reached today's calls. Four separate things were broken on top of it:
+
+1. **Jessica called Ray "Pops" on test calls.** Test mode routes calls to Ray's phone but
+   nothing told the prompt — fixed with a TEST_CALL_CONTEXT block (address Ray, no
+   health-data tags, answer admin questions plainly). *Ships on next publish.*
+2. **Voice tools failed randomly — FIXED LIVE NOW.** The agent had THREE same-named copies
+   of every tool (three generations of sync runs); 12 of 19 carried a shared secret the
+   production server rejects (dev DB and prod DB each minted their own secret). The LLM
+   picked among the copies arbitrarily → the "authorization error" Ray heard. The 12 stale
+   registrations are now detached from the agent (objects left in the ElevenLabs workspace,
+   deletable anytime), and the dev DB's `jessica_tool_secret` + `jessica_tool_ids` now match
+   the set production actually accepts (probe-verified end to end). The sync code also now
+   prunes its own stale duplicates so this can't quietly come back. **The very next call
+   should have working add_task / complete_task / update_daily_call_schedule.**
+3. **Every future appointment showed on TODAY's schedule.** Document-scanner appointments
+   are written into `schedule_tasks` — a dateless daily template — so all 10 imported
+   appointments (through Jan 2027, duplicates included) rendered every day. Jessica's
+   context now date-filters "Appt:" rows to today and collapses duplicates. *Ships on next
+   publish.* (The rows themselves still show daily on the dashboard schedule — separate
+   cleanup, and Ray flagged some imported dates as wrong data anyway.)
+4. **Same generic greeting every call.** With the purpose buried mid-prompt and only
+   "Hello?" to react to, the model opened every call identically and ignored the CALL
+   PURPOSE. The phone prompt now has an explicit OPENING rule (one greeting sentence, then
+   the purpose, varied wording). *Ships on next publish.*
+
+**For the next test day:** items 1, 3, 4 need a publish to reach live calls; item 2 is
+live already. Ray's other notes from the call — voice sounded "creepy"/wrong (agent voice
+settings, not code) and imported appointment dates being wrong — are data/config items in
+the dashboard and ElevenLabs voice picker, not code bugs.
+
 ---
 
 ## 8/17 — tenant bleed stopped, sessions fail gracefully, docs corrected
