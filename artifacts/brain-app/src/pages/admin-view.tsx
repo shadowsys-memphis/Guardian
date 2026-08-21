@@ -982,6 +982,8 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { data: todaySummary } = useGetTodaySummary({ query: { queryKey: getGetTodaySummaryQueryKey(), enabled: isLocal } });
   const { data: cart } = useGetCart({ query: { queryKey: getGetCartQueryKey(), enabled: isLocal } });
   const { data: rawInventory } = useListInventory({ query: { queryKey: getListInventoryQueryKey() } });
+  const { data: rotationTasks } = useListRotationTasks({ query: { queryKey: getListRotationTasksQueryKey(), enabled: isLocal } });
+  const { data: careLogs } = useListCareLogs({ query: { queryKey: getListCareLogsQueryKey(), enabled: isLocal } });
   const updateState = useUpdateAppState();
   const { toast } = useToast();
   const [dietaryProfile, setDietaryProfile] = useState<{ restrictions?: string[]; source?: string; updated_at?: string } | null>(null);
@@ -1319,6 +1321,15 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             </button>
           )}
         </div>
+
+        {isLocal && (
+          <div className="mt-5">
+            <SystemAIPanel
+              tasks={(rotationTasks ?? []) as RotationTask[]}
+              logs={(careLogs ?? []) as HistoricalCareLog[]}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
