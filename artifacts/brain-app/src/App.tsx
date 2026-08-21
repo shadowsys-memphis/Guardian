@@ -8,11 +8,7 @@ import { GuardianPage } from "@/pages/guardian";
 import { GuardianSuccessPage } from "@/pages/guardian-success";
 import { VaultGate } from "@/pages/vault-gate";
 import { VaultProvider, useVault } from "@/lib/vault-context";
-import { Home, Phone, ShoppingCart, ShieldAlert, CreditCard, PhoneCall } from "lucide-react";
-
-const PopsView = lazy(() =>
-  import("@/pages/pops-view").then((m) => ({ default: m.PopsView }))
-);
+import { Home, Phone, ShoppingCart, ShieldAlert, PhoneCall } from "lucide-react";
 const AdminView = lazy(() =>
   import("@/pages/admin-view").then((m) => ({ default: m.AdminView }))
 );
@@ -50,7 +46,7 @@ const queryClient = new QueryClient({
 });
 
 const NAV_ITEMS = [
-  { path: "/pops", label: "Home", icon: <Home size={20} /> },
+  { path: "/admin", label: "Home", icon: <Home size={20} /> },
   { path: "/jessica", label: "Jessica", icon: <Phone size={20} /> },
   { path: "/calls", label: "Calls", icon: <PhoneCall size={20} /> },
   { path: "/shopper", label: "Shopper", icon: <ShoppingCart size={20} /> },
@@ -63,7 +59,7 @@ function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex items-center">
       {NAV_ITEMS.map((item) => {
-        const isActive = location === item.path || (location === "/" && item.path === "/pops");
+        const isActive = location === item.path || (location === "/" && item.path === "/admin");
         return (
           <button
             key={item.path}
@@ -109,10 +105,8 @@ function PrivateWorkspace() {
     );
   }
 
-  // Pops' view is Ray's zero-touch ambient display — it renders its own
-  // full-screen layout and should never carry the family/admin tab bar.
   const isFullPageRoute =
-    location.startsWith("/admin") || location === "/pops" || location === "/";
+    location.startsWith("/admin") || location === "/";
 
   return (
     <div className={isFullPageRoute ? undefined : "pb-16"}>
@@ -121,7 +115,6 @@ function PrivateWorkspace() {
           <Route path="/">
             <Redirect to="/admin" />
           </Route>
-          <Route path="/pops" component={PopsView} />
           <Route path="/jessica" component={JessicaPhone} />
           <Route path="/calls" component={CallsView} />
           <Route path="/shopper" component={ShopperView} />

@@ -984,10 +984,13 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { data: rawInventory } = useListInventory({ query: { queryKey: getListInventoryQueryKey() } });
   const updateState = useUpdateAppState();
   const { toast } = useToast();
-  const [broadcastValue, setBroadcastValue] = useState(state?.activeMessage ?? "");
   const [dietaryProfile, setDietaryProfile] = useState<{ restrictions?: string[]; source?: string; updated_at?: string } | null>(null);
   const [activityRestrictions, setActivityRestrictions] = useState<{ restrictions?: string[]; source?: string; updated_at?: string } | null>(null);
   const [showOverride, setShowOverride] = useState(false);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [activeScripts, setActiveScripts] = useState<VoiceScript[]>([]);
+  const [recentActions, setRecentActions] = useState<any[]>([]);
+  const [fulfillment, setFulfillment] = useState<any>(null);
 
   useEffect(() => {
     if (!isLocal) return; // documents router (care-context) is local-only
@@ -999,6 +1002,24 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         if (data.activity_restrictions) setActivityRestrictions(data.activity_restrictions);
       })
       .catch(() => {});
+  }, [isLocal]);
+
+  useEffect(() => {
+    if (!isLocal) return;
+    let cancelled = false;
+    Promise.all([
+      fetch(`${WORKSPACE_BASE}/api/appointments`).then((r) => r.ok ? r.json() : []),
+      fetch(`${WORKSPACE_BASE}/api/scripts/active`).then((r) => r.ok ? r.json() : []),
+      fetch(`${WORKSPACE_BASE}/api/actions/log?limit=5`).then((r) => r.ok ? r.json() : []),
+      fetch(`${WORKSPACE_BASE}/api/shopper/fulfill/current`).then((r) => r.ok ? r.json() : null),
+    ]).then(([nextAppointments, nextScripts, nextActions, nextFulfillment]) => {
+      if (cancelled) return;
+      setAppointments(Array.isArray(nextAppointments) ? nextAppointments : []);
+      setActiveScripts(Array.isArray(nextScripts) ? nextScripts : []);
+      setRecentActions(Array.isArray(nextActions) ? nextActions : []);
+      setFulfillment(nextFulfillment);
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [isLocal]);
 
   const handleStateChange = (updates: UpdateAppStateInput) => {
@@ -1020,6 +1041,12 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const lastSymptomLog = (symptomLogs as any[])?.[0];
   const restrictionCount = (dietaryProfile?.restrictions?.length ?? 0) + (activityRestrictions?.restrictions?.length ?? 0);
   const cartNeedsApproval = isLocal && !!cart && (cart as any).status !== "approved";
+  const upcomingAppointments = appointments
+    .filter((appointment) => appointment.appointmentDate >= today)
+    .sort((a, b) => a.appointmentDate.localeCompare(b.appointmentDate));
+  const budgetCents = (cart as any)?.budgetCents ?? 20000;
+  const spentCents = (cart as any)?.totalEstimatedCostCents ?? 0;
+  const budgetPercent = budgetCents > 0 ? Math.min(100, Math.round((spentCents / budgetCents) * 100)) : 0;
 
   // One line per real condition Ray should look at. Empty when everything's on track.
   const attentionItems: { key: string; tone: "urgent" | "caution" | "attn"; text: string; detail?: string; onClick: () => void }[] = [];
@@ -1202,35 +1229,79 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         )}
       </div>
 
-      {/* ── Quick Actions ──────────────────────────────────────────────── */}
+      {/* ── Command Center ─────────────────────────────────────────────── */}
       <div className="pf-zone">
-        <p className="pf-zone-label mb-3">Quick Actions</p>
-        <Card>
-          <CardContent className="pt-5 space-y-3">
-            <p className="text-xs text-muted-foreground">Shown prominently on Pops' ambient screen, overriding the current task display.</p>
-            <div className="flex gap-3">
-              <Input
-                value={broadcastValue}
-                onChange={(e) => setBroadcastValue(e.target.value)}
-                className="font-display text-lg"
-                placeholder="Message for Pops..."
-              />
-              <Button onClick={() => handleStateChange({ activeMessage: broadcastValue })}>
-                Send
-              </Button>
-              {state?.activeMessage && (
-                <Button variant="outline" onClick={() => { setBroadcastValue(""); handleStateChange({ activeMessage: null }); }}>
-                  Clear
-                </Button>
+        <p className="pf-zone-label mb-3">Command Center</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <button className="pf-quick-action text-left" onClick={() => onNavigate("haldol")}>
+            <BrainCircuit size={18} className="text-accent" />
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">Medication cycle</span>
+            <strong className="text-sm text-foreground">{isLocal ? (haldol?.isOverdue ? "Overdue" : haldol?.cycleDay ? `Day ${haldol.cycleDay}` : "On track") : "Workspace safe"}</strong>
+          </button>
+          <button className="pf-quick-action text-left" onClick={() => onNavigate("appointments")}>
+            <Stethoscope size={18} className="text-accent" />
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">Appointments</span>
+            <strong className="text-sm text-foreground">{isLocal ? `${upcomingAppointments.length} upcoming` : "Owner-only"}</strong>
+          </button>
+          <button className="pf-quick-action text-left" onClick={() => onNavigate("shopper")}>
+            <ShoppingCart size={18} className="text-accent" />
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">Weekly budget</span>
+            <strong className="text-sm text-foreground">{isLocal ? `$${(spentCents / 100).toFixed(0)} of $${(budgetCents / 100).toFixed(0)}` : "Owner-only"}</strong>
+            {isLocal && <span className="w-full h-1 rounded-full bg-secondary overflow-hidden"><span className="block h-full bg-accent" style={{ width: `${budgetPercent}%` }} /></span>}
+          </button>
+          <button className="pf-quick-action text-left" onClick={() => onNavigate("scripts")}>
+            <Mic size={18} className="text-accent" />
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">Voice scripts</span>
+            <strong className="text-sm text-foreground">{isLocal ? `${activeScripts.length} active` : "Owner-only"}</strong>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription className="pf-stat-label">Upcoming care</CardDescription>
+              <CardTitle className="text-lg">{isLocal ? (upcomingAppointments[0]?.provider ?? "No upcoming appointments") : "Tenant-safe workspace"}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLocal && upcomingAppointments[0] ? (
+                <p className="text-xs text-muted-foreground">
+                  {formatPacificShortDate(upcomingAppointments[0].appointmentDate)} · {upcomingAppointments[0].appointmentTime ?? "09:00"} · {upcomingAppointments[0].location ?? "Location not recorded"}
+                </p>
+              ) : <p className="text-xs text-muted-foreground">Owner appointment details appear in the Appointments tab.</p>}
+              <button className="text-xs text-accent hover:underline mt-3" onClick={() => onNavigate("appointments")}>Open appointments →</button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription className="pf-stat-label">Agentic fulfillment</CardDescription>
+              <CardTitle className="text-lg">{isLocal ? (fulfillment?.status ?? "No run this week") : "Owner-only"}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">{isLocal && fulfillment ? `${fulfillment.store ?? "Store"} · ${fulfillment.items?.length ?? 0} items · $${((fulfillment.totalEstimatedCents ?? 0) / 100).toFixed(2)}` : "Fulfillment status appears after the shopping flow runs."}</p>
+              <button className="text-xs text-accent hover:underline mt-3" onClick={() => onNavigate("shopper")}>Open shopper →</button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {isLocal && (
+          <Card className="mt-5">
+            <CardHeader className="pb-2">
+              <CardDescription className="pf-stat-label">Recent activity</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {recentActions.length === 0 ? <p className="text-xs text-muted-foreground">No dispatched actions recorded yet.</p> : (
+                <div className="space-y-2">
+                  {recentActions.map((action) => (
+                    <div key={action.id} className="flex items-center justify-between gap-3 border-b border-border/40 pb-2 last:border-0 last:pb-0">
+                      <span className="text-sm text-foreground">{String(action.type).replaceAll("_", " ")}</span>
+                      <span className="text-[0.6875rem] text-muted-foreground">{action.createdAt ? formatPacificDateTime(action.createdAt) : "recently"}</span>
+                    </div>
+                  ))}
+                </div>
               )}
-            </div>
-            {state?.activeMessage && (
-              <p className="text-xs text-accent font-medium">
-                Currently showing: "{state.activeMessage}"
-              </p>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
           <button className="pf-quick-action" onClick={() => onNavigate("schedule")}>
