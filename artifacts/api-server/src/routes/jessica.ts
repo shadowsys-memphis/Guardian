@@ -88,6 +88,60 @@ export async function isCallTestMode(): Promise<boolean> {
   }
 }
 
+/**
+ * True when Pops explicitly told Jessica to stop calling at some point
+ * earlier TODAY (Pacific calendar day). Set by recordContactRefusalPause()
+ * below whenever finalizeCallSession detects a clear refusal-of-contact
+ * phrase in his side of a transcript — distinct from health-data `flagged`,
+ * which only covers clinical severity (severe mood/voices), not "stop
+ * calling me". Checked at the same choke point as isCallTestMode() so every
+ * one of the call-placing jobs is covered without touching each call site.
+ * Resets automatically the next calendar day — a bad evening never becomes
+ * a standing block, and Ray can always still call Pops directly himself.
+ */
+async function hasActiveContactRefusal(): Promise<boolean> {
+  try {
+    const rows = await db.select().from(appSettingsTable)
+      .where(eq(appSettingsTable.key, "call_refusal_pause_date"));
+    return rows[0]?.value === todayPacific();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Pops explicitly asking to stop being called is a different, more urgent
+ * signal than clinical severity (mood/voices `flagged`) or declining a
+ * single task (REFUSE_TASK) — it's a refusal of the call itself. Kept
+ * intentionally narrow (a handful of explicit phrases) so ordinary pushback
+ * like "stop asking so many questions" doesn't trip it.
+ */
+function detectContactRefusal(popsText: string): string | null {
+  const patterns = [/go away/i, /stop\s+(?:\w+\s+)?calling/i, /don'?t call\b/i, /leave me alone/i, /stop bothering/i, /quit calling/i];
+  if (patterns.some((p) => p.test(popsText))) {
+    return popsText.trim().slice(0, 200);
+  }
+  return null;
+}
+
+async function recordContactRefusalPause(sessionId: number, snippet: string): Promise<void> {
+  const today = todayPacific();
+  const detail = `Pops asked calls to stop (session ${sessionId}): "${snippet.replace(/\s+/g, " ")}" — automated calls to Pops paused for the rest of ${today}. Resumes automatically tomorrow; call him directly if you need to reach him today.`;
+  try {
+    await pool.query(
+      `INSERT INTO app_settings (key, value, updated_at) VALUES ('call_refusal_pause_date', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [today]
+    );
+  } catch {}
+  try {
+    await pool.query(
+      `INSERT INTO cron_job_log (job_name, ran_at, outcome, detail) VALUES ('call_refusal_pause', NOW(), 'triggered', $1)`,
+      [detail]
+    );
+  } catch {}
+}
+
 function parseHealthDataTags(text: string): Array<{
   category: string;
   questionId: number | null;
@@ -203,6 +257,14 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
         return { ok: false, status: 400, error: "no_admin_phone", message: "Test mode is on but the ADMIN_PHONE_NUMBER secret is not set — no call placed." };
       }
     } else {
+      if (await hasActiveContactRefusal()) {
+        return {
+          ok: false,
+          status: 423,
+          error: "call_paused_refusal",
+          message: "Pops asked earlier today not to be called again — automated calls to him are paused until tomorrow. Call him directly if you need to reach him now.",
+        };
+      }
       targetPhone = await getPopsPhonenumber();
       if (!targetPhone) {
         return {
@@ -464,6 +526,11 @@ async function finalizeCallSession(
     .map((t) => t.message ?? "")
     .join("\n");
 
+  const popsText = transcript
+    .filter((t) => t.role !== "agent" && typeof t.message === "string")
+    .map((t) => t.message ?? "")
+    .join("\n");
+
   const allText = transcript
     .filter((t) => typeof t.message === "string" && t.message.trim().length > 0)
     .map((t) => `${t.role === "agent" ? "Jessica" : "Pops"}: ${t.message ?? ""}`)
@@ -520,6 +587,16 @@ async function finalizeCallSession(
       : reached
         ? "Phone call with Pops. No structured health data captured."
         : "Call did not reach Pops (no answer or voicemail).");
+
+  // Pops explicitly refusing the call itself (not just one task) pauses
+  // further automated calls to him for the rest of today — see
+  // hasActiveContactRefusal() in triggerOutboundCall().
+  if (popsText) {
+    const refusalSnippet = detectContactRefusal(popsText);
+    if (refusalSnippet) {
+      await recordContactRefusalPause(sessionId, refusalSnippet).catch(() => {});
+    }
+  }
 
   await pool.query(
     `UPDATE call_sessions SET ended_at = NOW(), summary = $1, flagged = $2, transcript = $3, reached = $4 WHERE id = $5`,
