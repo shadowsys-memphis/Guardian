@@ -8,7 +8,7 @@ import { GuardianPage } from "@/pages/guardian";
 import { GuardianSuccessPage } from "@/pages/guardian-success";
 import { VaultGate } from "@/pages/vault-gate";
 import { VaultProvider, useVault } from "@/lib/vault-context";
-import { Home, Phone, ShoppingCart, ShieldAlert, PhoneCall } from "lucide-react";
+import { Home, Phone, ShoppingCart, Settings, PhoneCall } from "lucide-react";
 const AdminView = lazy(() =>
   import("@/pages/admin-view").then((m) => ({ default: m.AdminView }))
 );
@@ -50,7 +50,7 @@ const NAV_ITEMS = [
   { path: "/jessica", label: "Jessica", icon: <Phone size={20} /> },
   { path: "/calls", label: "Calls", icon: <PhoneCall size={20} /> },
   { path: "/shopper", label: "Shopper", icon: <ShoppingCart size={20} /> },
-  { path: "/admin", label: "Admin", icon: <ShieldAlert size={20} /> },
+  { path: "/settings", label: "Settings", icon: <Settings size={20} /> },
 ];
 
 function BottomNav() {
@@ -59,7 +59,10 @@ function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex items-center">
       {NAV_ITEMS.map((item) => {
-        const isActive = location === item.path || (location === "/" && item.path === "/admin");
+        const isActive =
+          location === item.path ||
+          location.startsWith(`${item.path}?`) ||
+          (location === "/" && item.path === "/admin");
         return (
           <button
             key={item.path}
@@ -85,10 +88,10 @@ function PrivateWorkspace() {
     return <VaultGate>{null}</VaultGate>;
   }
 
-  // Tenant sessions (including the public demo) are scoped to br(AI)n's
+  // Tenant sessions (including the public demo) are scoped to Brain Guardian's
   // multi-tenant core — dashboard, schedule, symptoms, inventory — all
-  // reachable inside AdminView. Every other top-level route (Pops' ambient
-  // view, Jessica's phone line, Calls, Shopper, Settings, subscription)
+  // reachable inside AdminView. Every other top-level route (Jessica's phone
+  // line, Calls, Shopper, Settings, subscription)
   // calls one of Ray's local-only specialty tools (see api-server
   // routes/index.ts localRouter) and would just 403. Keep these sessions
   // inside /admin instead of exposing dead links to those routes.

@@ -51,6 +51,8 @@ import {
   Archive,
   Stethoscope,
   SlidersHorizontal,
+  ShieldAlert,
+  Phone,
   MapPin,
   Store,
   Syringe,
@@ -193,11 +195,18 @@ export function AdminView() {
             </button>
           ))}
           {isLocal && (
-            <button onClick={() => navigate("/settings")} className="pf-rail-item">
-              <SlidersHorizontal size={16} />
-              <span className="md:hidden">Settings</span>
-              <span className="hidden md:inline">Settings</span>
-            </button>
+            <>
+              <button onClick={() => navigate("/settings")} className="pf-rail-item">
+                <SlidersHorizontal size={16} />
+                <span className="md:hidden">Settings</span>
+                <span className="hidden md:inline">Settings</span>
+              </button>
+              <button onClick={() => navigate("/my-subscription")} className="pf-rail-item">
+                <CreditCard size={16} />
+                <span className="md:hidden">Workspace</span>
+                <span className="hidden md:inline">Workspace</span>
+              </button>
+            </>
           )}
         </nav>
 
@@ -971,6 +980,7 @@ function HealthSettingsSection() {
 
 function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { isLocal } = useVault();
+  const [, navigate] = useLocation();
   const { data: state } = useGetAppState();
   // Haldol, today's call-assessment summary, and the grocery cart all live
   // behind Ray's local-only specialty tools (see api-server routes/index.ts
@@ -1321,6 +1331,54 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             </button>
           )}
         </div>
+
+        {isLocal && (
+          <div className="mt-5">
+            <p className="pf-zone-label mb-3">Care tools</p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              <button className="pf-quick-action text-left" onClick={() => navigate("/jessica")}>
+                <Phone size={18} className="text-accent" />
+                <span className="text-sm font-medium text-foreground">Jessica call</span>
+                <span className="text-xs text-muted-foreground">Talk with or call through Jessica</span>
+              </button>
+              <button className="pf-quick-action text-left" onClick={() => onNavigate("scripts")}>
+                <Mic size={18} className="text-accent" />
+                <span className="text-sm font-medium text-foreground">Voice scripts</span>
+                <span className="text-xs text-muted-foreground">Review Jessica’s active guidance</span>
+              </button>
+              <button className="pf-quick-action text-left" onClick={() => navigate("/admin/report")}>
+                <FileText size={18} className="text-accent" />
+                <span className="text-sm font-medium text-foreground">Clinical report</span>
+                <span className="text-xs text-muted-foreground">Open weekly and monthly care trends</span>
+              </button>
+              <button className="pf-quick-action text-left" onClick={() => onNavigate("calendar-sync")}>
+                <CalendarPlus size={18} className="text-accent" />
+                <span className="text-sm font-medium text-foreground">Calendar sync</span>
+                <span className="text-xs text-muted-foreground">Push care reminders to Calendar</span>
+              </button>
+              <button className="pf-quick-action text-left" onClick={() => navigate("/settings?tab=jessica")}>
+                <SlidersHorizontal size={18} className="text-accent" />
+                <span className="text-sm font-medium text-foreground">Jessica setup</span>
+                <span className="text-xs text-muted-foreground">Calls, quiet hours, and phone settings</span>
+              </button>
+              <button className="pf-quick-action text-left" onClick={() => navigate("/settings?tab=ai-model")}>
+                <BrainCircuit size={18} className="text-accent" />
+                <span className="text-sm font-medium text-foreground">AI model</span>
+                <span className="text-xs text-muted-foreground">Choose and test Jessica’s AI brain</span>
+              </button>
+              <button className="pf-quick-action text-left" onClick={() => navigate("/settings?tab=system")}>
+                <ShieldAlert size={18} className="text-accent" />
+                <span className="text-sm font-medium text-foreground">Safety alerts</span>
+                <span className="text-xs text-muted-foreground">Calls, medication, and system health</span>
+              </button>
+              <button className="pf-quick-action text-left" onClick={() => navigate("/my-subscription")}>
+                <CreditCard size={18} className="text-accent" />
+                <span className="text-sm font-medium text-foreground">Workspace</span>
+                <span className="text-xs text-muted-foreground">Local workspace and access status</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {isLocal && (
           <div className="mt-5">

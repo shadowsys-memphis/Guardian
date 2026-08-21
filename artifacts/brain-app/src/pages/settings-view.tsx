@@ -51,6 +51,13 @@ import { useToast } from "@/hooks/use-toast";
 const WORKSPACE_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 type SettingsTab = "general" | "jessica" | "store" | "medications" | "ai-model" | "access" | "system";
+const SETTINGS_TAB_IDS: readonly SettingsTab[] = ["general", "jessica", "store", "medications", "ai-model", "access", "system"];
+
+function requestedSettingsTab(): SettingsTab {
+  if (typeof window === "undefined") return "general";
+  const requested = new URLSearchParams(window.location.search).get("tab");
+  return SETTINGS_TAB_IDS.includes(requested as SettingsTab) ? requested as SettingsTab : "general";
+}
 
 function TouchpointsPanel() {
   const { toast } = useToast();
@@ -1387,8 +1394,12 @@ function TabButton({
 
 // ─── Main Settings View ───────────────────────────────────────────────────────
 export function SettingsView() {
-  const [tab, setTab] = useState<SettingsTab>("general");
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const [tab, setTab] = useState<SettingsTab>(requestedSettingsTab);
+
+  useEffect(() => {
+    setTab(requestedSettingsTab());
+  }, [location]);
 
   const TABS: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: "general", label: "General", icon: <Settings size={16} /> },
@@ -1444,7 +1455,10 @@ export function SettingsView() {
             <TabButton
               key={t.id}
               active={tab === t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                setTab(t.id);
+                navigate(`/settings?tab=${t.id}`);
+              }}
               icon={t.icon}
               label={t.label}
             />
