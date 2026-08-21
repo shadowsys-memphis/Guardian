@@ -3,171 +3,148 @@ import { db } from "@workspace/db";
 import {
   symptomLogsTable,
   haldolCycleTable,
-  scheduleTasksTable,
   healthDataPointsTable,
+  healthQuestionsTable,
   callSessionsTable,
+  medicationsTable,
   medicationAdjustmentsTable,
   medicalAppointmentsTable,
+  careEventsTable,
 } from "@workspace/db/schema";
-import { desc, gte, eq } from "drizzle-orm";
+import { desc, asc, gte, lte, eq, and, inArray } from "drizzle-orm";
+import { ensureCareEventsTable } from "../lib/hermes";
+import {
+  resolveReportWindow,
+  assembleDoctorReport,
+  type ReportPeriod,
+} from "../lib/doctor-report";
 
 const router: IRouter = Router();
 
-router.get("/reports/clinical", async (req, res) => {
+function getTenantId(req: { tenantSession?: { type: string; sub: string } }): string {
+  const session = req.tenantSession;
+  return session?.type === "local" ? "local" : (session?.sub ?? "local");
+}
+
+router.get("/reports/doctor", async (req, res) => {
   try {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const [
-      symptomLogs,
-      haldolRows,
-      completedTasks,
-      totalTasks,
-      dataPoints,
-      medAdjustments,
-      upcomingAppts,
-    ] = await Promise.all([
-      db
-        .select()
-        .from(symptomLogsTable)
-        .where(gte(symptomLogsTable.loggedAt, thirtyDaysAgo))
-        .orderBy(desc(symptomLogsTable.loggedAt))
-        .limit(60),
-      db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1),
-      db
-        .select()
-        .from(scheduleTasksTable)
-        .where(eq(scheduleTasksTable.isCompleted, true)),
-      db.select().from(scheduleTasksTable),
-      db
-        .select()
-        .from(healthDataPointsTable)
-        .where(gte(healthDataPointsTable.createdAt, thirtyDaysAgo))
-        .orderBy(desc(healthDataPointsTable.createdAt))
-        .limit(200),
-      db
-        .select()
-        .from(medicationAdjustmentsTable)
-        .orderBy(desc(medicationAdjustmentsTable.adjustmentDate))
-        .limit(20),
-      db
-        .select()
-        .from(medicalAppointmentsTable)
-        .orderBy(desc(medicalAppointmentsTable.appointmentDate))
-        .limit(10),
-    ]);
-
-    const haldol = haldolRows[0] ?? null;
-    const complianceRate =
-      totalTasks.length > 0
-        ? Math.round((completedTasks.length / totalTasks.length) * 100)
-        : 0;
-
-    const ptsdDays = symptomLogs.filter((l) => l.ptsdTrigger).length;
-    const avgHallucination =
-      symptomLogs.length > 0
-        ? (
-            symptomLogs.reduce((s, l) => s + l.hallucinationIntensity, 0) /
-            symptomLogs.length
-          ).toFixed(1)
-        : "0.0";
-    const avgMotivation =
-      symptomLogs.length > 0
-        ? (
-            symptomLogs.reduce((s, l) => s + l.motivationLevel, 0) /
-            symptomLogs.length
-          ).toFixed(1)
-        : "0.0";
-
-    const categoryGroups: Record<string, { flagged: number; total: number }> =
-      {};
-    for (const dp of dataPoints) {
-      if (!categoryGroups[dp.category])
-        categoryGroups[dp.category] = { flagged: 0, total: 0 };
-      categoryGroups[dp.category].total++;
-      if (dp.flagged) categoryGroups[dp.category].flagged++;
+    // Defense-in-depth: most tables read below (call_sessions, medications,
+    // haldol_cycle, medication_adjustments, medical_appointments,
+    // health_data_points) have no tenant_id column, so this report cannot be
+    // tenant-isolated yet. The router already mounts it local-only; this
+    // guard keeps that boundary explicit if the route is ever re-tiered.
+    if (req.tenantSession && req.tenantSession.type !== "local") {
+      res.status(403).json({ error: "Doctor report is not available for tenant workspaces yet" });
+      return;
     }
 
-    const lines: string[] = [
-      "═══════════════════════════════════════════════════",
-      "  BR(AI)N CLINICAL DIGEST — DOCTOR REPORT",
-      `  Generated: ${new Date().toLocaleString()}`,
-      "═══════════════════════════════════════════════════",
-      "",
-      "── PATIENT OVERVIEW ────────────────────────────",
-      "  Patient: Pops (Veteran, DOD: Vietnam Era)",
-      "  Diagnoses: PTSD · Schizophrenia · Auditory Hallucinations",
-      "  Primary Caregiver: Ray (son)",
-      "  Reporting Period: Last 30 days",
-      "",
-      "── MEDICATION STATUS ───────────────────────────",
-      haldol
-        ? [
-            `  Current Medication: Haldol Decanoate (Haloperidol Decanoate)`,
-            `  Last Injection Date: ${haldol.lastInjectionDate}`,
-            `  Cycle Notes: ${haldol.notes ?? "None recorded"}`,
-          ].join("\n")
-        : "  No Haldol cycle data on record.",
-      "",
-      "── MEDICATION ADJUSTMENTS ──────────────────────",
-      medAdjustments.length === 0
-        ? "  No adjustments recorded."
-        : medAdjustments
-            .map(
-              (a) =>
-                `  ${a.adjustmentDate}  ${a.medication}  ${a.previousDose ?? "?"} → ${a.newDose}  (${a.reason ?? "no reason noted"})  Logged by: ${a.loggedBy}`
-            )
-            .join("\n"),
-      "",
-      "── SYMPTOM LOG SUMMARY (30 days) ───────────────",
-      `  Total Logged Events: ${symptomLogs.length}`,
-      `  PTSD Trigger Days: ${ptsdDays}`,
-      `  Avg Hallucination Intensity: ${avgHallucination} / 5`,
-      `  Avg Motivation Level: ${avgMotivation} / 5`,
-      "",
-      "── HEALTH ASSESSMENT TRENDS ────────────────────",
-      Object.entries(categoryGroups).length === 0
-        ? "  No health assessment data in period."
-        : Object.entries(categoryGroups)
-            .map(
-              ([cat, { flagged, total }]) =>
-                `  ${cat.padEnd(20)} ${total} assessments, ${flagged} flagged`
-            )
-            .join("\n"),
-      "",
-      "── CARE TASK COMPLIANCE ────────────────────────",
-      `  Completed: ${completedTasks.length} / ${totalTasks.length} tasks (${complianceRate}%)`,
-      "",
-      "── UPCOMING APPOINTMENTS ───────────────────────",
-      upcomingAppts.length === 0
-        ? "  No appointments on record."
-        : upcomingAppts
-            .map(
-              (a) =>
-                `  ${a.appointmentDate} ${a.appointmentTime}  ${a.provider}  [${a.type}]  ${a.location ?? ""}  ${a.notes ?? ""}`
-            )
-            .join("\n"),
-      "",
-      "── RECENT SYMPTOM LOG ──────────────────────────",
-      symptomLogs.slice(0, 10).length === 0
-        ? "  No entries."
-        : symptomLogs
-            .slice(0, 10)
-            .map(
-              (l) =>
-                `  ${new Date(l.loggedAt).toLocaleDateString()}  PTSD:${l.ptsdTrigger ? "Y" : "N"}  Hall:${l.hallucinationIntensity}/5  Mot:${l.motivationLevel}/5  ${l.behaviorNotes ?? ""}`
-            )
-            .join("\n"),
-      "",
-      "═══════════════════════════════════════════════════",
-      "  END OF REPORT — br(AI)n Guardian OS",
-      "═══════════════════════════════════════════════════",
-    ];
+    const period: ReportPeriod = req.query["period"] === "monthly" ? "monthly" : "weekly";
+    const window = resolveReportWindow(period);
+    const windowStart = new Date(window.startMs);
+    // Tenant scope comes from the session only — never from client input.
+    const tenantId = getTenantId(req);
 
-    res.json({ report: lines.join("\n"), generatedAt: new Date().toISOString() });
+    // care_events may not exist yet on a fresh DB (created lazily via raw SQL).
+    await ensureCareEventsTable();
+
+    const [sessions, symptomLogs, careEvents, medications, haldolRows, adjustments, appointments] =
+      await Promise.all([
+        // Project only the check-in metadata — call_sessions.transcript holds
+        // full call transcripts and must not be hauled into memory here.
+        db
+          .select({
+            id: callSessionsTable.id,
+            sessionDate: callSessionsTable.sessionDate,
+            startedAt: callSessionsTable.startedAt,
+            endedAt: callSessionsTable.endedAt,
+            summary: callSessionsTable.summary,
+            flagged: callSessionsTable.flagged,
+            elevenlabsConversationId: callSessionsTable.elevenlabsConversationId,
+            reached: callSessionsTable.reached,
+          })
+          .from(callSessionsTable)
+          .where(
+            and(
+              gte(callSessionsTable.sessionDate, window.periodStart),
+              lte(callSessionsTable.sessionDate, window.periodEnd),
+            ),
+          )
+          .orderBy(asc(callSessionsTable.sessionDate)),
+        db
+          .select()
+          .from(symptomLogsTable)
+          .where(
+            and(
+              eq(symptomLogsTable.tenantId, tenantId),
+              gte(symptomLogsTable.loggedAt, windowStart),
+            ),
+          )
+          .orderBy(asc(symptomLogsTable.loggedAt)),
+        db
+          .select()
+          .from(careEventsTable)
+          .where(
+            and(
+              eq(careEventsTable.tenantId, tenantId),
+              gte(careEventsTable.createdAt, windowStart),
+            ),
+          )
+          .orderBy(asc(careEventsTable.createdAt)),
+        db.select().from(medicationsTable).where(eq(medicationsTable.active, true)),
+        db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1),
+        db
+          .select()
+          .from(medicationAdjustmentsTable)
+          .where(
+            and(
+              gte(medicationAdjustmentsTable.adjustmentDate, window.periodStart),
+              lte(medicationAdjustmentsTable.adjustmentDate, window.periodEnd),
+            ),
+          )
+          .orderBy(asc(medicationAdjustmentsTable.adjustmentDate)),
+        db
+          .select()
+          .from(medicalAppointmentsTable)
+          .where(gte(medicalAppointmentsTable.appointmentDate, window.periodStart))
+          .orderBy(
+            asc(medicalAppointmentsTable.appointmentDate),
+            asc(medicalAppointmentsTable.appointmentTime),
+          ),
+      ]);
+
+    const sessionIds = sessions.map((s) => s.id);
+    const healthPoints = sessionIds.length
+      ? await db
+          .select()
+          .from(healthDataPointsTable)
+          .where(inArray(healthDataPointsTable.sessionId, sessionIds))
+      : [];
+    const questionIds = [
+      ...new Set(healthPoints.map((p) => p.questionId).filter((id): id is number => id != null)),
+    ];
+    const questions = questionIds.length
+      ? await db
+          .select()
+          .from(healthQuestionsTable)
+          .where(inArray(healthQuestionsTable.id, questionIds))
+      : [];
+
+    const report = assembleDoctorReport(window, {
+      sessions,
+      healthPoints,
+      questions,
+      symptomLogs,
+      careEvents,
+      medications,
+      haldol: haldolRows[0] ?? null,
+      adjustments,
+      appointments,
+    });
+
+    res.json(report);
   } catch (err) {
-    req.log.error({ err }, "Failed to generate clinical report");
-    res.status(500).json({ error: "Failed to generate clinical report" });
+    req.log.error({ err }, "Failed to generate doctor report");
+    res.status(500).json({ error: "Failed to generate doctor report" });
   }
 });
 

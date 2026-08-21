@@ -26,6 +26,9 @@ export default defineConfig({
       // the real @workspace/db would throw at import-time (no DATABASE_URL),
       // so tests mock it via vi.mock() — but the alias still needs to point
       // somewhere for Vitest's module resolver to find the package.json.
+      // The /schema entry must come first: the bare alias would otherwise
+      // rewrite "@workspace/db/schema" into ".../index.ts/schema".
+      "@workspace/db/schema": path.resolve(__dirname, "../../lib/db/src/schema/index.ts"),
       "@workspace/db": path.resolve(__dirname, "../../lib/db/src/index.ts"),
       "@workspace/integrations-gemini-ai": path.resolve(
         __dirname,

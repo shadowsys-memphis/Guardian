@@ -1,293 +1,327 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { formatPacificDateTime, formatPacificLongDate } from "@/lib/time";
-import { Printer, FileText, TrendingUp, AlertTriangle, CheckCircle2, XCircle, MinusCircle, Activity, ChevronLeft } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
-import { useGetWeeklyReport, useGetMonthlyReport } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { formatPacificDateTime, formatPacificLongDate, formatPacificDate } from "@/lib/time";
+import { Printer, FileText, Download, Flag, ChevronLeft, Info } from "lucide-react";
+import { useGetDoctorReport, type DoctorReport as DoctorReportPayload } from "@workspace/api-client-react";
+import { formatDoctorReportText, SOURCE_LABELS, NO_DATA, labelType } from "@/lib/doctor-report-text";
 import { Button } from "@/components/ui/button";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  mood: "Mood", medication: "Medication", sleep: "Sleep", appetite: "Appetite",
-  cognition: "Cognition", voices: "Voices", energy: "Energy", task: "Tasks",
-};
-const CATEGORY_ICONS: Record<string, string> = {
-  mood: "😐", medication: "💊", sleep: "🌙", appetite: "🍽️",
-  cognition: "🧠", voices: "👂", energy: "⚡", task: "✅",
-};
-const CAT_COLORS: Record<string, string> = {
-  mood: "#d97087", medication: "#22c55e", sleep: "#818cf8", appetite: "#f97316",
-  cognition: "#06b6d4", voices: "#ec4899", energy: "#84cc16", task: "#a78bfa",
-};
-const CATS = ["mood", "medication", "sleep", "appetite", "cognition", "voices", "energy", "task"];
-
-function StatusIcon({ status }: { status: string }) {
-  if (status === "green") return <CheckCircle2 size={16} className="text-green-600 print:text-green-700" />;
-  if (status === "yellow") return <MinusCircle size={16} className="text-sky-500 print:text-sky-600" />;
-  if (status === "red") return <XCircle size={16} className="text-red-500 print:text-red-600" />;
-  return <MinusCircle size={16} className="text-gray-400" />;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === "green" ? "bg-green-50 text-green-700 border-green-200 print:bg-green-50 print:text-green-800" :
-    status === "yellow" ? "bg-sky-50 text-sky-700 border-sky-200 print:bg-sky-50 print:text-sky-800" :
-    status === "red" ? "bg-red-50 text-red-700 border-red-200 print:bg-red-50 print:text-red-800" :
-    "bg-gray-50 text-gray-500 border-gray-200";
-  const label = status === "green" ? "Stable" : status === "yellow" ? "Monitor" : status === "red" ? "Concern" : "No Data";
-  return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-semibold ${cls}`}><StatusIcon status={status} />{label}</span>;
-}
-
-function WeeklyTab() {
-  const { data: report, isLoading, error } = useGetWeeklyReport();
-
-  if (isLoading) return <div className="py-20 text-center text-muted-foreground">Loading weekly report…</div>;
-  if (error || !report) return <div className="py-20 text-center text-destructive">Failed to load report. No data available yet.</div>;
-
-  const r = report as any;
-
+function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <div className="space-y-8 report-content">
-      <section className="print:break-inside-avoid">
-        <h2 className="text-xl font-bold text-gray-900 mb-1 uppercase tracking-wide border-b border-gray-200 pb-2">
-          Summary Narrative
-        </h2>
-        <p className="text-gray-700 leading-relaxed mt-3">{r.narrative}</p>
-        <div className="flex gap-6 mt-4 text-sm text-gray-600">
-          <span><strong>{r.sessionCount}</strong> check-in calls</span>
-          <span><strong>{r.voiceActiveDays}</strong> voice-active days</span>
-          <span><strong>{r.flaggedEvents?.length ?? 0}</strong> flagged events</span>
-        </div>
-      </section>
-
-      <section className="print:break-inside-avoid">
-        <h2 className="text-xl font-bold text-gray-900 mb-4 uppercase tracking-wide border-b border-gray-200 pb-2">
-          Category Status
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {CATS.map((cat) => {
-            const status = r.categoryStatus?.[cat] ?? "unknown";
-            const bd = r.categoryBreakdown?.[cat];
-            return (
-              <div key={cat} className="border rounded-lg p-3 bg-white print:border-gray-300 text-center">
-                <div className="text-2xl mb-1">{CATEGORY_ICONS[cat]}</div>
-                <div className="text-xs font-bold uppercase tracking-widest text-gray-600 mb-2">{CATEGORY_LABELS[cat]}</div>
-                <StatusBadge status={status} />
-                {bd && (
-                  <div className="text-xs text-gray-400 mt-2">
-                    {bd.sessionCount} sessions · {bd.flaggedCount} flagged
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {r.flaggedEvents?.length > 0 && (
-        <section className="print:break-inside-avoid">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 uppercase tracking-wide border-b border-gray-200 pb-2">
-            Flagged / Unusual Events
-          </h2>
-          <div className="space-y-3">
-            {r.flaggedEvents.map((ev: any, i: number) => (
-              <div key={i} className="border border-red-200 bg-red-50 rounded-lg p-3 print:border-red-300">
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertTriangle size={14} className="text-red-500" />
-                  <span className="text-xs font-bold text-red-600 uppercase tracking-wider">{CATEGORY_LABELS[ev.category] ?? ev.category}</span>
-                  <span className="text-xs text-gray-500">{ev.date}</span>
-                  {ev.parsedIntensity && ev.parsedIntensity !== "none" && (
-                    <span className="text-xs bg-red-100 text-red-700 px-1.5 rounded font-semibold">{ev.parsedIntensity}</span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-800 italic">"{ev.rawResponse}"</p>
-                {ev.parsedValue && <p className="text-xs text-gray-500 mt-1">Interpreted: {ev.parsedValue}</p>}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {r.symptomLogs?.length > 0 && (
-        <section className="print:break-inside-avoid">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 uppercase tracking-wide border-b border-gray-200 pb-2">
-            Caregiver Symptom Logs
-          </h2>
-          <div className="space-y-2">
-            {r.symptomLogs.map((log: any, i: number) => (
-              <div key={i} className="border rounded-lg p-3 bg-white text-sm print:border-gray-300">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-xs text-gray-500">{formatPacificDateTime(log.loggedAt)}</span>
-                  {log.ptsdTrigger && <span className="text-xs bg-red-100 text-red-700 px-1.5 rounded font-semibold">PTSD Trigger</span>}
-                  <span className="text-xs text-gray-600">Hallucination intensity: <strong>{log.hallucinationIntensity}/10</strong></span>
-                  <span className="text-xs text-gray-600">Motivation: <strong>{log.motivationLevel}/5</strong></span>
-                </div>
-                {log.behaviorNotes && <p className="text-xs text-gray-500 mt-1 italic">Notes: {log.behaviorNotes}</p>}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {r.foodPreferences?.length > 0 && (
-        <section className="print:break-inside-avoid">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 uppercase tracking-wide border-b border-gray-200 pb-2">
-            Food Preferences & Cravings This Week
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {[...new Set(r.foodPreferences as string[])].map((food, i) => (
-              <span key={i} className="px-3 py-1 bg-green-50 border border-green-200 text-green-800 rounded-full text-sm print:border-green-300">
-                🍽️ {food}
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {r.sessionCount === 0 && (
-        <div className="py-12 text-center text-gray-400 border border-dashed rounded-lg">
-          <FileText size={32} className="mx-auto mb-2 opacity-40" />
-          <p>No check-in call data for this week yet.</p>
-        </div>
-      )}
-    </div>
+    <h2 className="text-lg font-bold text-gray-900 mb-3 uppercase tracking-wide border-b border-gray-200 pb-2">
+      {children}
+    </h2>
   );
 }
 
-function MonthlyTab() {
-  const { data: report, isLoading, error } = useGetMonthlyReport();
-  const [visibleCats, setVisibleCats] = useState<Set<string>>(new Set(["mood", "medication", "sleep", "voices"]));
+function NoData() {
+  return <p className="text-sm text-gray-500 italic">{NO_DATA}</p>;
+}
 
-  if (isLoading) return <div className="py-20 text-center text-muted-foreground">Loading monthly report…</div>;
-  if (error || !report) return <div className="py-20 text-center text-destructive">Failed to load report. No data available yet.</div>;
+function SourceTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-gray-300 bg-gray-50 text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+      {children}
+    </span>
+  );
+}
 
-  const r = report as any;
+function FlagTag() {
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-amber-300 bg-amber-50 text-[11px] font-semibold text-amber-700 uppercase tracking-wide">
+      <Flag size={10} /> System flag
+    </span>
+  );
+}
 
-  const trendData: any[] = r.trendData ?? [];
-  const dates = [...new Set(trendData.map((d: any) => d.date as string))].sort();
-  const chartData = dates.map((date) => {
-    const row: Record<string, any> = { date: date.slice(5) };
-    for (const cat of CATS) {
-      const pt = trendData.find((d: any) => d.date === date && d.category === cat);
-      if (pt?.averageValue !== null && pt?.averageValue !== undefined) row[cat] = parseFloat(pt.averageValue.toFixed(2));
-    }
-    return row;
-  });
-
-  const toggleCat = (cat: string) => {
-    setVisibleCats((prev) => {
-      const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
-      return next;
-    });
-  };
+function ReportBody({ report }: { report: DoctorReportPayload }) {
+  const a = report.dataAvailability;
+  const meds = report.medications;
 
   return (
     <div className="space-y-8 report-content">
-      <section className="print:break-inside-avoid">
-        <h2 className="text-xl font-bold text-gray-900 mb-1 uppercase tracking-wide border-b border-gray-200 pb-2">
-          Monthly Summary
-        </h2>
-        <p className="text-gray-700 leading-relaxed mt-3">{r.narrative}</p>
-      </section>
-
-      <section className="print:break-inside-avoid">
-        <h2 className="text-xl font-bold text-gray-900 mb-4 uppercase tracking-wide border-b border-gray-200 pb-2">
-          Key Statistics
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total Sessions" value={r.sessionCount} unit="calls" color="blue" />
-          <StatCard label="Medication Adherence" value={r.medicationAdherenceRate !== null && r.medicationAdherenceRate !== undefined ? `${r.medicationAdherenceRate}%` : "N/A"} color={r.medicationAdherenceRate >= 80 ? "green" : "yellow"} />
-          <StatCard label="Flagged Days" value={r.flaggedDays} color={r.flaggedDays === 0 ? "green" : r.flaggedDays <= 3 ? "yellow" : "red"} />
-          <StatCard label="Voice Active Days" value={r.voiceActiveDays} unit={`(${r.voiceActiveRate}%)`} color={r.voiceActiveDays === 0 ? "green" : "yellow"} />
+      <section className="print:break-inside-avoid border border-gray-300 rounded-lg p-4 bg-gray-50">
+        <p className="text-sm text-gray-700 leading-relaxed">{report.scopeStatement}</p>
+        <div className="mt-3 text-xs text-gray-600 leading-relaxed">
+          <span className="font-bold uppercase tracking-wide">Data source legend:</span>{" "}
+          <strong>Recorded response</strong> — wording documented from a check-in question ·{" "}
+          <strong>Caregiver entry</strong> — entered by the caregiver ·{" "}
+          <strong>System flag</strong> — automated threshold marker, not a clinical judgment ·{" "}
+          <strong>Care event</strong> — action recorded in the app's care log
         </div>
       </section>
 
       <section className="print:break-inside-avoid">
-        <h2 className="text-xl font-bold text-gray-900 mb-4 uppercase tracking-wide border-b border-gray-200 pb-2">
-          30-Day Category Status
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {CATS.map((cat) => (
-            <div key={cat} className="border rounded-lg p-3 bg-white print:border-gray-300 text-center">
-              <div className="text-2xl mb-1">{CATEGORY_ICONS[cat]}</div>
-              <div className="text-xs font-bold uppercase tracking-widest text-gray-600 mb-2">{CATEGORY_LABELS[cat]}</div>
-              <StatusBadge status={r.categoryStatus?.[cat] ?? "unknown"} />
+        <SectionHeading>Documented records in this period</SectionHeading>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          {[
+            ["Check-in sessions", a.checkIns],
+            ["Recorded responses", a.observations],
+            ["Caregiver symptom entries", a.symptomEntries],
+            ["Care task outcomes", a.taskOutcomeEvents],
+            ["Medication events", a.medicationEvents],
+            ["Medication adjustments", a.medicationAdjustments],
+            ["Care events", a.careEvents],
+            ["Appointments in period", a.appointmentsInPeriod],
+          ].map(([label, count]) => (
+            <div key={label} className="border rounded-lg p-3 bg-white print:border-gray-300 text-center">
+              <div className="text-xl font-bold text-gray-800">{count}</div>
+              <div className="text-xs text-gray-500 uppercase tracking-widest mt-1">{label}</div>
             </div>
           ))}
         </div>
+        {report.observationCategories.length > 0 && (
+          <p className="text-xs text-gray-500 mt-3">
+            Responses by topic:{" "}
+            {report.observationCategories
+              .map((c) => `${labelType(c.category)} ${c.responseCount}${c.systemFlagCount > 0 ? ` (${c.systemFlagCount} flagged)` : ""}`)
+              .join(" · ")}
+          </p>
+        )}
       </section>
 
-      {chartData.length > 0 && (
-        <section className="print:break-inside-avoid">
-          <h2 className="text-xl font-bold text-gray-900 mb-2 uppercase tracking-wide border-b border-gray-200 pb-2">
-            Trend Charts
-          </h2>
-          <div className="print:hidden flex flex-wrap gap-2 mb-4">
-            {CATS.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => toggleCat(cat)}
-                className={`px-2.5 py-1 rounded border text-xs font-semibold transition-colors ${visibleCats.has(cat) ? "border-transparent text-white" : "border-gray-300 text-gray-500 bg-white"}`}
-                style={visibleCats.has(cat) ? { backgroundColor: CAT_COLORS[cat], borderColor: CAT_COLORS[cat] } : {}}
-              >
-                {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
-              </button>
+      <section className="print:break-inside-avoid">
+        <SectionHeading>Medications</SectionHeading>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-gray-700 mb-1">Current medication list (as configured by caregiver)</h3>
+            {meds.activeMedications.length === 0 ? (
+              <NoData />
+            ) : (
+              <ul className="text-sm text-gray-800 space-y-1">
+                {meds.activeMedications.map((m, i) => (
+                  <li key={i} className="border rounded p-2 bg-white print:border-gray-300">
+                    <strong>{m.name}</strong> {m.dose} · {m.frequency} · {m.timeOfDay}
+                    {m.notes && <span className="text-gray-500"> — {m.notes}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-gray-700 mb-1">Injection record</h3>
+            {meds.injectionCycle ? (
+              <div className="text-sm text-gray-800 border rounded p-2 bg-white print:border-gray-300">
+                Last documented injection: <strong>{meds.injectionCycle.lastInjectionDate}</strong>
+                {meds.injectionCycle.doseMg != null && <> ({meds.injectionCycle.doseMg} mg)</>} · prescriber-set interval{" "}
+                {meds.injectionCycle.intervalDays} days · {meds.injectionCycle.daysSinceInjection} day(s) since last documented injection.
+                <div className="text-xs text-gray-500 mt-1">
+                  Next date by interval arithmetic (computed, not a recommendation): {meds.injectionCycle.nextInjectionDate}
+                </div>
+                {meds.injectionCycle.notes && (
+                  <div className="text-xs text-gray-500 mt-1">Caregiver notes: {meds.injectionCycle.notes}</div>
+                )}
+              </div>
+            ) : (
+              <NoData />
+            )}
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-gray-700 mb-1">Medication adjustments (caregiver-recorded)</h3>
+            {meds.adjustments.length === 0 ? (
+              <NoData />
+            ) : (
+              <ul className="text-sm text-gray-800 space-y-1">
+                {meds.adjustments.map((adj, i) => (
+                  <li key={i} className="border rounded p-2 bg-white print:border-gray-300">
+                    {adj.adjustmentDate}: <strong>{adj.medication}</strong>{" "}
+                    {adj.previousDose ?? "(previous dose not documented)"} → {adj.newDose}
+                    {adj.reason ? <span className="text-gray-500"> — reason recorded: {adj.reason}</span> : <span className="text-gray-500"> — no reason documented</span>}
+                    <span className="text-xs text-gray-400"> · logged by {adj.loggedBy}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-gray-700 mb-1">Medication confirmations / refusals</h3>
+            {meds.medEvents.length === 0 ? (
+              <NoData />
+            ) : (
+              <ul className="text-sm text-gray-800 space-y-1">
+                {meds.medEvents.map((ev, i) => (
+                  <li key={i} className="border rounded p-2 bg-white print:border-gray-300 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-gray-500">{formatPacificDateTime(ev.occurredAt)}</span>
+                    <SourceTag>Care event</SourceTag>
+                    <span className={ev.outcome === "refused" ? "font-semibold text-red-700" : "font-semibold"}>{ev.outcome}</span>
+                    {ev.detail && <span className="text-gray-600">{ev.detail}</span>}
+                    <span className="text-xs text-gray-400">recorded by {ev.recordedBy} via {labelType(ev.source)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="print:break-inside-avoid">
+        <SectionHeading>Recorded check-in responses</SectionHeading>
+        {report.observations.length === 0 ? (
+          <NoData />
+        ) : (
+          <div className="space-y-2">
+            {report.observations.map((o, i) => (
+              <div key={i} className="border rounded-lg p-3 bg-white print:border-gray-300">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="text-xs text-gray-500">{formatPacificDateTime(o.recordedAt)}</span>
+                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{labelType(o.category)}</span>
+                  <SourceTag>Recorded response — {SOURCE_LABELS[o.source] ?? o.source}</SourceTag>
+                  {o.systemFlagged && <FlagTag />}
+                </div>
+                {o.questionText && <p className="text-xs text-gray-500">Question asked: {o.questionText}</p>}
+                <p className="text-sm text-gray-800 italic">"{o.response}"</p>
+              </div>
             ))}
           </div>
-          <div className="bg-white border rounded-lg p-4 print:border-gray-300">
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#9ca3af" }} />
-                <YAxis domain={[0, 1]} tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `${Math.round(v * 100)}%`} />
-                <Tooltip
-                  contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", fontSize: 11, borderRadius: 6 }}
-                  formatter={(v: number, name: string) => [`${Math.round(v * 100)}%`, CATEGORY_LABELS[name] ?? name]}
-                />
-                <Legend formatter={(name) => `${CATEGORY_ICONS[name] ?? ""} ${CATEGORY_LABELS[name] ?? name}`} />
-                {CATS.filter((c) => visibleCats.has(c)).map((cat) => (
-                  <Line key={cat} type="monotone" dataKey={cat} stroke={CAT_COLORS[cat]} strokeWidth={2} dot={false} connectNulls />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      )}
+        )}
+      </section>
 
-      {r.sessionCount === 0 && (
-        <div className="py-12 text-center text-gray-400 border border-dashed rounded-lg">
-          <Activity size={32} className="mx-auto mb-2 opacity-40" />
-          <p>No data recorded in the past 30 days.</p>
+      <section className="print:break-inside-avoid">
+        <SectionHeading>Caregiver symptom entries</SectionHeading>
+        {report.symptomEntries.length === 0 ? (
+          <NoData />
+        ) : (
+          <div className="space-y-2">
+            {report.symptomEntries.map((s, i) => (
+              <div key={i} className="border rounded-lg p-3 bg-white text-sm print:border-gray-300">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-gray-500">{formatPacificDateTime(s.loggedAt)}</span>
+                  <SourceTag>Caregiver entry — {s.loggedBy}</SourceTag>
+                  <span className="text-xs text-gray-600">PTSD trigger noted: <strong>{s.ptsdTrigger ? "yes" : "no"}</strong></span>
+                  <span className="text-xs text-gray-600">Hallucination intensity recorded: <strong>{s.hallucinationIntensity}</strong></span>
+                  <span className="text-xs text-gray-600">Motivation recorded: <strong>{s.motivationLevel}</strong></span>
+                </div>
+                {s.notes && <p className="text-xs text-gray-500 mt-1 italic">Notes as documented: "{s.notes}"</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="print:break-inside-avoid">
+        <SectionHeading>Care task outcomes</SectionHeading>
+        {report.taskOutcomes.entries.length === 0 ? (
+          <NoData />
+        ) : (
+          <>
+            <p className="text-sm text-gray-600 mb-2">
+              Recorded in period: <strong>{report.taskOutcomes.counts.completed}</strong> completed,{" "}
+              <strong>{report.taskOutcomes.counts.refused}</strong> refused.
+            </p>
+            <div className="space-y-1">
+              {report.taskOutcomes.entries.map((t, i) => (
+                <div key={i} className="border rounded p-2 bg-white text-sm print:border-gray-300 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-gray-500">{formatPacificDateTime(t.occurredAt)}</span>
+                  <span>{t.taskTitle ?? "(task name not documented)"}</span>
+                  <span className={t.outcome === "refused" ? "font-semibold text-red-700" : "font-semibold text-gray-800"}>{t.outcome}</span>
+                  <span className="text-xs text-gray-400">recorded by {t.recordedBy} via {labelType(t.source)}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="print:break-inside-avoid">
+        <SectionHeading>Care events</SectionHeading>
+        {report.careEvents.length === 0 ? (
+          <NoData />
+        ) : (
+          <div className="space-y-1">
+            {report.careEvents.map((ev, i) => (
+              <div key={i} className="border rounded p-2 bg-white text-sm print:border-gray-300 flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500">{formatPacificDateTime(ev.occurredAt)}</span>
+                <SourceTag>Care event</SourceTag>
+                <span className="font-semibold text-gray-800">{labelType(ev.eventType)}</span>
+                {ev.description && <span className="text-gray-600">{ev.description}</span>}
+                {ev.severity && <span className="text-xs text-gray-600">severity recorded: {ev.severity}</span>}
+                <span className="text-xs text-gray-400">{ev.actor} via {labelType(ev.source)} · {ev.outcome}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="print:break-inside-avoid">
+        <SectionHeading>Check-in sessions</SectionHeading>
+        {report.checkIns.length === 0 ? (
+          <NoData />
+        ) : (
+          <div className="space-y-1">
+            {report.checkIns.map((c, i) => (
+              <div key={i} className="border rounded p-2 bg-white text-sm print:border-gray-300">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-gray-500">{formatPacificDate(c.sessionDate + "T12:00:00Z")}</span>
+                  <SourceTag>{SOURCE_LABELS[c.source] ?? c.source}</SourceTag>
+                  {!c.reached && <span className="text-xs text-gray-600">not reached</span>}
+                  {c.systemFlagged && <FlagTag />}
+                </div>
+                {c.automatedSummary && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    <span className="font-semibold">Automated summary (AI-generated, not a clinical assessment):</span>{" "}
+                    {c.automatedSummary}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="print:break-inside-avoid">
+        <SectionHeading>Appointments</SectionHeading>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-gray-700 mb-1">In reporting period (chronological)</h3>
+            {report.appointments.inPeriod.length === 0 ? (
+              <NoData />
+            ) : (
+              <AppointmentList items={report.appointments.inPeriod} />
+            )}
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-gray-700 mb-1">Upcoming (chronological)</h3>
+            {report.appointments.upcoming.length === 0 ? (
+              <p className="text-sm text-gray-500 italic">None documented.</p>
+            ) : (
+              <AppointmentList items={report.appointments.upcoming} />
+            )}
+          </div>
         </div>
-      )}
+      </section>
     </div>
   );
 }
 
-function StatCard({ label, value, unit, color }: { label: string; value: any; unit?: string; color?: string }) {
-  const colorCls =
-    color === "green" ? "text-green-700" :
-    color === "yellow" ? "text-sky-600" :
-    color === "red" ? "text-red-600" :
-    color === "blue" ? "text-blue-700" :
-    "text-gray-800";
+function AppointmentList({ items }: { items: DoctorReportPayload["appointments"]["inPeriod"] }) {
   return (
-    <div className="border rounded-lg p-4 bg-white print:border-gray-300 text-center">
-      <div className={`text-2xl font-bold ${colorCls}`}>{value}</div>
-      {unit && <div className="text-xs text-gray-400 mt-0.5">{unit}</div>}
-      <div className="text-xs text-gray-500 uppercase tracking-widest mt-1">{label}</div>
-    </div>
+    <ul className="text-sm text-gray-800 space-y-1">
+      {items.map((ap, i) => (
+        <li key={i} className="border rounded p-2 bg-white print:border-gray-300">
+          <strong>{ap.appointmentDate} {ap.appointmentTime}</strong> · {ap.provider} · {labelType(ap.type)}
+          {ap.location && <span className="text-gray-500"> · {ap.location}</span>}
+          {ap.notes && <span className="text-gray-500"> — {ap.notes}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
 export function DoctorReport() {
-  const [tab, setTab] = useState<"weekly" | "monthly">("weekly");
+  const [period, setPeriod] = useState<"weekly" | "monthly">("weekly");
   const [, navigate] = useLocation();
+  const { data: report, isLoading, error } = useGetDoctorReport({ period });
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = () => window.print();
+
+  const handleDownload = () => {
+    if (!report) return;
+    const blob = new Blob([formatDoctorReportText(report)], { type: "text/plain" });
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = `doctor-report-${report.periodStart}-to-${report.periodEnd}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
   };
 
   return (
@@ -300,12 +334,6 @@ export function DoctorReport() {
           .print\\:hidden { display: none !important; }
           .print\\:break-inside-avoid { break-inside: avoid; }
           .print\\:border-gray-300 { border-color: #d1d5db !important; }
-          .print\\:text-green-800 { color: #166534 !important; }
-          .print\\:bg-green-50 { background-color: #f0fdf4 !important; }
-          .print\\:text-sky-800 { color: #075985 !important; }
-          .print\\:bg-sky-50 { background-color: #f0f9ff !important; }
-          .print\\:text-red-800 { color: #7f1d1d !important; }
-          .print\\:bg-red-50 { background-color: #fef2f2 !important; }
         }
       `}</style>
 
@@ -324,46 +352,62 @@ export function DoctorReport() {
             <FileText size={20} className="text-primary" />
             <div>
               <h1 className="text-lg font-display font-bold text-primary tracking-widest uppercase leading-none">Doctor Report</h1>
-              <p className="text-xs text-muted-foreground">Health summary for medical review</p>
+              <p className="text-xs text-muted-foreground">Caregiver-recorded documentation for clinical review</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex gap-1 border border-border rounded-md p-1 bg-secondary/30">
               <button
-                onClick={() => setTab("weekly")}
-                className={`px-3 py-1.5 text-xs font-display uppercase tracking-widest rounded-sm transition-colors ${tab === "weekly" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setPeriod("weekly")}
+                className={`px-3 py-1.5 text-xs font-display uppercase tracking-widest rounded-sm transition-colors ${period === "weekly" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
               >
-                This Week
+                Last 7 Days
               </button>
               <button
-                onClick={() => setTab("monthly")}
-                className={`px-3 py-1.5 text-xs font-display uppercase tracking-widest rounded-sm transition-colors ${tab === "monthly" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setPeriod("monthly")}
+                className={`px-3 py-1.5 text-xs font-display uppercase tracking-widest rounded-sm transition-colors ${period === "monthly" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
               >
-                This Month
+                Last 30 Days
               </button>
             </div>
-            <Button onClick={handlePrint} size="sm" variant="outline" className="gap-2">
+            <Button onClick={handleDownload} size="sm" variant="outline" className="gap-2" disabled={!report}>
+              <Download size={14} />
+              Download .txt
+            </Button>
+            <Button onClick={handlePrint} size="sm" variant="outline" className="gap-2" disabled={!report}>
               <Printer size={14} />
               Print / PDF
             </Button>
           </div>
         </div>
 
+        <div className="print:hidden max-w-4xl mx-auto px-6 pt-4">
+          <div className="flex items-start gap-2 text-xs text-muted-foreground border border-border/50 rounded-md p-3 bg-white">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <p>
+              This report compiles what was documented in the app during the selected window: check-in responses (verbatim),
+              caregiver symptom entries, recorded care task and medication outcomes, care events, medication records, and
+              appointments. Anything not documented is shown as not documented — it is never summarized or filled in.
+              Use Print / PDF for a clinician-ready copy.
+            </p>
+          </div>
+        </div>
+
         <div id="doctor-report-print" className="max-w-4xl mx-auto px-6 py-8 print:px-0 print:py-0">
           <div className="print-header mb-8">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 print:block hidden">
-                  {tab === "weekly" ? "Weekly" : "Monthly"} Health Report — Ray's Pops
-                </h1>
-                <p className="text-sm text-gray-500 print:block hidden mt-1">
-                  Generated {formatPacificLongDate(new Date())} · Confidential — For Medical Review Only
-                </p>
-              </div>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-900 print:block hidden">Care Documentation Report</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Reporting period: {report ? `${formatPacificDate(report.periodStart + "T12:00:00Z")} – ${formatPacificDate(report.periodEnd + "T12:00:00Z")}` : "…"}{" "}
+              ({period === "weekly" ? "7 days" : "30 days"})
+              {report && <> · Generated {formatPacificLongDate(report.generatedAt)}</>}
+            </p>
           </div>
 
-          {tab === "weekly" ? <WeeklyTab /> : <MonthlyTab />}
+          {isLoading && <div className="py-20 text-center text-muted-foreground">Loading report…</div>}
+          {error != null && !isLoading && !report && (
+            <div className="py-20 text-center text-destructive">Failed to load report.</div>
+          )}
+          {report && !isLoading && <ReportBody report={report} />}
         </div>
       </div>
     </>

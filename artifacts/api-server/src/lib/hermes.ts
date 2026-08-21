@@ -66,7 +66,7 @@ import { inferTierFromTitle } from "./task-tiers";
 import { addManualItemsToCart, speakableItemList } from "./cart";
 
 let careEventsReady = false;
-async function ensureCareEventsTable(): Promise<void> {
+export async function ensureCareEventsTable(): Promise<void> {
   if (careEventsReady) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS care_events (

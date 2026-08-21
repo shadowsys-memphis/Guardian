@@ -907,54 +907,227 @@ export interface AssessmentSettings {
   dailyCallTime?: string;
 }
 
-export interface FlaggedEvent {
-  date: string;
+export type DoctorReportPeriod =
+  (typeof DoctorReportPeriod)[keyof typeof DoctorReportPeriod];
+
+export const DoctorReportPeriod = {
+  weekly: "weekly",
+  monthly: "monthly",
+} as const;
+
+/**
+ * Documented-record counts for the window. Zero means "not documented in this reporting period" — never a substituted conclusion.
+ */
+export interface DoctorReportAvailability {
+  checkIns: number;
+  observations: number;
+  symptomEntries: number;
+  taskOutcomeEvents: number;
+  medicationEvents: number;
+  medicationAdjustments: number;
+  activeMedications: number;
+  careEvents: number;
+  appointmentsInPeriod: number;
+  upcomingAppointments: number;
+  injectionRecordOnFile: boolean;
+}
+
+export type DoctorReportCheckInSource =
+  (typeof DoctorReportCheckInSource)[keyof typeof DoctorReportCheckInSource];
+
+export const DoctorReportCheckInSource = {
+  phone_call: "phone_call",
+  app_check_in: "app_check_in",
+} as const;
+
+export interface DoctorReportCheckIn {
+  sessionDate: string;
+  source: DoctorReportCheckInSource;
+  startedAt: string;
+  endedAt: string | null;
+  /** AI-generated call summary — labeled as automated, not a clinical assessment */
+  automatedSummary: string | null;
+  systemFlagged: boolean;
+  reached: boolean;
+}
+
+export type DoctorReportObservationSource =
+  (typeof DoctorReportObservationSource)[keyof typeof DoctorReportObservationSource];
+
+export const DoctorReportObservationSource = {
+  phone_call: "phone_call",
+  app_check_in: "app_check_in",
+} as const;
+
+/**
+ * One recorded response from a proactive check-in question. `response` preserves the documented wording verbatim.
+ */
+export interface DoctorReportObservation {
+  recordedAt: string;
+  sessionDate: string;
+  source: DoctorReportObservationSource;
   category: string;
-  rawResponse: string;
-  parsedValue?: string | null;
-  parsedIntensity?: string | null;
-  sessionId: number;
+  questionText: string | null;
+  response: string;
+  parsedValue: string | null;
+  parsedIntensity: string | null;
+  systemFlagged: boolean;
 }
 
-export interface CategoryBreakdown {
-  status: string;
-  sessionCount: number;
-  flaggedCount: number;
+export interface DoctorReportCategoryTally {
+  category: string;
+  responseCount: number;
+  systemFlagCount: number;
 }
 
-export interface ReportSymptomLog {
+export type DoctorReportSymptomEntrySource =
+  (typeof DoctorReportSymptomEntrySource)[keyof typeof DoctorReportSymptomEntrySource];
+
+export const DoctorReportSymptomEntrySource = {
+  caregiver_entry: "caregiver_entry",
+} as const;
+
+export interface DoctorReportSymptomEntry {
   loggedAt: string;
   ptsdTrigger: boolean;
   hallucinationIntensity: number;
   motivationLevel: number;
-  behaviorNotes?: string | null;
+  notes: string | null;
+  loggedBy: string;
+  source: DoctorReportSymptomEntrySource;
+}
+
+export type DoctorReportTaskEntryOutcome =
+  (typeof DoctorReportTaskEntryOutcome)[keyof typeof DoctorReportTaskEntryOutcome];
+
+export const DoctorReportTaskEntryOutcome = {
+  completed: "completed",
+  refused: "refused",
+} as const;
+
+export interface DoctorReportTaskEntry {
+  occurredAt: string;
+  taskTitle: string | null;
+  outcome: DoctorReportTaskEntryOutcome;
+  recordedBy: string;
+  source: string;
+}
+
+export type DoctorReportTaskOutcomesCounts = {
+  completed: number;
+  refused: number;
+};
+
+/**
+ * Care-task outcomes documented in the window, sourced from the append-only care_events ledger
+ */
+export interface DoctorReportTaskOutcomes {
+  counts: DoctorReportTaskOutcomesCounts;
+  entries: DoctorReportTaskEntry[];
+}
+
+export interface DoctorReportMedication {
+  name: string;
+  dose: string;
+  frequency: string;
+  timeOfDay: string;
+  notes: string | null;
+}
+
+/**
+ * Injection record as configured by the caregiver. nextInjectionDate is computed arithmetic from the prescriber-set interval, not a recommendation.
+ */
+export interface DoctorReportInjectionCycle {
+  lastInjectionDate: string;
+  doseMg: number | null;
+  intervalDays: number;
+  nextInjectionDate: string;
+  daysSinceInjection: number;
+  notes: string | null;
+}
+
+export interface DoctorReportAdjustment {
+  adjustmentDate: string;
+  medication: string;
+  previousDose: string | null;
+  newDose: string;
+  reason: string | null;
   loggedBy: string;
 }
 
-export type WeeklyReportCategoryStatus = { [key: string]: string };
+export type DoctorReportMedEventOutcome =
+  (typeof DoctorReportMedEventOutcome)[keyof typeof DoctorReportMedEventOutcome];
 
-export type WeeklyReportCategoryBreakdown = {
-  [key: string]: CategoryBreakdown;
-};
+export const DoctorReportMedEventOutcome = {
+  confirmed: "confirmed",
+  refused: "refused",
+} as const;
 
-export interface WeeklyReport {
-  weekStart: string;
-  weekEnd: string;
-  sessionCount: number;
-  categoryStatus: WeeklyReportCategoryStatus;
-  categoryBreakdown: WeeklyReportCategoryBreakdown;
-  flaggedEvents: FlaggedEvent[];
-  symptomLogs: ReportSymptomLog[];
-  foodPreferences: string[];
-  voiceActiveDays: number;
-  narrative: string;
+export interface DoctorReportMedEvent {
+  occurredAt: string;
+  outcome: DoctorReportMedEventOutcome;
+  detail: string | null;
+  recordedBy: string;
+  source: string;
 }
 
-export interface MonthlyTrendPoint {
-  date: string;
-  category: string;
-  averageValue?: number | null;
-  flagged: boolean;
+export interface DoctorReportMedications {
+  activeMedications: DoctorReportMedication[];
+  injectionCycle: DoctorReportInjectionCycle | null;
+  adjustments: DoctorReportAdjustment[];
+  medEvents: DoctorReportMedEvent[];
+}
+
+/**
+ * Doctor-relevant entry from the append-only care_events ledger, shown as a system-recorded event
+ */
+export interface DoctorReportCareEvent {
+  occurredAt: string;
+  eventType: string;
+  description: string | null;
+  severity: string | null;
+  source: string;
+  actor: string;
+  outcome: string;
+}
+
+export interface DoctorReportAppointment {
+  appointmentDate: string;
+  appointmentTime: string;
+  provider: string;
+  location: string | null;
+  type: string;
+  notes: string | null;
+}
+
+export interface DoctorReportAppointments {
+  /** Appointments dated inside the reporting window, ascending */
+  inPeriod: DoctorReportAppointment[];
+  /** Appointments dated after the reporting window, ascending */
+  upcoming: DoctorReportAppointment[];
+}
+
+/**
+ * Caregiver-recorded documentation for a bounded reporting window. Factual records only — no diagnoses, scores, or generated conclusions.
+ */
+export interface DoctorReport {
+  period: DoctorReportPeriod;
+  /** First calendar day included (YYYY-MM-DD, Pacific) */
+  periodStart: string;
+  /** Last calendar day included (YYYY-MM-DD, Pacific) */
+  periodEnd: string;
+  generatedAt: string;
+  /** Fixed statement identifying the report as caregiver-recorded information, not a diagnosis or treatment recommendation */
+  scopeStatement: string;
+  dataAvailability: DoctorReportAvailability;
+  checkIns: DoctorReportCheckIn[];
+  observations: DoctorReportObservation[];
+  observationCategories: DoctorReportCategoryTally[];
+  symptomEntries: DoctorReportSymptomEntry[];
+  taskOutcomes: DoctorReportTaskOutcomes;
+  medications: DoctorReportMedications;
+  careEvents: DoctorReportCareEvent[];
+  appointments: DoctorReportAppointments;
 }
 
 export interface AiModelInfo {
@@ -987,21 +1160,6 @@ export interface LmStudioConnectionResult {
   modelCount?: number;
   modelIds?: string[];
   error?: string;
-}
-
-export type MonthlyReportCategoryStatus = { [key: string]: string };
-
-export interface MonthlyReport {
-  monthStart: string;
-  monthEnd: string;
-  sessionCount: number;
-  medicationAdherenceRate?: number | null;
-  flaggedDays: number;
-  voiceActiveDays: number;
-  voiceActiveRate: number;
-  categoryStatus: MonthlyReportCategoryStatus;
-  trendData: MonthlyTrendPoint[];
-  narrative: string;
 }
 
 export interface RotationTask {
@@ -1329,6 +1487,18 @@ export type GetIntercomMessagesParams = {
 export type ListCallSessionsParams = {
   limit?: number;
 };
+
+export type GetDoctorReportParams = {
+  period?: GetDoctorReportPeriod;
+};
+
+export type GetDoctorReportPeriod =
+  (typeof GetDoctorReportPeriod)[keyof typeof GetDoctorReportPeriod];
+
+export const GetDoctorReportPeriod = {
+  weekly: "weekly",
+  monthly: "monthly",
+} as const;
 
 export type GetLabDrawsParams = {
   status?: GetLabDrawsStatus;

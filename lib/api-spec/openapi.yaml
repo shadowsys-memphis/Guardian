@@ -33,6 +33,8 @@ tags:
     description: Caregiver rotation task tracking and clinical care logging
   - name: admin
     description: Admin AI assistant and clinical summary generation
+  - name: reports
+    description: Caregiver-recorded documentation reports for clinical review
   - name: workspace
     description: Google Workspace integration — Calendar events and Drive file export
   - name: inventory
@@ -1287,31 +1289,26 @@ paths:
         "200":
           description: Updated
 
-  /health-assessment/report/weekly:
+  /reports/doctor:
     get:
-      operationId: getWeeklyReport
-      tags: [health-assessment]
-      summary: Get aggregated weekly health report for doctor review
+      operationId: getDoctorReport
+      tags: [reports]
+      summary: Structured caregiver-recorded documentation report for clinical review, scoped to a 7- or 30-day window
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [weekly, monthly]
+            default: weekly
       responses:
         "200":
-          description: Weekly health report
+          description: Caregiver-recorded documentation for the reporting window
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WeeklyReport"
-
-  /health-assessment/report/monthly:
-    get:
-      operationId: getMonthlyReport
-      tags: [health-assessment]
-      summary: Get aggregated monthly health report for doctor review
-      responses:
-        "200":
-          description: Monthly health report
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MonthlyReport"
+                $ref: "#/components/schemas/DoctorReport"
 
   /rotation/tasks:
     get:
@@ -3222,14 +3219,158 @@ components:
           description: "HH:MM 24-hour format, Pacific time, e.g. 10:00"
       required: []
 
-    FlaggedEvent:
+    DoctorReport:
+      type: object
+      description: Caregiver-recorded documentation for a bounded reporting window. Factual records only — no diagnoses, scores, or generated conclusions.
+      properties:
+        period:
+          type: string
+          enum: [weekly, monthly]
+        periodStart:
+          type: string
+          description: First calendar day included (YYYY-MM-DD, Pacific)
+        periodEnd:
+          type: string
+          description: Last calendar day included (YYYY-MM-DD, Pacific)
+        generatedAt:
+          type: string
+          format: date-time
+        scopeStatement:
+          type: string
+          description: Fixed statement identifying the report as caregiver-recorded information, not a diagnosis or treatment recommendation
+        dataAvailability:
+          $ref: "#/components/schemas/DoctorReportAvailability"
+        checkIns:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportCheckIn"
+        observations:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportObservation"
+        observationCategories:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportCategoryTally"
+        symptomEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportSymptomEntry"
+        taskOutcomes:
+          $ref: "#/components/schemas/DoctorReportTaskOutcomes"
+        medications:
+          $ref: "#/components/schemas/DoctorReportMedications"
+        careEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportCareEvent"
+        appointments:
+          $ref: "#/components/schemas/DoctorReportAppointments"
+      required:
+        - period
+        - periodStart
+        - periodEnd
+        - generatedAt
+        - scopeStatement
+        - dataAvailability
+        - checkIns
+        - observations
+        - observationCategories
+        - symptomEntries
+        - taskOutcomes
+        - medications
+        - careEvents
+        - appointments
+
+    DoctorReportAvailability:
+      type: object
+      description: Documented-record counts for the window. Zero means "not documented in this reporting period" — never a substituted conclusion.
+      properties:
+        checkIns:
+          type: integer
+        observations:
+          type: integer
+        symptomEntries:
+          type: integer
+        taskOutcomeEvents:
+          type: integer
+        medicationEvents:
+          type: integer
+        medicationAdjustments:
+          type: integer
+        activeMedications:
+          type: integer
+        careEvents:
+          type: integer
+        appointmentsInPeriod:
+          type: integer
+        upcomingAppointments:
+          type: integer
+        injectionRecordOnFile:
+          type: boolean
+      required:
+        - checkIns
+        - observations
+        - symptomEntries
+        - taskOutcomeEvents
+        - medicationEvents
+        - medicationAdjustments
+        - activeMedications
+        - careEvents
+        - appointmentsInPeriod
+        - upcomingAppointments
+        - injectionRecordOnFile
+
+    DoctorReportCheckIn:
       type: object
       properties:
-        date:
+        sessionDate:
           type: string
+        source:
+          type: string
+          enum: [phone_call, app_check_in]
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        automatedSummary:
+          type: string
+          nullable: true
+          description: AI-generated call summary — labeled as automated, not a clinical assessment
+        systemFlagged:
+          type: boolean
+        reached:
+          type: boolean
+      required:
+        - sessionDate
+        - source
+        - startedAt
+        - endedAt
+        - automatedSummary
+        - systemFlagged
+        - reached
+
+    DoctorReportObservation:
+      type: object
+      description: One recorded response from a proactive check-in question. `response` preserves the documented wording verbatim.
+      properties:
+        recordedAt:
+          type: string
+          format: date-time
+        sessionDate:
+          type: string
+        source:
+          type: string
+          enum: [phone_call, app_check_in]
         category:
           type: string
-        rawResponse:
+        questionText:
+          type: string
+          nullable: true
+        response:
           type: string
         parsedValue:
           type: string
@@ -3237,29 +3378,34 @@ components:
         parsedIntensity:
           type: string
           nullable: true
-        sessionId:
-          type: integer
+        systemFlagged:
+          type: boolean
       required:
-        - date
+        - recordedAt
+        - sessionDate
+        - source
         - category
-        - rawResponse
-        - sessionId
+        - questionText
+        - response
+        - parsedValue
+        - parsedIntensity
+        - systemFlagged
 
-    CategoryBreakdown:
+    DoctorReportCategoryTally:
       type: object
       properties:
-        status:
+        category:
           type: string
-        sessionCount:
+        responseCount:
           type: integer
-        flaggedCount:
+        systemFlagCount:
           type: integer
       required:
-        - status
-        - sessionCount
-        - flaggedCount
+        - category
+        - responseCount
+        - systemFlagCount
 
-    ReportSymptomLog:
+    DoctorReportSymptomEntry:
       type: object
       properties:
         loggedAt:
@@ -3271,79 +3417,259 @@ components:
           type: integer
         motivationLevel:
           type: integer
-        behaviorNotes:
+        notes:
           type: string
           nullable: true
         loggedBy:
           type: string
+        source:
+          type: string
+          enum: [caregiver_entry]
       required:
         - loggedAt
         - ptsdTrigger
         - hallucinationIntensity
         - motivationLevel
+        - notes
+        - loggedBy
+        - source
+
+    DoctorReportTaskEntry:
+      type: object
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+        taskTitle:
+          type: string
+          nullable: true
+        outcome:
+          type: string
+          enum: [completed, refused]
+        recordedBy:
+          type: string
+        source:
+          type: string
+      required:
+        - occurredAt
+        - taskTitle
+        - outcome
+        - recordedBy
+        - source
+
+    DoctorReportTaskOutcomes:
+      type: object
+      description: Care-task outcomes documented in the window, sourced from the append-only care_events ledger
+      properties:
+        counts:
+          type: object
+          properties:
+            completed:
+              type: integer
+            refused:
+              type: integer
+          required:
+            - completed
+            - refused
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportTaskEntry"
+      required:
+        - counts
+        - entries
+
+    DoctorReportMedication:
+      type: object
+      properties:
+        name:
+          type: string
+        dose:
+          type: string
+        frequency:
+          type: string
+        timeOfDay:
+          type: string
+        notes:
+          type: string
+          nullable: true
+      required:
+        - name
+        - dose
+        - frequency
+        - timeOfDay
+        - notes
+
+    DoctorReportInjectionCycle:
+      type: object
+      description: Injection record as configured by the caregiver. nextInjectionDate is computed arithmetic from the prescriber-set interval, not a recommendation.
+      properties:
+        lastInjectionDate:
+          type: string
+        doseMg:
+          type: integer
+          nullable: true
+        intervalDays:
+          type: integer
+        nextInjectionDate:
+          type: string
+        daysSinceInjection:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+      required:
+        - lastInjectionDate
+        - doseMg
+        - intervalDays
+        - nextInjectionDate
+        - daysSinceInjection
+        - notes
+
+    DoctorReportAdjustment:
+      type: object
+      properties:
+        adjustmentDate:
+          type: string
+        medication:
+          type: string
+        previousDose:
+          type: string
+          nullable: true
+        newDose:
+          type: string
+        reason:
+          type: string
+          nullable: true
+        loggedBy:
+          type: string
+      required:
+        - adjustmentDate
+        - medication
+        - previousDose
+        - newDose
+        - reason
         - loggedBy
 
-    WeeklyReport:
+    DoctorReportMedEvent:
       type: object
       properties:
-        weekStart:
+        occurredAt:
           type: string
-        weekEnd:
+          format: date-time
+        outcome:
           type: string
-        sessionCount:
-          type: integer
-        categoryStatus:
-          type: object
-          additionalProperties:
-            type: string
-        categoryBreakdown:
-          type: object
-          additionalProperties:
-            $ref: "#/components/schemas/CategoryBreakdown"
-        flaggedEvents:
-          type: array
-          items:
-            $ref: "#/components/schemas/FlaggedEvent"
-        symptomLogs:
-          type: array
-          items:
-            $ref: "#/components/schemas/ReportSymptomLog"
-        foodPreferences:
-          type: array
-          items:
-            type: string
-        voiceActiveDays:
-          type: integer
-        narrative:
+          enum: [confirmed, refused]
+        detail:
           type: string
-      required:
-        - weekStart
-        - weekEnd
-        - sessionCount
-        - categoryStatus
-        - categoryBreakdown
-        - flaggedEvents
-        - symptomLogs
-        - foodPreferences
-        - voiceActiveDays
-        - narrative
-
-    MonthlyTrendPoint:
-      type: object
-      properties:
-        date:
-          type: string
-        category:
-          type: string
-        averageValue:
-          type: number
           nullable: true
-        flagged:
-          type: boolean
+        recordedBy:
+          type: string
+        source:
+          type: string
       required:
-        - date
-        - category
-        - flagged
+        - occurredAt
+        - outcome
+        - detail
+        - recordedBy
+        - source
+
+    DoctorReportMedications:
+      type: object
+      properties:
+        activeMedications:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportMedication"
+        injectionCycle:
+          allOf:
+            - $ref: "#/components/schemas/DoctorReportInjectionCycle"
+          nullable: true
+        adjustments:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportAdjustment"
+        medEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/DoctorReportMedEvent"
+      required:
+        - activeMedications
+        - injectionCycle
+        - adjustments
+        - medEvents
+
+    DoctorReportCareEvent:
+      type: object
+      description: Doctor-relevant entry from the append-only care_events ledger, shown as a system-recorded event
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+        eventType:
+          type: string
+        description:
+          type: string
+          nullable: true
+        severity:
+          type: string
+          nullable: true
+        source:
+          type: string
+        actor:
+          type: string
+        outcome:
+          type: string
+      required:
+        - occurredAt
+        - eventType
+        - description
+        - severity
+        - source
+        - actor
+        - outcome
+
+    DoctorReportAppointment:
+      type: object
+      properties:
+        appointmentDate:
+          type: string
+        appointmentTime:
+          type: string
+        provider:
+          type: string
+        location:
+          type: string
+          nullable: true
+        type:
+          type: string
+        notes:
+          type: string
+          nullable: true
+      required:
+        - appointmentDate
+        - appointmentTime
+        - provider
+        - location
+        - type
+        - notes
+
+    DoctorReportAppointments:
+      type: object
+      properties:
+        inPeriod:
+          type: array
+          description: Appointments dated inside the reporting window, ascending
+          items:
+            $ref: "#/components/schemas/DoctorReportAppointment"
+        upcoming:
+          type: array
+          description: Appointments dated after the reporting window, ascending
+          items:
+            $ref: "#/components/schemas/DoctorReportAppointment"
+      required:
+        - inPeriod
+        - upcoming
 
     AiModelInfo:
       type: object
@@ -3416,45 +3742,6 @@ components:
           type: string
       required:
         - connected
-
-    MonthlyReport:
-      type: object
-      properties:
-        monthStart:
-          type: string
-        monthEnd:
-          type: string
-        sessionCount:
-          type: integer
-        medicationAdherenceRate:
-          type: integer
-          nullable: true
-        flaggedDays:
-          type: integer
-        voiceActiveDays:
-          type: integer
-        voiceActiveRate:
-          type: integer
-        categoryStatus:
-          type: object
-          additionalProperties:
-            type: string
-        trendData:
-          type: array
-          items:
-            $ref: "#/components/schemas/MonthlyTrendPoint"
-        narrative:
-          type: string
-      required:
-        - monthStart
-        - monthEnd
-        - sessionCount
-        - flaggedDays
-        - voiceActiveDays
-        - voiceActiveRate
-        - categoryStatus
-        - trendData
-        - narrative
 
     RotationTask:
       type: object

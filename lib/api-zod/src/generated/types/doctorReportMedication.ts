@@ -6,4 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type MonthlyReportCategoryStatus = { [key: string]: string };
+export interface DoctorReportMedication {
+  name: string;
+  dose: string;
+  frequency: string;
+  timeOfDay: string;
+  notes: string | null;
+}

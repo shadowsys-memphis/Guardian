@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
@@ -102,7 +102,10 @@ import {
   type HistoricalCareLog,
   type InventoryItem,
   getGetScheduleQueryKey,
+  getDoctorReport,
+  type DoctorReport,
 } from "@workspace/api-client-react";
+import { formatDoctorReportText } from "@/lib/doctor-report-text";
 import { useQueryClient } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -4284,7 +4287,7 @@ function AppointmentsTab() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
-  const [report, setReport] = useState<string | null>(null);
+  const [report, setReport] = useState<DoctorReport | null>(null);
   const emptyForm = { appointmentDate: "", appointmentTime: "09:00", provider: "", location: "", type: "primary_care", notes: "" };
   const [form, setForm] = useState(emptyForm);
 
@@ -4350,21 +4353,24 @@ function AppointmentsTab() {
     setReportLoading(true);
     setReport(null);
     try {
-      const res = await fetch(`${WORKSPACE_BASE}/api/reports/clinical`);
-      const data = await res.json();
-      setReport(data.report);
+      setReport(await getDoctorReport({ period: "monthly" }));
     } catch {
       toast({ title: "Failed to generate report", variant: "destructive" });
     } finally { setReportLoading(false); }
   };
 
+  // Memoized: the tab re-renders on every appointment-form keystroke, and the
+  // formatted report is a multi-hundred-line string.
+  const reportText = useMemo(() => (report ? formatDoctorReportText(report) : null), [report]);
+
   const handleDownloadReport = () => {
-    if (!report) return;
-    const blob = new Blob([report], { type: "text/plain" });
+    if (!report || !reportText) return;
+    const blob = new Blob([reportText], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `clinical-report-${new Date().toISOString().split("T")[0]}.txt`;
+    a.download = `doctor-report-${report.periodStart}-to-${report.periodEnd}.txt`;
     a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const TYPE_LABELS: Record<string, string> = {
@@ -4455,7 +4461,7 @@ function AppointmentsTab() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-display uppercase tracking-widest flex items-center gap-2">
-                <FileText size={14} className="text-success" /> Clinical Digest — Ready
+                <FileText size={14} className="text-success" /> Doctor Report — Ready ({report.periodStart} to {report.periodEnd})
               </CardTitle>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={handleDownloadReport} className="gap-1.5 text-xs">
@@ -4468,7 +4474,7 @@ function AppointmentsTab() {
             </div>
           </CardHeader>
           <CardContent>
-            <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono bg-secondary/20 p-4 rounded-sm border border-border/30 max-h-96 overflow-y-auto">{report}</pre>
+            <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono bg-secondary/20 p-4 rounded-sm border border-border/30 max-h-96 overflow-y-auto">{reportText}</pre>
           </CardContent>
         </Card>
       )}

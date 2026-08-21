@@ -53,6 +53,7 @@ import type {
   CreateSymptomLogInput,
   CreateVoiceScriptInput,
   DayType,
+  DoctorReport,
   DriveExportInput,
   DriveExportResult,
   GeminiConversation,
@@ -61,6 +62,7 @@ import type {
   GeminiError,
   GeminiMessage,
   GeminiMessageInput,
+  GetDoctorReportParams,
   GetIntercomMessagesParams,
   GetLabDrawsParams,
   GetSymptomLogsParams,
@@ -87,7 +89,6 @@ import type {
   MealRemixInput,
   MealRemixResult,
   MealWithIngredients,
-  MonthlyReport,
   RecordTaskOutcomeInput,
   RemixSuggestion,
   RescheduleLabDrawInput,
@@ -123,7 +124,6 @@ import type {
   UpdateTouchpointsConfigInput,
   UpdateVoiceScriptInput,
   VoiceScript,
-  WeeklyReport,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -6139,147 +6139,91 @@ export const useUpdateCraving = <
 };
 
 /**
- * @summary Get aggregated weekly health report for doctor review
+ * @summary Structured caregiver-recorded documentation report for clinical review, scoped to a 7- or 30-day window
  */
-export const getGetWeeklyReportUrl = () => {
-  return `/api/health-assessment/report/weekly`;
+export const getGetDoctorReportUrl = (params?: GetDoctorReportParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/reports/doctor?${stringifiedParams}`
+    : `/api/reports/doctor`;
 };
 
-export const getWeeklyReport = async (
+export const getDoctorReport = async (
+  params?: GetDoctorReportParams,
   options?: RequestInit,
-): Promise<WeeklyReport> => {
-  return customFetch<WeeklyReport>(getGetWeeklyReportUrl(), {
+): Promise<DoctorReport> => {
+  return customFetch<DoctorReport>(getGetDoctorReportUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetWeeklyReportQueryKey = () => {
-  return [`/api/health-assessment/report/weekly`] as const;
+export const getGetDoctorReportQueryKey = (params?: GetDoctorReportParams) => {
+  return [`/api/reports/doctor`, ...(params ? [params] : [])] as const;
 };
 
-export const getGetWeeklyReportQueryOptions = <
-  TData = Awaited<ReturnType<typeof getWeeklyReport>>,
+export const getGetDoctorReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDoctorReport>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getWeeklyReport>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetDoctorReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDoctorReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetWeeklyReportQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetDoctorReportQueryKey(params);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getWeeklyReport>>> = ({
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDoctorReport>>> = ({
     signal,
-  }) => getWeeklyReport({ signal, ...requestOptions });
+  }) => getDoctorReport(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getWeeklyReport>>,
+    Awaited<ReturnType<typeof getDoctorReport>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetWeeklyReportQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getWeeklyReport>>
+export type GetDoctorReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDoctorReport>>
 >;
-export type GetWeeklyReportQueryError = ErrorType<unknown>;
+export type GetDoctorReportQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get aggregated weekly health report for doctor review
+ * @summary Structured caregiver-recorded documentation report for clinical review, scoped to a 7- or 30-day window
  */
 
-export function useGetWeeklyReport<
-  TData = Awaited<ReturnType<typeof getWeeklyReport>>,
+export function useGetDoctorReport<
+  TData = Awaited<ReturnType<typeof getDoctorReport>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getWeeklyReport>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetWeeklyReportQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Get aggregated monthly health report for doctor review
- */
-export const getGetMonthlyReportUrl = () => {
-  return `/api/health-assessment/report/monthly`;
-};
-
-export const getMonthlyReport = async (
-  options?: RequestInit,
-): Promise<MonthlyReport> => {
-  return customFetch<MonthlyReport>(getGetMonthlyReportUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetMonthlyReportQueryKey = () => {
-  return [`/api/health-assessment/report/monthly`] as const;
-};
-
-export const getGetMonthlyReportQueryOptions = <
-  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getMonthlyReport>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetMonthlyReportQueryKey();
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getMonthlyReport>>
-  > = ({ signal }) => getMonthlyReport({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getMonthlyReport>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetMonthlyReportQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getMonthlyReport>>
->;
-export type GetMonthlyReportQueryError = ErrorType<unknown>;
-
-/**
- * @summary Get aggregated monthly health report for doctor review
- */
-
-export function useGetMonthlyReport<
-  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getMonthlyReport>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetMonthlyReportQueryOptions(options);
+>(
+  params?: GetDoctorReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDoctorReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDoctorReportQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

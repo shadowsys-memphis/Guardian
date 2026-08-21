@@ -23,7 +23,7 @@ pnpm --filter @workspace/api-server run dev     # build + start the API server
 pnpm --filter @workspace/brain-app run dev      # Vite dev server (frontend), --host 0.0.0.0
 ```
 
-There is no test framework configured in this repo (no vitest/jest config, no `*.test.*` files). Don't assume one exists — verify changes via `pnpm run typecheck` and manual exercising of the route/page.
+`@workspace/api-server` has a vitest suite (`pnpm --filter @workspace/api-server run test`; `*.test.ts` colocated with source, DB mocked via `vi.mock` — see `vitest.config.ts` for the alias setup and the integration/native-runner exclusions). The other packages have no test framework — verify their changes via `pnpm run typecheck` and manual exercising of the route/page.
 
 Single-package typecheck (only when debugging in isolation — cross-package type errors require the root command):
 ```bash

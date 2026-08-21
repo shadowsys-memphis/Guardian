@@ -5,12 +5,14 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
+import type { DoctorReportSymptomEntrySource } from "./doctorReportSymptomEntrySource";
 
-export interface ReportSymptomLog {
+export interface DoctorReportSymptomEntry {
   loggedAt: Date;
   ptsdTrigger: boolean;
   hallucinationIntensity: number;
   motivationLevel: number;
-  behaviorNotes?: string | null;
+  notes: string | null;
   loggedBy: string;
+  source: DoctorReportSymptomEntrySource;
 }

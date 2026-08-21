@@ -6,8 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CategoryBreakdown {
-  status: string;
-  sessionCount: number;
-  flaggedCount: number;
-}
+export type DoctorReportTaskOutcomesCounts = {
+  completed: number;
+  refused: number;
+};

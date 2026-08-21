@@ -5,5 +5,8 @@
  * br(AI)n App API - Caregiver AI System
  * OpenAPI spec version: 0.1.0
  */
+import type { GetDoctorReportPeriod } from "./getDoctorReportPeriod";
 
-export type WeeklyReportCategoryStatus = { [key: string]: string };
+export type GetDoctorReportParams = {
+  period?: GetDoctorReportPeriod;
+};

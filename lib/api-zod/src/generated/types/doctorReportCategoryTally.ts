@@ -6,11 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface FlaggedEvent {
-  date: string;
+export interface DoctorReportCategoryTally {
   category: string;
-  rawResponse: string;
-  parsedValue?: string | null;
-  parsedIntensity?: string | null;
-  sessionId: number;
+  responseCount: number;
+  systemFlagCount: number;
 }

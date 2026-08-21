@@ -1707,68 +1707,206 @@ export const UpdateCravingBody = zod.object({
 });
 
 /**
- * @summary Get aggregated weekly health report for doctor review
+ * @summary Structured caregiver-recorded documentation report for clinical review, scoped to a 7- or 30-day window
  */
-export const GetWeeklyReportResponse = zod.object({
-  weekStart: zod.string(),
-  weekEnd: zod.string(),
-  sessionCount: zod.number(),
-  categoryStatus: zod.record(zod.string(), zod.string()),
-  categoryBreakdown: zod.record(
-    zod.string(),
-    zod.object({
-      status: zod.string(),
-      sessionCount: zod.number(),
-      flaggedCount: zod.number(),
-    }),
-  ),
-  flaggedEvents: zod.array(
-    zod.object({
-      date: zod.string(),
-      category: zod.string(),
-      rawResponse: zod.string(),
-      parsedValue: zod.string().nullish(),
-      parsedIntensity: zod.string().nullish(),
-      sessionId: zod.number(),
-    }),
-  ),
-  symptomLogs: zod.array(
-    zod.object({
-      loggedAt: zod.date(),
-      ptsdTrigger: zod.boolean(),
-      hallucinationIntensity: zod.number(),
-      motivationLevel: zod.number(),
-      behaviorNotes: zod.string().nullish(),
-      loggedBy: zod.string(),
-    }),
-  ),
-  foodPreferences: zod.array(zod.string()),
-  voiceActiveDays: zod.number(),
-  narrative: zod.string(),
+export const getDoctorReportQueryPeriodDefault = `weekly`;
+
+export const GetDoctorReportQueryParams = zod.object({
+  period: zod
+    .enum(["weekly", "monthly"])
+    .default(getDoctorReportQueryPeriodDefault),
 });
 
-/**
- * @summary Get aggregated monthly health report for doctor review
- */
-export const GetMonthlyReportResponse = zod.object({
-  monthStart: zod.string(),
-  monthEnd: zod.string(),
-  sessionCount: zod.number(),
-  medicationAdherenceRate: zod.number().nullish(),
-  flaggedDays: zod.number(),
-  voiceActiveDays: zod.number(),
-  voiceActiveRate: zod.number(),
-  categoryStatus: zod.record(zod.string(), zod.string()),
-  trendData: zod.array(
-    zod.object({
-      date: zod.string(),
-      category: zod.string(),
-      averageValue: zod.number().nullish(),
-      flagged: zod.boolean(),
+export const GetDoctorReportResponse = zod
+  .object({
+    period: zod.enum(["weekly", "monthly"]),
+    periodStart: zod
+      .string()
+      .describe("First calendar day included (YYYY-MM-DD, Pacific)"),
+    periodEnd: zod
+      .string()
+      .describe("Last calendar day included (YYYY-MM-DD, Pacific)"),
+    generatedAt: zod.date(),
+    scopeStatement: zod
+      .string()
+      .describe(
+        "Fixed statement identifying the report as caregiver-recorded information, not a diagnosis or treatment recommendation",
+      ),
+    dataAvailability: zod
+      .object({
+        checkIns: zod.number(),
+        observations: zod.number(),
+        symptomEntries: zod.number(),
+        taskOutcomeEvents: zod.number(),
+        medicationEvents: zod.number(),
+        medicationAdjustments: zod.number(),
+        activeMedications: zod.number(),
+        careEvents: zod.number(),
+        appointmentsInPeriod: zod.number(),
+        upcomingAppointments: zod.number(),
+        injectionRecordOnFile: zod.boolean(),
+      })
+      .describe(
+        'Documented-record counts for the window. Zero means \"not documented in this reporting period\" — never a substituted conclusion.',
+      ),
+    checkIns: zod.array(
+      zod.object({
+        sessionDate: zod.string(),
+        source: zod.enum(["phone_call", "app_check_in"]),
+        startedAt: zod.date(),
+        endedAt: zod.date().nullable(),
+        automatedSummary: zod
+          .string()
+          .nullable()
+          .describe(
+            "AI-generated call summary — labeled as automated, not a clinical assessment",
+          ),
+        systemFlagged: zod.boolean(),
+        reached: zod.boolean(),
+      }),
+    ),
+    observations: zod.array(
+      zod
+        .object({
+          recordedAt: zod.date(),
+          sessionDate: zod.string(),
+          source: zod.enum(["phone_call", "app_check_in"]),
+          category: zod.string(),
+          questionText: zod.string().nullable(),
+          response: zod.string(),
+          parsedValue: zod.string().nullable(),
+          parsedIntensity: zod.string().nullable(),
+          systemFlagged: zod.boolean(),
+        })
+        .describe(
+          "One recorded response from a proactive check-in question. `response` preserves the documented wording verbatim.",
+        ),
+    ),
+    observationCategories: zod.array(
+      zod.object({
+        category: zod.string(),
+        responseCount: zod.number(),
+        systemFlagCount: zod.number(),
+      }),
+    ),
+    symptomEntries: zod.array(
+      zod.object({
+        loggedAt: zod.date(),
+        ptsdTrigger: zod.boolean(),
+        hallucinationIntensity: zod.number(),
+        motivationLevel: zod.number(),
+        notes: zod.string().nullable(),
+        loggedBy: zod.string(),
+        source: zod.enum(["caregiver_entry"]),
+      }),
+    ),
+    taskOutcomes: zod
+      .object({
+        counts: zod.object({
+          completed: zod.number(),
+          refused: zod.number(),
+        }),
+        entries: zod.array(
+          zod.object({
+            occurredAt: zod.date(),
+            taskTitle: zod.string().nullable(),
+            outcome: zod.enum(["completed", "refused"]),
+            recordedBy: zod.string(),
+            source: zod.string(),
+          }),
+        ),
+      })
+      .describe(
+        "Care-task outcomes documented in the window, sourced from the append-only care_events ledger",
+      ),
+    medications: zod.object({
+      activeMedications: zod.array(
+        zod.object({
+          name: zod.string(),
+          dose: zod.string(),
+          frequency: zod.string(),
+          timeOfDay: zod.string(),
+          notes: zod.string().nullable(),
+        }),
+      ),
+      injectionCycle: zod
+        .object({
+          lastInjectionDate: zod.string(),
+          doseMg: zod.number().nullable(),
+          intervalDays: zod.number(),
+          nextInjectionDate: zod.string(),
+          daysSinceInjection: zod.number(),
+          notes: zod.string().nullable(),
+        })
+        .describe(
+          "Injection record as configured by the caregiver. nextInjectionDate is computed arithmetic from the prescriber-set interval, not a recommendation.",
+        )
+        .nullable(),
+      adjustments: zod.array(
+        zod.object({
+          adjustmentDate: zod.string(),
+          medication: zod.string(),
+          previousDose: zod.string().nullable(),
+          newDose: zod.string(),
+          reason: zod.string().nullable(),
+          loggedBy: zod.string(),
+        }),
+      ),
+      medEvents: zod.array(
+        zod.object({
+          occurredAt: zod.date(),
+          outcome: zod.enum(["confirmed", "refused"]),
+          detail: zod.string().nullable(),
+          recordedBy: zod.string(),
+          source: zod.string(),
+        }),
+      ),
     }),
-  ),
-  narrative: zod.string(),
-});
+    careEvents: zod.array(
+      zod
+        .object({
+          occurredAt: zod.date(),
+          eventType: zod.string(),
+          description: zod.string().nullable(),
+          severity: zod.string().nullable(),
+          source: zod.string(),
+          actor: zod.string(),
+          outcome: zod.string(),
+        })
+        .describe(
+          "Doctor-relevant entry from the append-only care_events ledger, shown as a system-recorded event",
+        ),
+    ),
+    appointments: zod.object({
+      inPeriod: zod
+        .array(
+          zod.object({
+            appointmentDate: zod.string(),
+            appointmentTime: zod.string(),
+            provider: zod.string(),
+            location: zod.string().nullable(),
+            type: zod.string(),
+            notes: zod.string().nullable(),
+          }),
+        )
+        .describe("Appointments dated inside the reporting window, ascending"),
+      upcoming: zod
+        .array(
+          zod.object({
+            appointmentDate: zod.string(),
+            appointmentTime: zod.string(),
+            provider: zod.string(),
+            location: zod.string().nullable(),
+            type: zod.string(),
+            notes: zod.string().nullable(),
+          }),
+        )
+        .describe("Appointments dated after the reporting window, ascending"),
+    }),
+  })
+  .describe(
+    "Caregiver-recorded documentation for a bounded reporting window. Factual records only — no diagnoses, scores, or generated conclusions.",
+  );
 
 /**
  * @summary List all rotation tasks ordered by creation time
