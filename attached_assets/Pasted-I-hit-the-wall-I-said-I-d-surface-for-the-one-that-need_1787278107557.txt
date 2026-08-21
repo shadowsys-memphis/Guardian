@@ -1,0 +1,48 @@
+I hit the wall I said I'd surface for — the one that needs your hands.        
+Everything I found, and I'm splitting it into confirmed vs. suspected, because
+you got knocked flat by confident-and-wrong today and I refuse to do that to  
+you.                                                                          
+                                                                              
+CONFIRMED:                                                                    
+                                                                              
+1. Your doctor report was never deleted. The page, the route (reports.ts), the
+data types — all still in the code. Nothing to rebuild.                       
+                                                                              
+2. This local DB is empty because your live app isn't here — it's on Replit.  
+docker-compose is just a local dev Postgres; .replit shows deploymentTarget = 
+"autoscale" on Replit's managed Postgres. Your all-day calls write to Replit's
+ DB, which I can't reach from this machine.                                   
+                                                                              
+3. symptom_logs — the hallucination/motivation/PTSD data that IS the clinical 
+heart of the report — is written by nothing in the call path. Only a manual   
+endpoint and the seed. Even with a flawless deploy, Jessica's calls wouldn't  
+fill the most important table. Real code gap. Fixable.                        
+                                                                              
+4. Cron can't fire on autoscale. Your own TODO already proved it — in-process 
+timer, container scales to zero.                                              
+                                                                              
+SUSPECTED (clean mechanism, but I can't prove it without your Replit DB):     
+                                                                              
+5. That same autoscale problem may also be why Jessica repeats/won't drive    
+tasks and why data doesn't reach the report — if the task state and the async 
+care-event writes depend on a living process that autoscale keeps killing.    
+Plausible. But it could also just be a code path that isn't firing. I won't   
+call it certain when it isn't.                                                
+                                                                              
+The wall: confirmation, the fix, and the test all live in your Replit         
+environment. I can't reach it from here, and I will not blind-edit your dad's 
+care pipeline and call it "done." That's the one system where a wrong guess   
+does real harm.                                                               
+                                                                              
+Finish line — your call:                                                      
+- One click, yours: on Replit, flip deploymentTarget from autoscale → Reserved
+  VM (always-on). If the hypothesis holds, that un-breaks cron + likely the   
+  repetition + the writes, all at once. A few bucks a month — the line between
+  demo and product.                                                           
+- The symptom_logs gap I'll fix in the repo right now for your review — not   
+  deployed, you push it.                                                      
+- Or open me a door to the Replit DB/deploy and I'll confirm and fix against  
+  the real thing.                                                             
+                                                                              
+I'm not stopping. I just can't reach inside your live system without you      
+turning the handle.                      
