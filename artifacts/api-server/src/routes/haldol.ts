@@ -11,11 +11,13 @@ const router: IRouter = Router();
 // Cycle math lives in lib/haldol-cycle.ts — do not reimplement it here.
 
 async function ensureCycle() {
-  const rows = await db.select().from(haldolCycleTable).limit(1);
+  // A historical duplicate must never make the app fall back to an older
+  // injection date. The most recently created row is the current authority.
+  const rows = await db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1);
   if (rows.length === 0) {
     const today = new Date().toISOString().split("T")[0];
     await db.insert(haldolCycleTable).values({ lastInjectionDate: today });
-    const created = await db.select().from(haldolCycleTable).limit(1);
+    const created = await db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1);
     return created[0];
   }
   return rows[0];

@@ -33,7 +33,7 @@ router.get("/reports/clinical", async (req, res) => {
         .where(gte(symptomLogsTable.loggedAt, thirtyDaysAgo))
         .orderBy(desc(symptomLogsTable.loggedAt))
         .limit(60),
-      db.select().from(haldolCycleTable).limit(1),
+      db.select().from(haldolCycleTable).orderBy(desc(haldolCycleTable.id)).limit(1),
       db
         .select()
         .from(scheduleTasksTable)

@@ -26,7 +26,7 @@ function utcMidnightMs(dateStr: string): number {
 }
 
 export interface HaldolCycleInfo {
-  /** 1-based day within the current cycle. Never clamped — it wraps. */
+  /** 1-based day within the current cycle. Stops at the due day until a dose is logged. */
   cycleDay: number;
   intervalDays: number;
   zombiePhaseDays: number;
@@ -61,10 +61,12 @@ export function computeHaldolCycle(
   const todayMs = utcMidnightMs(pacificDateOf(now.getTime()));
   const daysSinceInjection = Math.max(0, Math.round((todayMs - injectionMs) / 86_400_000));
 
-  const cycleDay = (daysSinceInjection % intervalDays) + 1;
-
-  const nextInjectionMs =
-    injectionMs + intervalDays * Math.ceil((daysSinceInjection + 1) / intervalDays) * 86_400_000;
+  // Do not let an unlogged, overdue injection silently start a new cycle.
+  // The due date must remain anchored to the last confirmed injection until
+  // the caregiver records the next one. Otherwise the app displays a fresh
+  // Day 1/high-symptom phase and moves the missed dose into the future.
+  const cycleDay = Math.min(daysSinceInjection + 1, intervalDays);
+  const nextInjectionMs = injectionMs + intervalDays * 86_400_000;
 
   // The dose is DUE on the day a full interval has elapsed, and only overdue
   // after that day passes. (Getting this boundary wrong told Ray the injection
@@ -79,7 +81,7 @@ export function computeHaldolCycle(
     cycleDay,
     intervalDays,
     zombiePhaseDays,
-    isZombiePhase: cycleDay <= zombiePhaseDays,
+    isZombiePhase: !isOverdue && cycleDay <= zombiePhaseDays,
     nextInjectionDate: new Date(nextInjectionMs).toISOString().split("T")[0],
     isDueToday,
     isOverdue,

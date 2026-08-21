@@ -1737,8 +1737,17 @@ function ScriptsTab() {
 function HaldolTab() {
   const { data: haldol } = useGetHaldolCycle();
   const updateHaldol = useUpdateHaldolCycle();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [calPushing, setCalPushing] = useState(false);
+  const [lastInjectionDate, setLastInjectionDate] = useState("");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (!haldol) return;
+    setLastInjectionDate(haldol.lastInjectionDate);
+    setNotes(haldol.notes ?? "");
+  }, [haldol?.id, haldol?.lastInjectionDate, haldol?.notes]);
 
   const handlePushInjectionToCalendar = async () => {
     if (!haldol?.nextInjectionDate) return;
@@ -1765,14 +1774,21 @@ function HaldolTab() {
 
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
-    const formData = new FormData(e.target as HTMLFormElement);
     updateHaldol.mutate({
       data: {
-        lastInjectionDate: formData.get("lastInjectionDate") as string,
-        notes: formData.get("notes") as string,
+        lastInjectionDate,
+        notes,
       },
     }, {
-      onSuccess: () => toast({ title: "Cycle tracking updated" }),
+      onSuccess: (updatedCycle) => {
+        queryClient.setQueryData(getGetHaldolCycleQueryKey(), updatedCycle);
+        queryClient.invalidateQueries({ queryKey: getGetHaldolCycleQueryKey() });
+        toast({
+          title: "Confirmed injection date saved",
+          description: `Next injection remains due ${updatedCycle.nextInjectionDate}.`,
+        });
+      },
+      onError: () => toast({ title: "Could not save the injection date", variant: "destructive" }),
     });
   };
 
@@ -1783,18 +1799,20 @@ function HaldolTab() {
         <p className="text-muted-foreground">Manage the monthly medication cycle and anticipate high-symptom rest phases.</p>
       </header>
 
-      {/* 14-Segment Phase Arc */}
+      {/* Prescriber-defined cycle arc */}
       {haldol && (
         <Card className="border-border/40">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-display uppercase tracking-widest">14-Day Cycle Arc</CardTitle>
-            <CardDescription>Days 1–5 = High Symptom (rest). Days 6–14 = Stabilization.</CardDescription>
+            <CardTitle className="text-sm font-display uppercase tracking-widest">{haldol.intervalDays}-Day Cycle Arc</CardTitle>
+            <CardDescription>
+              Days 1–{haldol.zombiePhaseDays ?? 5} = High Symptom (rest). Days {(haldol.zombiePhaseDays ?? 5) + 1}–{haldol.intervalDays} = Stabilization.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-1 flex-wrap">
-              {Array.from({ length: 14 }, (_, i) => {
+              {Array.from({ length: haldol.intervalDays ?? 28 }, (_, i) => {
                 const day = i + 1;
-                const isZombie = day <= 5;
+                const isZombie = day <= (haldol.zombiePhaseDays ?? 5);
                 const isCurrent = day === haldol.cycleDay;
                 return (
                   <div
@@ -1858,7 +1876,9 @@ function HaldolTab() {
               )}
 
               <div className="pt-4 border-t border-border/50">
-                <p className="text-muted-foreground uppercase text-xs font-bold tracking-widest mb-1">Next Scheduled Injection</p>
+                <p className="text-muted-foreground uppercase text-xs font-bold tracking-widest mb-1">Last Confirmed Injection</p>
+                <p className="text-lg font-display text-foreground">{haldol.lastInjectionDate}</p>
+                <p className="text-muted-foreground uppercase text-xs font-bold tracking-widest mt-5 mb-1">Next Scheduled Injection</p>
                 <p className="text-3xl font-display text-foreground">{haldol.nextInjectionDate}</p>
                 <Button
                   size="sm"
@@ -1877,25 +1897,32 @@ function HaldolTab() {
           <Card>
             <CardHeader>
               <CardTitle>Update Cycle</CardTitle>
-              <CardDescription>Log a new injection to reset the cycle counter.</CardDescription>
+              <CardDescription>Confirm the actual injection date. The due date stays fixed until a new injection is recorded.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleUpdate} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-muted-foreground">Last Injection Date</label>
-                  <Input type="date" name="lastInjectionDate" defaultValue={haldol.lastInjectionDate} required />
+                  <Input
+                    type="date"
+                    name="lastInjectionDate"
+                    value={lastInjectionDate}
+                    onChange={(e) => setLastInjectionDate(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-muted-foreground">Clinical Notes</label>
                   <textarea
                     name="notes"
-                    defaultValue={haldol.notes ?? ""}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
                     className="flex min-h-[120px] w-full rounded-sm border border-border bg-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     placeholder="Observations around injection time..."
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={updateHaldol.isPending}>
-                  Reset &amp; Save Cycle
+                  Confirm &amp; Save Injection
                 </Button>
               </form>
             </CardContent>
