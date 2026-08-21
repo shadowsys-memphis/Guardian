@@ -1,0 +1,44 @@
+I’ll summarize the last two days from the actual saved commits and task history, separating completed work, important decisions, and what is currently in progress.
+
+
+
+3 actions
+Recap of the last two days
+Product direction
+Reworked Home into a caregiver command center at /admin.
+Removed the old Pops-facing ambient screen as an active destination.
+Preserved the calm Presence Field visual system.
+Replaced the duplicate Admin navigation entry with Settings.
+Surfaced previously buried caregiver tools: Jessica setup, scripts, clinical reports, calendar sync, AI model settings, system alerts, subscription/workspace, and job status.
+Kept Pops’ interaction model audio-first through Jessica; the web app is caregiver-facing.
+Haldol safety correction
+Established August 5, 2026 as the authoritative last injection date.
+Established September 2, 2026 as the next scheduled injection.
+Changed cycle math to use the configured interval and zombie-phase values rather than hard-coded assumptions.
+Prevented an overdue dose from silently rolling into a new future cycle or displaying a falsely healthy Day 1.
+Made the Haldol admin form controlled and refreshed React Query data after saves.
+Added regression tests and verified the development database contains the correct 28-day record.
+API and frontend checks passed, and both services were restarted successfully.
+Shopping and cart work
+Added the ability to save AI-remixed meals into the meal catalog.
+Protected cart additions from concurrent duplicate inserts.
+Added confirmation/edit handling for scanned product names before they enter the cart.
+Updated the generated API contracts for those changes.
+Jessica, calls, and scheduling
+Improved call scheduling and related Gemini/Jessica route behavior.
+Fixed post-call ElevenLabs webhook handling so sessions finalize correctly.
+Added or updated scheduling/task escalation behavior.
+Documented the autoscale versus always-on scheduler risk.
+Added implementation details around the Jessica API route.
+Cleanup and publishing
+Removed obsolete Pops-view and stale project/chat-paste artifacts.
+Organized old documentation and assets.
+Published the app multiple times while these changes were being stabilized.
+The Git history is saved; the duplicate-looking commit pairs are from Replit’s task-agent/merge process, not separate untracked versions.
+Doctor report status
+The attached August clinical report was saved as a project artifact, but we correctly identified that the report itself is not yet professional enough for a doctor.
+The current report contains unsupported/hard-coded patient context and overly interpretive wording.
+Task #185 — Make the doctor report factual and clinician-ready is now assigned to Claude.
+Claude is rebuilding it around dated, source-attributed data from proactive questions, Jessica calls, caregiver logs, tasks, medications, appointments, and relevant admin events. I’m not duplicating that work.
+Still separate
+The proposed Clinical Summary task about incorporating today’s completed tasks is a different caregiver workflow and is not the same as the doctor-report rebuild.
