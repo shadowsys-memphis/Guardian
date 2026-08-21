@@ -1,6 +1,6 @@
 # STATUS — what's done, what's next
 
-*The one file that answers "where was I?" Updated 2026-08-17 evening.*
+*The one file that answers "where was I?" Updated 2026-08-21 evening.*
 
 ---
 
@@ -9,6 +9,45 @@
 **The automated daily call is OFF.** It stays off until Ray has run the full day against his
 own phone (909-732-4902) with zero issues and explicitly says "turn it on." Test calls go to
 Ray's phone only. Pops' number is saved and correct.
+
+---
+
+## 8/21 — doctor report rebuilt: facts only, every line names its source (#185)
+
+**Committed today (`5271cbd`):**
+- **The doctor report no longer invents conclusions.** The old export hard-coded Pops'
+  identity, diagnoses, and service history, counted tasks all-time (meaningless — the
+  schedule resets nightly), and auto-wrote "stable"/"concern" wording that read like
+  clinical judgment. All of that is gone, endpoints included (`/reports/clinical`,
+  `/health-assessment/report/weekly`, `/health-assessment/report/monthly`).
+- **What replaced it:** one structured `GET /reports/doctor?period=weekly|monthly`
+  (7- or 30-day Pacific window). Every entry is dated and labeled by source — recorded
+  response (verbatim wording from a check-in), caregiver entry, system flag (automated
+  marker, explicitly not a judgment), or care event. Task and medication outcomes come
+  from the `care_events` ledger (the durable record — `schedule_tasks` wipes nightly).
+  Injection record goes through `computeHaldolCycle`; appointments are chronological and
+  split in-period vs upcoming. Anything absent says **"Not documented in this reporting
+  period"** — never a substituted summary.
+- **Both surfaces render the same payload**: the printable `/admin/report` page (now with a
+  data-source legend and a 7/30-day toggle) and the appointment-tab "Export Doctor Report"
+  .txt download.
+- **Tenant guard:** tenant sessions get a hard 403 — most source tables have no
+  `tenant_id`, so the report stays local-only until they do. The tables that do have it
+  are scoped from the session.
+- **Tests:** two new vitest suites cover window math, source attribution, verbatim
+  preservation, date ordering, no-data language, empty-DB contract, and tenant isolation;
+  full api-server suite green (29 tests). A `/code-review high` pass ran over the diff and
+  all seven findings were fixed before commit. (Also corrected the stale ".claude/CLAUDE.md
+  says this repo has no tests" note.)
+- **Sanity check against real data:** the computed next-injection date (2026-09-02) agrees
+  with Ray's own correction note stored on the cycle record. Good sign the shared math and
+  the paper trail line up.
+
+**Worth knowing when reading a generated report right now:** "Recorded check-in responses"
+shows 0 because `health_data_points` is genuinely empty (0 rows ever) — consistent with the
+no-transcript-has-ever-saved item on the worry list below. The report states that honestly
+instead of papering over it; once the webhook secret question is resolved and transcripts
+land, responses will populate on their own.
 
 ---
 
