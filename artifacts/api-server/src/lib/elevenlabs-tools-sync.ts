@@ -314,9 +314,34 @@ export async function syncJessicaToolsToElevenLabs(): Promise<SyncJessicaToolsRe
     };
     const currentToolIds = agentData.conversation_config?.agent?.prompt?.tool_ids ?? [];
     const ourToolIds = Object.values(toolIds).filter((id): id is string => !!id);
-    const mergedToolIds = Array.from(new Set([...currentToolIds, ...ourToolIds]));
 
-    const alreadyAttached = ourToolIds.every((id) => currentToolIds.includes(id));
+    // Detach stale generations of OUR OWN tools. Merging without pruning let
+    // three same-named copies of every tool accumulate on the agent (each
+    // sync run against a fresh jessica_tool_ids map registered a new set) —
+    // the ElevenLabs LLM picked among them arbitrarily, and the copies
+    // carrying an outdated shared secret failed live calls with
+    // "authorization error" (Ray hit exactly this on 2026-08-21). A tool is
+    // pruned only when its name matches one of ours AND it is not the
+    // canonical id — hand-made tools with other names are never touched.
+    const ourToolNames = new Set(defs.map((d) => (d.config["name"] as string) ?? d.key));
+    const staleDuplicateIds = new Set<string>();
+    for (const attachedId of currentToolIds) {
+      if (ourToolIds.includes(attachedId)) continue;
+      const toolRes = await fetch(`${ELEVENLABS_BASE}/convai/tools/${attachedId}`, {
+        headers: { "xi-api-key": apiKey },
+      });
+      if (!toolRes.ok) continue; // unreadable → leave it alone
+      const toolData = (await toolRes.json()) as { tool_config?: { name?: string } };
+      if (toolData.tool_config?.name && ourToolNames.has(toolData.tool_config.name)) {
+        staleDuplicateIds.add(attachedId);
+      }
+    }
+    const mergedToolIds = Array.from(
+      new Set([...currentToolIds.filter((id) => !staleDuplicateIds.has(id)), ...ourToolIds]),
+    );
+
+    const alreadyAttached =
+      ourToolIds.every((id) => currentToolIds.includes(id)) && staleDuplicateIds.size === 0;
     if (!alreadyAttached) {
       const patchAgentRes = await fetch(`${ELEVENLABS_BASE}/convai/agents/${agentId}`, {
         method: "PATCH",
@@ -333,7 +358,7 @@ export async function syncJessicaToolsToElevenLabs(): Promise<SyncJessicaToolsRe
 
     return {
       ok: true,
-      message: `Jessica's task & schedule tools are synced (${defs.length} tools) and attached to the agent.`,
+      message: `Jessica's task & schedule tools are synced (${defs.length} tools) and attached to the agent.${staleDuplicateIds.size > 0 ? ` Detached ${staleDuplicateIds.size} stale duplicate registration(s).` : ""}`,
       tools: toolIds as Record<string, string>,
     };
   } catch (err) {

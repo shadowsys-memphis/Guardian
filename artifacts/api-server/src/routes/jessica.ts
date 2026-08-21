@@ -190,6 +190,20 @@ function parseCravingTag(text: string): string | null {
  * wrong first impression, so this call does no health check-in, recites
  * nothing from his record, and mutates no schedule state.
  */
+/**
+ * Prepended to the prompt whenever call test mode routes the call to Ray's
+ * phone. Without it, the prompt frames the callee as Pops and Jessica greets
+ * Ray as "Pops" and logs his answers as Pops' health data — both happened on
+ * the 2026-08-21 test calls.
+ */
+export const TEST_CALL_CONTEXT = `TEST CALL — READ THIS FIRST. IT OVERRIDES EVERYTHING BELOW.
+
+Call test mode is ON. This call is routed to Ray (Raymo) — the caregiver and system admin — NOT to Pops. You are speaking with Ray.
+- Address him as Ray from your very first word. Never call him Pops on this call.
+- Run the call the way the CALL PURPOSE describes so Ray can hear how it will sound to Pops, but speak TO Ray about it — he is testing the system and knows exactly what this is.
+- If he asks admin or system questions, drop the script and answer plainly and honestly.
+- Do NOT emit <health_data> or <craving> tags on this call — nothing said here is Pops' health data, and recording it would corrupt his record.`;
+
 export const INTRO_CALL_CONTEXT = `FIRST CALL — JUST A HELLO. This overrides everything below.
 
 Pops has never spoken to you before. Keep this short and easy — a few minutes.
@@ -251,7 +265,12 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
 
     let targetPhone: string | null = null;
 
-    if (opts?.test || (await isCallTestMode())) {
+    // Remembered so the prompt can be told who is actually on the line —
+    // on 2026-08-21 test-mode calls rang Ray while the prompt still framed
+    // the callee as Pops, and Jessica called him "Pops" until he objected.
+    const isTestCall = opts?.test === true || (await isCallTestMode());
+
+    if (isTestCall) {
       targetPhone = process.env["ADMIN_PHONE_NUMBER"] ?? null;
       if (!targetPhone) {
         return { ok: false, status: 400, error: "no_admin_phone", message: "Test mode is on but the ADMIN_PHONE_NUMBER secret is not set — no call placed." };
@@ -322,7 +341,11 @@ export async function triggerOutboundCall(opts?: { test?: boolean; extraContext?
     // recite on a first call.
     const introBlock = opts?.intro ? `${INTRO_CALL_CONTEXT}\n\n` : "";
     const extraBlock = opts?.extraContext ? `${opts.extraContext}\n\n` : "";
-    const liveContext = introBlock + extraBlock + careContextBlock + scheduleContext;
+    // Test block goes above even the intro block: whoever answers this call
+    // is Ray, and every other instruction in the prompt must be read through
+    // that fact.
+    const testBlock = isTestCall ? `${TEST_CALL_CONTEXT}\n\n` : "";
+    const liveContext = testBlock + introBlock + extraBlock + careContextBlock + scheduleContext;
 
     const systemPrompt = buildJessicaSystemPrompt(questions, cycleDay, isZombiePhase, liveContext, { isOverdue, daysOverdue, intervalDays, zombiePhaseDays }, { channel: "phone", focus: opts?.focus });
 

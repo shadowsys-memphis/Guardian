@@ -178,6 +178,10 @@ export async function loadLiveContext(tenantId: string = "local", opts?: { sched
         voiceScript: scheduleTasksTable.voiceScript,
         isCompleted: scheduleTasksTable.isCompleted,
         status: scheduleTasksTable.status,
+        // Needed to date-filter "Appt:" rows below — the description's
+        // leading YYYY-MM-DD is the appointment's only date anywhere in
+        // this dateless daily-template table.
+        description: scheduleTasksTable.description,
       })
         .from(scheduleTasksTable)
         .where(and(eq(scheduleTasksTable.isActive, true), eq(scheduleTasksTable.tenantId, tenantId)))
@@ -201,7 +205,23 @@ export async function loadLiveContext(tenantId: string = "local", opts?: { sched
     const currentQuarter = quarterForHour(nowHour % 24);
 
     const scheduleByQ: Record<string, string[]> = {};
+    // "Appt:" rows come from the document scanner, which writes every dated
+    // appointment into this DATELESS daily template (description leading with
+    // the real YYYY-MM-DD). Without this filter every future appointment reads
+    // as happening TODAY on every single day — on 2026-08-21 Jessica
+    // confidently told Ray about an October colonoscopy "this morning".
+    // Only today's appointments pass, and exact duplicates (double-applied
+    // documents) collapse to one line.
+    const todayDate = todayPacific();
+    const seenApptKeys = new Set<string>();
     for (const t of schedule) {
+      if (/^Appt\b/.test(t.title)) {
+        const apptDate = /^(\d{4}-\d{2}-\d{2})/.exec(t.description ?? "")?.[1];
+        if (apptDate && apptDate !== todayDate) continue;
+        const dupeKey = `${t.title}|${t.timeLabel}`;
+        if (seenApptKeys.has(dupeKey)) continue;
+        seenApptKeys.add(dupeKey);
+      }
       const q = t.quarter ?? "Q1";
       if (!scheduleByQ[q]) scheduleByQ[q] = [];
       // Refused and no-answer are shown distinctly — Jessica shouldn't re-ask
@@ -354,6 +374,23 @@ REFUSE_TASK — Pops clearly declines a task (different from not answering). Rec
 
   const focus = opts?.focus;
 
+  // Observed failure on the 2026-08-21 live-call transcripts: with a large
+  // prompt and only "Hello?" from the callee, the model opened every call
+  // with the same generic "How are you feeling this morning?" and never
+  // touched the CALL PURPOSE. The opening has to be an explicit instruction,
+  // not something the model infers from a purpose block buried mid-prompt.
+  const openingRule = channel === "phone"
+    ? `OPENING — YOUR FIRST REPLY OF THE CALL:
+After the callee speaks, give ONE short warm greeting sentence and land on the
+CALL PURPOSE in that same first reply — the purpose is the reason you called,
+so say it naturally up front (hydration call: mention water; chores call:
+mention the late-morning plan). Vary your greeting wording from call to call.
+Never open with a generic "How are you feeling this morning?" unless the CALL
+PURPOSE is itself the day's health check.
+
+`
+    : "";
+
   const morningRoutineRules = (focus && !focus.morningRoutine) ? "" : `DAILY ROUTINE RULES:
 - Morning order (guide him through it gently, one thing at a time): wake → water → let Koda out → make the bed → tidy the room → shower/hygiene → breakfast. Never rattle off the whole list at once.
 - Out of bed: if you're checking whether he's up, one warm nudge only. Never nag, never repeat, never guilt.
@@ -417,7 +454,7 @@ INTERFACE CONTEXT:
 TONE PROFILE:
 ${toneProfile}
 
-${liveContext ? liveContext + "\n" : ""}YOUR JOB:
+${openingRule}${liveContext ? liveContext + "\n" : ""}YOUR JOB:
 ${jobBullets}
 ${scriptSection}
 ${morningRoutineRules}
