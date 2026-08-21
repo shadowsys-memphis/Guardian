@@ -4196,6 +4196,16 @@ function AppointmentsTab() {
 
   useEffect(() => { load(); }, []);
 
+  const today = todayPacific();
+  const sortedAppointments = [...appointments].sort((a, b) => {
+    const aIsPast = a.appointmentDate < today;
+    const bIsPast = b.appointmentDate < today;
+    if (aIsPast !== bIsPast) return aIsPast ? 1 : -1;
+    const aKey = `${a.appointmentDate}T${a.appointmentTime ?? "00:00"}`;
+    const bKey = `${b.appointmentDate}T${b.appointmentTime ?? "00:00"}`;
+    return aKey.localeCompare(bKey);
+  });
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -4375,15 +4385,20 @@ function AppointmentsTab() {
             <p className="text-sm text-muted-foreground text-center py-8 italic">No appointments on record. Add one above.</p>
           ) : (
             <div className="space-y-3">
-              {appointments.map((a: any) => {
-                const isPast = a.appointmentDate < new Date().toISOString().split("T")[0];
+              {sortedAppointments.map((a: any) => {
+                const isPast = a.appointmentDate < today;
+                const isToday = a.appointmentDate === today;
                 return (
                   <div key={a.id} className={`flex items-start justify-between gap-4 p-4 rounded-sm border transition-colors ${isPast ? "border-border/20 bg-secondary/10 opacity-70" : "border-primary/20 bg-primary/3"}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm">{a.appointmentDate}</span>
+                        <span className={`font-bold text-sm ${isToday ? "text-accent" : ""}`}>
+                          {isToday ? "Today" : a.appointmentDate}
+                        </span>
+                        {isToday && <span className="text-muted-foreground text-xs">{a.appointmentDate}</span>}
                         <span className="text-muted-foreground text-xs">{a.appointmentTime}</span>
                         <span className="px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase bg-primary/10 border border-primary/20 text-primary">{TYPE_LABELS[a.type] ?? a.type}</span>
+                        {isToday && <span className="text-[10px] text-accent uppercase font-bold">Today</span>}
                         {isPast && <span className="text-[10px] text-muted-foreground/60 uppercase font-bold">Past</span>}
                       </div>
                       <p className="font-semibold mt-1">{a.provider}</p>
