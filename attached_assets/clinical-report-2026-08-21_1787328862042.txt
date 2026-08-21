@@ -1,0 +1,55 @@
+═══════════════════════════════════════════════════
+  BR(AI)N CLINICAL DIGEST — DOCTOR REPORT
+  Generated: 8/21/2026, 4:12:59 PM
+═══════════════════════════════════════════════════
+
+── PATIENT OVERVIEW ────────────────────────────
+  Patient: Pops (Veteran, DOD: Vietnam Era)
+  Diagnoses: PTSD · Schizophrenia · Auditory Hallucinations
+  Primary Caregiver: Ray (son)
+  Reporting Period: Last 30 days
+
+── MEDICATION STATUS ───────────────────────────
+  Current Medication: Haldol Decanoate (Haloperidol Decanoate)
+  Last Injection Date: 2026-08-05
+  Cycle Notes: Shot given 2026-08-06 — confirmed by Ray (caregiver) same day. Monthly (28-day) cadence per Dr Uddin visit 2026-07-28; dose halved at that visit, exact mg pending After Visit Summary. | Corrected by Ray 2026-08-06: cycle restarted with 2026-08-05 as day 1 (next due 2026-09-02).
+
+── MEDICATION ADJUSTMENTS ──────────────────────
+  No adjustments recorded.
+
+── SYMPTOM LOG SUMMARY (30 days) ───────────────
+  Total Logged Events: 7
+  PTSD Trigger Days: 1
+  Avg Hallucination Intensity: 1.7 / 5
+  Avg Motivation Level: 3.3 / 5
+
+── HEALTH ASSESSMENT TRENDS ────────────────────
+  No health assessment data in period.
+
+── CARE TASK COMPLIANCE ────────────────────────
+  Completed: 0 / 39 tasks (0%)
+
+── UPCOMING APPOINTMENTS ───────────────────────
+  2027-01-04 08:30 AM  LL DERM PROC PROVIDER 2  [other]    Source: Scheduled Appointments
+  2026-12-07 02:00 PM  LOM ACC PACT BRAVO MD 11  [other]    Source: Scheduled Appointments
+  2026-10-29 09:30 AM  LOM ACC ENDO MD 5  [other]    Source: Scheduled Appointments
+  2026-10-27 08:00 AM  LL GI COLONOSCOPY ANESTH  [other]    Source: Scheduled Appointments
+  2026-10-15 09:30 AM  LL SURG POD A3  [other]    Source: Scheduled Appointments
+  2026-10-01 09:00 AM  LL SURG ENT VOICE  [other]    Source: Scheduled Appointments
+  2026-10-01 09:00 AM  LL SURG ENT VOICE  [other]    Source: Scheduled Appointments
+  2026-09-02 09:30 AM  LOM ACC ENDO MD 5  [other]    Source: Scheduled Appointments
+  2026-08-26 09:40 AM  LL SURG EYE PGY3A PRE/POST OP  [other]    Source: Scheduled Appointments
+  2026-08-25 09:30 AM  LOM ACC MH BHIP06 MD 1  [other]    Source: Scheduled Appointments
+
+── RECENT SYMPTOM LOG ──────────────────────────
+  8/12/2026  PTSD:N  Hall:0/5  Mot:4/5  Easy morning, medication taken on time.
+  8/11/2026  PTSD:N  Hall:1/5  Mot:4/5  Slept well, in good spirits at breakfast.
+  8/10/2026  PTSD:N  Hall:3/5  Mot:2/5  Mentioned hearing voices during dinner; redirected with a favorite show.
+  8/9/2026  PTSD:N  Hall:0/5  Mot:5/5  Great mood — asked to go for an extra walk after lunch.
+  8/8/2026  PTSD:Y  Hall:2/5  Mot:3/5  A loud truck outside startled him; settled down after a few minutes of music.
+  8/7/2026  PTSD:N  Hall:1/5  Mot:4/5  Calm morning, ate a full breakfast, chatted about the game on TV.
+  7/27/2026  PTSD:N  Hall:5/5  Mot:1/5  Having a tough time lately with interacting 
+
+═══════════════════════════════════════════════════
+  END OF REPORT — br(AI)n Guardian OS
+═══════════════════════════════════════════════════
